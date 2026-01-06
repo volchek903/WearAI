@@ -1,0 +1,79 @@
+2026-01-06 00:04:00 | INFO | __main__ | Startup OK: DB connection verified.
+2026-01-06 00:04:00 | INFO | aiogram.dispatcher | Start polling
+2026-01-06 00:04:03 | INFO | aiogram.dispatcher | Run polling for bot @WearAIBot id=7998511134 - 'WearAI | Оденься с ИИ'
+2026-01-06 00:04:14 | INFO | audit | [6e50c33f59] done | 156.8ms
+2026-01-06 00:04:14 | INFO | aiogram.event | Update id=22853998 is handled. Duration 164 ms by bot id=7998511134
+2026-01-06 00:07:55 | WARNING | aiogram.dispatcher | Received SIGINT signal
+2026-01-06 00:07:55 | INFO | aiogram.dispatcher | Polling stopped for bot @WearAIBot id=7998511134 - 'WearAI | Оденься с ИИ'
+2026-01-06 00:07:55 | INFO | aiogram.dispatcher | Polling stopped
+2026-01-06 00:07:55 | INFO | __main__ | Shutdown OK: DB engine disposed.
+2026-01-06 00:18:19 | INFO | __main__ | Startup OK: DB connection verified.
+2026-01-06 00:18:19 | INFO | aiogram.dispatcher | Start polling
+2026-01-06 00:18:19 | INFO | aiogram.dispatcher | Run polling for bot @WearAIBot id=7998511134 - 'WearAI | Оденься с ИИ'
+2026-01-06 00:18:20 | INFO | audit | [fb3960eb0d] done | 207.9ms
+2026-01-06 00:18:20 | INFO | aiogram.event | Update id=22853999 is handled. Duration 210 ms by bot id=7998511134
+2026-01-06 00:18:25 | INFO | audit | [b5ce394eff] done | 160.8ms
+2026-01-06 00:18:25 | INFO | aiogram.event | Update id=22854000 is handled. Duration 164 ms by bot id=7998511134
+2026-01-06 00:18:29 | INFO | audit | [02a1758a33] done | 115.0ms
+2026-01-06 00:18:29 | INFO | aiogram.event | Update id=22854001 is handled. Duration 115 ms by bot id=7998511134
+2026-01-06 00:18:32 | INFO | audit | [f0ff53e384] done | 147.7ms
+2026-01-06 00:18:32 | INFO | aiogram.event | Update id=22854002 is handled. Duration 149 ms by bot id=7998511134
+2026-01-06 00:18:46 | INFO | audit | [b58c9822f5] done | 807.1ms
+2026-01-06 00:18:46 | INFO | aiogram.event | Update id=22854003 is handled. Duration 826 ms by bot id=7998511134
+2026-01-06 00:18:46 | INFO | audit | [ffa1492641] done | 812.9ms
+2026-01-06 00:18:46 | INFO | aiogram.event | Update id=22854005 is handled. Duration 813 ms by bot id=7998511134
+2026-01-06 00:18:46 | INFO | audit | [ad5b799761] done | 902.8ms
+2026-01-06 00:18:46 | INFO | aiogram.event | Update id=22854004 is handled. Duration 903 ms by bot id=7998511134
+2026-01-06 00:18:49 | INFO | audit | [1f879ea289] done | 79.7ms
+2026-01-06 00:18:49 | INFO | aiogram.event | Update id=22854006 is handled. Duration 80 ms by bot id=7998511134
+2026-01-06 00:19:05 | INFO | audit | [a33471ca3f] done | 145.4ms
+2026-01-06 00:19:05 | INFO | aiogram.event | Update id=22854007 is handled. Duration 148 ms by bot id=7998511134
+2026-01-06 00:19:15 | INFO | audit | [0654d1d0cf] done | 807.7ms
+2026-01-06 00:19:15 | INFO | aiogram.event | Update id=22854008 is handled. Duration 809 ms by bot id=7998511134
+2026-01-06 00:19:16 | INFO | audit | [4e21a6e4b3] done | 914.5ms
+2026-01-06 00:19:16 | INFO | aiogram.event | Update id=22854009 is handled. Duration 915 ms by bot id=7998511134
+2026-01-06 00:19:18 | INFO | audit | [9f4766dd2d] done | 121.3ms
+2026-01-06 00:19:18 | INFO | aiogram.event | Update id=22854010 is handled. Duration 122 ms by bot id=7998511134
+2026-01-06 00:19:24 | INFO | audit | [fe31a9917f] done | 163.5ms
+2026-01-06 00:19:24 | INFO | aiogram.event | Update id=22854011 is handled. Duration 167 ms by bot id=7998511134
+2026-01-06 00:19:31 | INFO | audit | [c42f4a056a] done | 150.0ms
+2026-01-06 00:19:31 | INFO | aiogram.event | Update id=22854012 is handled. Duration 153 ms by bot id=7998511134
+2026-01-06 00:19:39 | INFO | audit | [59e113e5cb] done | 90.4ms
+2026-01-06 00:19:39 | INFO | aiogram.event | Update id=22854013 is handled. Duration 92 ms by bot id=7998511134
+2026-01-06 00:19:47 | INFO | audit | [9a9489fe17] done | 142.7ms
+2026-01-06 00:19:47 | INFO | aiogram.event | Update id=22854014 is handled. Duration 144 ms by bot id=7998511134
+2026-01-06 00:19:54 | INFO | audit | [5ff0ec16b4] done | 230.2ms
+2026-01-06 00:19:54 | INFO | aiogram.event | Update id=22854015 is handled. Duration 233 ms by bot id=7998511134
+2026-01-06 00:19:59 | INFO | audit | [743a96391d] done | 369.6ms
+2026-01-06 00:19:59 | INFO | aiogram.event | Update id=22854016 is handled. Duration 372 ms by bot id=7998511134
+2026-01-06 00:24:42 | WARNING | aiogram.dispatcher | Received SIGINT signal
+2026-01-06 00:24:42 | INFO | aiogram.dispatcher | Polling stopped for bot @WearAIBot id=7998511134 - 'WearAI | Оденься с ИИ'
+2026-01-06 00:24:42 | INFO | aiogram.dispatcher | Polling stopped
+2026-01-06 00:24:42 | INFO | __main__ | Shutdown OK: DB engine disposed.
+2026-01-06 00:24:46 | INFO | __main__ | Startup OK: DB connection verified.
+2026-01-06 00:24:46 | INFO | aiogram.dispatcher | Start polling
+2026-01-06 00:24:46 | INFO | aiogram.dispatcher | Run polling for bot @WearAIBot id=7998511134 - 'WearAI | Оденься с ИИ'
+2026-01-06 00:24:53 | INFO | audit | [4def71d488] done | 153.0ms
+2026-01-06 00:24:53 | INFO | aiogram.event | Update id=22854017 is handled. Duration 159 ms by bot id=7998511134
+2026-01-06 00:24:58 | INFO | audit | [f7c3be5f82] done | 140.6ms
+2026-01-06 00:24:58 | INFO | aiogram.event | Update id=22854018 is handled. Duration 143 ms by bot id=7998511134
+2026-01-06 00:25:09 | INFO | audit | [158f2c31f2] done | 141.6ms
+2026-01-06 00:25:09 | INFO | aiogram.event | Update id=22854019 is handled. Duration 144 ms by bot id=7998511134
+2026-01-06 00:49:15 | ERROR | aiogram.dispatcher | Failed to fetch updates - TelegramNetworkError: HTTP Client says - Request timeout error
+2026-01-06 00:49:15 | WARNING | aiogram.dispatcher | Sleep for 1.000000 seconds and try again... (tryings = 0, bot id = 7998511134)
+2026-01-06 00:49:26 | INFO | aiogram.dispatcher | Connection established (tryings = 1, bot id = 7998511134)
+2026-01-06 00:53:52 | WARNING | aiogram.dispatcher | Received SIGINT signal
+2026-01-06 00:53:52 | INFO | aiogram.dispatcher | Polling stopped for bot @WearAIBot id=7998511134 - 'WearAI | Оденься с ИИ'
+2026-01-06 00:53:52 | INFO | aiogram.dispatcher | Polling stopped
+2026-01-06 00:53:52 | INFO | __main__ | Shutdown OK: DB engine disposed.
+2026-01-06 00:53:57 | INFO | __main__ | Startup OK: DB connection verified.
+2026-01-06 00:53:57 | INFO | aiogram.dispatcher | Start polling
+2026-01-06 00:53:57 | INFO | aiogram.dispatcher | Run polling for bot @WearAIBot id=7998511134 - 'WearAI | Оденься с ИИ'
+2026-01-06 00:54:01 | INFO | audit | [78eb2e2f65] done | 247.9ms
+2026-01-06 00:54:01 | INFO | aiogram.event | Update id=22854020 is handled. Duration 251 ms by bot id=7998511134
+2026-01-06 00:54:04 | INFO | audit | [79b27a9462] done | 417.2ms
+2026-01-06 00:54:04 | INFO | aiogram.event | Update id=22854021 is handled. Duration 418 ms by bot id=7998511134
+2026-01-06 00:54:12 | INFO | audit | [b4a0dd4e48] done | 148.7ms
+2026-01-06 00:54:12 | INFO | aiogram.event | Update id=22854022 is handled. Duration 151 ms by bot id=7998511134
+2026-01-06 00:54:20 | INFO | audit | [26cddf3eb8] done | 125.3ms
+2026-01-06 00:54:20 | INFO | aiogram.event | Update id=22854023 is handled. Duration 128 ms by bot id=7998511134
