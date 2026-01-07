@@ -1,0 +1,16 @@
+# Virtualenv
+venv/
+.venv/
+
+# Env files (secrets)
+.env
+.env.*
+
+# Logs
+*.log
+logs/
+
+# SQLite DB files
+*.db
+*.sqlite
+*.sqlite3
