@@ -22,6 +22,10 @@ from app.utils.tg_edit import edit_text_safe
 from app.utils.tg_send import send_image_smart
 from app.utils.kie_errors import kie_error_to_user_text
 
+# ✅ NEW: сохраняем сгенерированное изображение на диск,
+# чтобы потом "Оживить" брало именно его (а не старый URL/кеш)
+from app.utils.generated_files import save_generated_image_bytes
+
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -130,8 +134,7 @@ async def product_photos_in(message: Message, state: FSMContext) -> None:
         await state.set_state(ModelFlow.presentation_desc)
 
         await message.answer(
-            PRODUCT_ACTION_EXAMPLE,
-            reply_markup=help_button_kb("presentation_desc"),
+            PRODUCT_ACTION_EXAMPLE, reply_markup=help_button_kb("presentation_desc")
         )
         return
 
@@ -154,8 +157,7 @@ async def product_photos_in(message: Message, state: FSMContext) -> None:
     await state.set_state(ModelFlow.presentation_desc)
 
     await message.answer(
-        PRODUCT_ACTION_EXAMPLE,
-        reply_markup=help_button_kb("presentation_desc"),
+        PRODUCT_ACTION_EXAMPLE, reply_markup=help_button_kb("presentation_desc")
     )
 
 
@@ -274,7 +276,23 @@ async def review_confirmed(
             raise RuntimeError("KIE returned empty result")
 
         output_files: list[dict[str, str]] = []
+
+        # ✅ NEW: локальные пути текущей генерации (для видео)
+        local_output_paths: list[str] = []
+        best_local_path: str = ""
+
         for filename, img_bytes in results:
+            # сохраняем на диск "текущую" картинку
+            local_path = save_generated_image_bytes(
+                img_bytes=img_bytes,
+                filename=filename,
+                scenario="model",
+                tg_id=call.from_user.id,
+            )
+            local_output_paths.append(local_path)
+            if not best_local_path:
+                best_local_path = local_path
+
             sent = await send_image_smart(
                 call.message, img_bytes=img_bytes, filename=filename
             )
@@ -300,7 +318,7 @@ async def review_confirmed(
             session=session, tg_id=call.from_user.id, delta=1
         )
 
-        # ВАЖНО: сохраняем только payload для feedback (без “залипания” старых данных)
+        # ВАЖНО: сохраняем payload для feedback + путь к локальному файлу текущей генерации
         await state.set_data(
             {
                 "feedback_payload": {
@@ -312,6 +330,10 @@ async def review_confirmed(
                     "kie_prompt": prompt,
                     "input_photos": product_photos,
                     "output_files": output_files,
+                    # ✅ NEW:
+                    "local_output_paths": local_output_paths,
+                    "best_local_path": best_local_path,
+                    # сюда уже НЕ надо класть last_generated_image_url
                 }
             }
         )

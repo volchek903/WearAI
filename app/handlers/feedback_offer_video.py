@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import time
+import uuid
 from pathlib import Path
 
 import aiohttp
@@ -66,11 +68,48 @@ def _pick_best_output_file(fp: dict) -> tuple[str, str]:
     raise RuntimeError("Не удалось определить file_id результата генерации.")
 
 
+def _read_local_best_image_from_feedback(fp: dict) -> tuple[bytes, str, str]:
+    """
+    Пытаемся взять ТЕКУЩУЮ сгенерированную картинку с диска (чтобы видео не брало “старое”).
+    Ожидаем, что генератор положил в feedback_payload:
+      - best_local_path: str
+      - local_output_paths: list[str] (опционально)
+    Возвращаем: (bytes, filename, source_path)
+    """
+    best = fp.get("best_local_path")
+    src_path: str | None = str(best) if isinstance(best, str) and best.strip() else None
+
+    if not src_path:
+        paths = fp.get("local_output_paths")
+        if isinstance(paths, list) and paths:
+            first = paths[0]
+            if isinstance(first, str) and first.strip():
+                src_path = first.strip()
+
+    if not src_path:
+        raise RuntimeError("Не найден локальный файл результата (best_local_path).")
+
+    p = Path(src_path)
+    if not p.exists() or not p.is_file():
+        raise RuntimeError(f"Локальный файл результата не найден: {p}")
+
+    data = p.read_bytes()
+    filename = p.name or "image.png"
+    return data, filename, str(p)
+
+
 async def _get_or_upload_kling_image_url(cb: CallbackQuery, state: FSMContext) -> str:
     """
-    Из результата генерации (file_id в Telegram) делаем публичный image_url для Kling:
-    - если уже есть fp["kling_image_url"] — используем
-    - иначе скачиваем из Telegram -> upload в KIE -> кешируем в fp
+    Делаем публичный image_url для Kling.
+
+    Приоритет (важно!):
+    1) Берём байты из локального файла текущей генерации (best_local_path),
+       чтобы исключить “подтягивание” старого результата.
+    2) Если локального файла нет — fallback: скачиваем из Telegram по file_id результата.
+
+    Кешируем в feedback_payload:
+      - kling_image_url
+      - kling_image_source_path (чтобы не использовать кеш, если файл другой)
     """
     data = await state.get_data()
     fp = data.get("feedback_payload")
@@ -81,29 +120,64 @@ async def _get_or_upload_kling_image_url(cb: CallbackQuery, state: FSMContext) -
     if scenario not in {"model", "tryon"}:
         raise RuntimeError("Оживление доступно только после «Модель» или «Примерка».")
 
-    cached = fp.get("kling_image_url")
-    if isinstance(cached, str) and cached.strip():
-        return cached.strip()
+    # Если уже есть URL и он относится к тому же source_path — можно переиспользовать
+    cached_url = fp.get("kling_image_url")
+    cached_src = fp.get("kling_image_source_path")
+
+    # Попробуем сначала локальный файл
+    image_bytes: bytes | None = None
+    filename: str = "image.png"
+    source_path: str | None = None
+
+    try:
+        image_bytes, filename, source_path = _read_local_best_image_from_feedback(fp)
+        if (
+            isinstance(cached_url, str)
+            and cached_url.strip()
+            and isinstance(cached_src, str)
+            and source_path
+            and cached_src == source_path
+        ):
+            return cached_url.strip()
+    except Exception as e:
+        # локального файла нет — пойдём в Telegram fallback
+        logger.warning("No local image for video, fallback to Telegram. err=%s", e)
 
     if not settings.kie_api_key:
         raise RuntimeError("Не настроен KIE_API_KEY.")
 
-    file_id, filename = _pick_best_output_file(fp)
+    # Fallback: Telegram file_id -> bytes
+    if image_bytes is None:
+        file_id, filename_from_payload = _pick_best_output_file(fp)
+        tg_file = await cb.bot.get_file(file_id)
+        if not tg_file.file_path:
+            raise RuntimeError("Не удалось получить file_path из Telegram.")
+        image_bytes = await _download_telegram_file(cb.bot.token, tg_file.file_path)
+        filename = Path(filename_from_payload).name or "image.jpg"
+        source_path = f"tg:{file_id}"
 
-    tg_file = await cb.bot.get_file(file_id)
-    if not tg_file.file_path:
-        raise RuntimeError("Не удалось получить file_path из Telegram.")
+        if (
+            isinstance(cached_url, str)
+            and cached_url.strip()
+            and isinstance(cached_src, str)
+            and cached_src == source_path
+        ):
+            return cached_url.strip()
 
-    image_bytes = await _download_telegram_file(cb.bot.token, tg_file.file_path)
+    # Чтобы не ловить кеш по одинаковым путям/именам — делаем upload уникальным
+    tag = f"{int(time.time()*1000)}_{uuid.uuid4().hex[:8]}"
+    p = Path(filename)
+    unique_filename = f"{p.stem or 'image'}_{tag}{p.suffix or '.png'}"
 
     client = KieKlingClient(settings.kie_api_key)
     image_url = await client.upload_image_bytes(
         image_bytes=image_bytes,
-        filename=Path(filename).name or "image.jpg",
-        upload_path=f"images/wearai/generated/{scenario}/{cb.from_user.id}",
+        filename=unique_filename,
+        upload_path=f"images/wearai/video_source/{scenario}/{cb.from_user.id}/{tag}",
     )
 
     fp["kling_image_url"] = image_url
+    fp["kling_image_source_path"] = source_path or ""
     await state.update_data(feedback_payload=fp)
     return image_url
 
@@ -119,7 +193,6 @@ async def fb_ok(cb: CallbackQuery, state: FSMContext) -> None:
     fp = data.get("feedback_payload") or {}
     scenario = str(fp.get("scenario") or "")
 
-    # если вдруг вызвали без payload — просто в меню
     if scenario not in {"model", "tryon"}:
         await edit_text_safe(cb, "Главное меню:", reply_markup=main_menu_kb())
         await state.clear()
@@ -203,7 +276,6 @@ async def fb_text(message: Message, state: FSMContext) -> None:
         await message.answer("Нужен текст 🙂 Опишите проблему одним сообщением.")
         return
 
-    # Тут можно отправлять менеджеру/в БД — пока логируем
     data = await state.get_data()
     fp = data.get("feedback_payload") or {}
     logger.info(

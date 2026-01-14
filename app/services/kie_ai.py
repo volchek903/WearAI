@@ -16,9 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 @dataclass(frozen=True)
 class PhotoSettingsDTO:
-    aspect_ratio: str = (
-        "9:16"  # 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, auto, ...
-    )
+    aspect_ratio: str = "9:16"
     resolution: str = "2K"  # 1K / 2K / 4K
     output_format: str = "png"  # png / jpg
 
@@ -60,17 +58,15 @@ def _norm_output_format(v: str) -> str:
 
 
 async def _load_photo_settings_from_db(
-    session: AsyncSession,
-    tg_id: int,
+    session: AsyncSession, tg_id: int
 ) -> PhotoSettingsDTO:
     """
     Читает настройки пользователя из БД по tg_id.
-    Ожидается, что у тебя есть:
+    Ожидается:
       - app.models.user.User (users.tg_id)
       - app.models.user_photo_settings.UserPhotoSettings (user_photo_settings.user_id)
-    Если не найдено — возвращает DEFAULT_PHOTO_SETTINGS.
+    Если не найдено — DEFAULT_PHOTO_SETTINGS.
     """
-    # ленивые импорты, чтобы не словить циклические зависимости
     from app.models.user import User
     from app.models.user_photo_settings import UserPhotoSettings
 
@@ -105,14 +101,12 @@ class KieAIError(RuntimeError):
 
 def _debug_save_upload_image(data: bytes, filename: str) -> None:
     """
-    Сохраняет байты картинки, которая уходит в KIE upload.
+    DEBUG: сохраняет байты картинки, которая уходит в KIE upload.
     Включается env-переменной KIE_DEBUG_SAVE_IMAGES=1
 
     По умолчанию сохраняет в:
-      <project_root>/_kie_debug_uploads/
-
-    project_root берётся как текущая директория запуска (Path.cwd()).
-    Можно переопределить папкой:
+      <cwd>/_kie_debug_uploads/
+    Можно переопределить:
       KIE_DEBUG_SAVE_DIR=/path/to/project
     """
     if os.getenv("KIE_DEBUG_SAVE_IMAGES", "0") != "1":
@@ -128,7 +122,6 @@ def _debug_save_upload_image(data: bytes, filename: str) -> None:
 
         out_name = f"kie_upload_{int(time.time()*1000)}_{uuid.uuid4().hex[:8]}{suffix}"
         out_path = out_dir / out_name
-
         out_path.write_bytes(data)
         print(f"[KIE DEBUG] saved upload image -> {out_path}")
     except Exception as e:
@@ -137,22 +130,17 @@ def _debug_save_upload_image(data: bytes, filename: str) -> None:
 
 def _make_unique_upload_target(upload_path: str, filename: str) -> tuple[str, str, str]:
     """
-    Делает uploadPath и fileName уникальными, чтобы не ловить кеш по одному и тому же URL.
-
-    Можно выключить уникализацию:
+    Делает uploadPath и fileName уникальными, чтобы не ловить кеш по одному URL.
+    Можно выключить:
       KIE_UPLOAD_UNIQUE=0
     """
-    unique_on = os.getenv("KIE_UPLOAD_UNIQUE", "1") == "1"
-    if not unique_on:
-        return upload_path, filename, ""
+    if os.getenv("KIE_UPLOAD_UNIQUE", "1") != "1":
+        return (upload_path or "images/user-uploads"), (filename or "image.png"), ""
 
     tag = f"{int(time.time()*1000)}_{uuid.uuid4().hex[:8]}"
-
-    # уникальный подпуть
     base_path = (upload_path or "images/user-uploads").rstrip("/")
     unique_path = f"{base_path}/{tag}"
 
-    # уникальный filename (сохраняя расширение)
     p = Path(filename or "image.png")
     stem = p.stem or "image"
     suf = p.suffix or ".png"
@@ -163,7 +151,7 @@ def _make_unique_upload_target(upload_path: str, filename: str) -> tuple[str, st
 
 def _add_cache_buster(urls: Sequence[str], tag: str) -> list[str]:
     """
-    Добавляет ?v=... к URL (если KIE/прокси кеширует скачивание по URL).
+    Добавляет v=... к URL, но только если его там ещё нет.
     Включается env:
       KIE_FORCE_NOCACHE=1
     """
@@ -172,13 +160,21 @@ def _add_cache_buster(urls: Sequence[str], tag: str) -> list[str]:
 
     v = tag or str(int(time.time() * 1000))
     out: list[str] = []
+
     for u in urls:
         if not isinstance(u, str) or not u.strip():
             continue
+
+        # если уже есть v=..., не трогаем
+        if "v=" in u:
+            out.append(u)
+            continue
+
         if "?" in u:
             out.append(f"{u}&v={v}")
         else:
             out.append(f"{u}?v={v}")
+
     return out
 
 
@@ -220,19 +216,15 @@ class KieAIClient:
         """
         url = f"{self.upload_base}/api/file-stream-upload"
 
-        # ✅ делаем upload уникальным (анти-кеш)
         unique_upload_path, unique_filename, tag = _make_unique_upload_target(
             upload_path, filename
         )
 
-        # ✅ DEBUG: сохраняем байты картинки, которая реально уходит в KIE upload
+        # DEBUG: если включено, сохраняем то, что реально уходит в upload
         _debug_save_upload_image(data, unique_filename)
 
         files = {"file": (unique_filename, data, "application/octet-stream")}
-        form = {
-            "uploadPath": unique_upload_path,
-            "fileName": unique_filename,
-        }
+        form = {"uploadPath": unique_upload_path, "fileName": unique_filename}
 
         if os.getenv("KIE_DEBUG_PRINT_UPLOAD", "0") == "1":
             print(
@@ -264,16 +256,16 @@ class KieAIClient:
             if not download_url:
                 raise KieAIError(f"Upload response has no downloadUrl: {payload}")
 
-            # по желанию добавим cache-buster прямо на downloadUrl
-            if os.getenv("KIE_FORCE_NOCACHE", "0") == "1":
-                dl = str(download_url)
+            dl = str(download_url)
+
+            # опционально добавляем cache-buster к downloadUrl
+            if os.getenv("KIE_FORCE_NOCACHE", "0") == "1" and "v=" not in dl:
                 if "?" in dl:
                     dl = f"{dl}&v={tag or int(time.time()*1000)}"
                 else:
                     dl = f"{dl}?v={tag or int(time.time()*1000)}"
-                return dl
 
-            return str(download_url)
+            return dl
 
     async def create_nano_banana_pro_task(
         self,
@@ -296,7 +288,6 @@ class KieAIClient:
             except Exception:
                 settings = settings or DEFAULT_PHOTO_SETTINGS
 
-        # 2) Если БД не дали — используем то, что передали, либо дефолт
         if settings is None:
             settings = DEFAULT_PHOTO_SETTINGS
 
@@ -304,8 +295,7 @@ class KieAIClient:
         resolution = _norm_resolution(settings.resolution)
         output_format = _norm_output_format(settings.output_format)
 
-        # ✅ опционально добавим cache-buster к входным URL
-        # (если где-то URL всё равно одинаковый — это поможет)
+        # cache-buster к URL (если включено) — только если v= ещё нет
         req_tag = str(int(time.time() * 1000))
         safe_urls = _add_cache_buster(image_input_urls, req_tag)
 
@@ -322,7 +312,6 @@ class KieAIClient:
         if callback_url:
             body["callBackUrl"] = callback_url
 
-        # ✅ DEBUG: печатаем то, что реально уходит в createTask
         if os.getenv("KIE_DEBUG_PRINT_TASK", "0") == "1":
             try:
                 print(
@@ -366,15 +355,8 @@ class KieAIClient:
             return payload
 
     async def wait_result_urls(
-        self,
-        task_id: str,
-        *,
-        max_wait_s: int = 600,
+        self, task_id: str, *, max_wait_s: int = 600
     ) -> list[str]:
-        """
-        Poll recordInfo until success/fail.
-        Uses a simple backoff: 2s -> 5s -> 10s (cap).
-        """
         elapsed = 0
         sleep_s = 2
 

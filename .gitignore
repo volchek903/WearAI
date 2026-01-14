@@ -20,3 +20,4 @@ _kie_debug_uploads
 .vscode
 wearai.db
 alembic
+.png

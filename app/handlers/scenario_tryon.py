@@ -21,6 +21,10 @@ from app.utils.tg_edit import edit_text_safe
 from app.utils.tg_send import send_image_smart
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 
+# ✅ NEW: сохраняем результат на диск, чтобы видео брало "текущую" генерацию
+from app.utils.generated_files import save_generated_image_bytes
+
+
 router = Router()
 logger = logging.getLogger(__name__)
 
@@ -90,6 +94,7 @@ async def item_photo_in(message: Message, state: FSMContext) -> None:
         await message.answer("Ой 😅 Сессия сбилась. Нажми /start и начни заново 🙌")
         return
 
+    # ✅ важно: перезаписываем item_photo, чтобы не оставались старые значения
     await state.update_data(item_photo=item_file_id)
     await state.set_state(TryOnFlow.confirm)
 
@@ -115,6 +120,7 @@ async def item_photo_in(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(TryOnFlow.confirm, F.data == ConfirmCallbacks.NO)
 async def tryon_choose_other(call: CallbackQuery, state: FSMContext) -> None:
+    # ✅ обнуляем выбранную вещь
     await state.update_data(item_photo=None)
     await state.set_state(TryOnFlow.item_photo)
 
@@ -124,7 +130,7 @@ async def tryon_choose_other(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(TryOnFlow.confirm, F.data == ConfirmCallbacks.YES)
 async def tryon_confirmed_go_prompt(call: CallbackQuery, state: FSMContext) -> None:
-    # После подтверждения вещи — просим промпт
+    # После подтверждения — просим промпт
     await state.set_state(TryOnFlow.tryon_desc)
 
     await edit_text_safe(
@@ -186,7 +192,22 @@ async def tryon_desc_in(
             raise RuntimeError("KIE returned empty result")
 
         output_files: list[dict[str, str]] = []
+
+        # ✅ NEW: локальные пути текущей генерации (для видео)
+        local_output_paths: list[str] = []
+        best_local_path: str = ""
+
         for filename, img_bytes in results:
+            local_path = save_generated_image_bytes(
+                img_bytes=img_bytes,
+                filename=filename,
+                scenario="tryon",
+                tg_id=message.from_user.id,
+            )
+            local_output_paths.append(local_path)
+            if not best_local_path:
+                best_local_path = local_path
+
             sent = await send_image_smart(
                 message, img_bytes=img_bytes, filename=filename
             )
@@ -212,6 +233,7 @@ async def tryon_desc_in(
             session=session, tg_id=message.from_user.id, delta=1
         )
 
+        # ✅ ВАЖНО: сохраняем payload + локальный файл текущей генерации
         await state.set_data(
             {
                 "feedback_payload": {
@@ -225,6 +247,9 @@ async def tryon_desc_in(
                         "item_photo": item_photo,
                     },
                     "output_files": output_files,
+                    # ✅ NEW:
+                    "local_output_paths": local_output_paths,
+                    "best_local_path": best_local_path,
                 }
             }
         )
@@ -239,7 +264,7 @@ async def tryon_desc_in(
     except KieAIError as e:
         logger.warning("TRYON KIE failed: %s", e)
         await message.answer(kie_error_to_user_text(e))
-        # оставляем в tryon_desc — пусть пользователь сразу поправит промпт и отправит ещё раз
+        # оставляем в tryon_desc — пусть пользователь поправит промпт и отправит ещё раз
         return
 
     except Exception as e:
