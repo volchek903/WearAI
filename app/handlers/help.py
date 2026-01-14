@@ -1,45 +1,24 @@
 from __future__ import annotations
 
+import html
+import logging
+
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 
+from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 from app.keyboards.help import HelpCallbacks, help_use_back_kb
 from app.keyboards.confirm import yes_no_kb, review_edit_kb
 from app.repository.users import upsert_user
+from app.services.prompt_helper import generate_nano_banana_prompt_ru, PromptHelperError
 from app.states.help_flow import HelpFlow
 from app.states.model_flow import ModelFlow
 from app.utils.tg_edit import edit_text_safe
 
 router = Router()
-
-
-def _gen_model_desc(details: str) -> str:
-    details = (details or "").strip()
-    if not details:
-        return (
-            "Девушка 22–25 лет, натуральный макияж, аккуратная прическа, студийный свет, белый фон, "
-            "стиль casual, лёгкая улыбка, поза в пол-оборота, качество фото высокое."
-        )
-    return (
-        f"{details}. "
-        "Студийный мягкий свет, аккуратный внешний вид, натуральные цвета, высокое качество, без лишних предметов в кадре."
-    )
-
-
-def _gen_presentation_desc(details: str) -> str:
-    details = (details or "").strip()
-    if not details:
-        return (
-            "Показать товар крупным планом, чтобы хорошо были видны детали и текстура. "
-            "Руки/поза аккуратные, фон нейтральный, свет мягкий, товар в центре внимания."
-        )
-    return (
-        f"{details}. "
-        "Фон нейтральный, свет мягкий, товар в фокусе, без лишнего визуального шума."
-    )
+logger = logging.getLogger(__name__)
 
 
 def _tips_for_photo(kind: str) -> str:
@@ -79,6 +58,7 @@ async def help_start(
 ) -> None:
     await upsert_user(session, call.from_user.id, call.from_user.username)
 
+    # формат: help:start:{kind} (судя по split(":", 2))
     kind = call.data.split(":", 2)[2].strip()
     return_state = await state.get_state()
     await state.update_data(help_kind=kind, return_state=return_state)
@@ -89,7 +69,7 @@ async def help_start(
         await call.answer()
         return
 
-    # генерация текста
+    # генерация промпта через модель
     await state.set_state(HelpFlow.input)
 
     if kind == "model_desc":
@@ -100,7 +80,7 @@ async def help_start(
             "• стиль (casual, street, business)\n"
             "• фон/свет\n"
             "• настроение/поза\n\n"
-            "Я соберу это в готовое описание 😉"
+            "Сгенерирую промпт на русском для nano-banana-pro 😉"
         )
     elif kind == "presentation_desc":
         text = (
@@ -110,10 +90,10 @@ async def help_start(
             "• где он должен быть (на руке/ушах/ногтях и т.д.)\n"
             "• план (крупный/по пояс/портрет)\n"
             "• настроение/стиль\n\n"
-            "Сгенерирую красивый текст 😉"
+            "Сгенерирую промпт на русском для nano-banana-pro 😉"
         )
     else:
-        text = "Ок 🙂 Напиши детали, и я сделаю вариант текста."
+        text = "Ок 🙂 Напиши детали, и я сделаю промпт на русском для nano-banana-pro."
 
     await edit_text_safe(call, text)
     await call.answer()
@@ -136,20 +116,35 @@ async def help_input(message: Message, state: FSMContext) -> None:
         return
 
     data = await state.get_data()
-    kind = data.get("help_kind")
-    if kind == "model_desc":
-        generated = _gen_model_desc(details)
-    elif kind == "presentation_desc":
-        generated = _gen_presentation_desc(details)
-    else:
-        generated = details
+    kind = (data.get("help_kind") or "").strip()
+
+    try:
+        # ВАЖНО: kind должен совпадать с ожидаемыми секциями в prompt_helper.py
+        # Например: model_desc / presentation_desc / tryon_desc
+        generated = await generate_nano_banana_prompt_ru(
+            section=kind, user_text=details
+        )
+    except PromptHelperError as e:
+        logger.exception("Prompt helper failed: %s", e)
+        await message.answer(
+            "Не получилось сгенерировать промпт 😅\n"
+            "Проверь, что в .env есть OPENROUTER_API_KEY, и попробуй ещё раз."
+        )
+        return
+    except Exception as e:
+        logger.exception("Unexpected error in prompt generation: %s", e)
+        await message.answer(
+            "Не получилось сгенерировать промпт 😅 Попробуй ещё раз чуть позже."
+        )
+        return
 
     await state.update_data(generated_text=generated)
     await state.set_state(HelpFlow.ready)
 
+    safe = html.escape(generated)
     await message.answer(
-        "Готово! ✨ Вот вариант:\n\n"
-        f"“{generated}”\n\n"
+        "Готово! ✨ Вот промпт на русском для <b>nano-banana-pro</b>:\n\n"
+        f"<code>{safe}</code>\n\n"
         "Хочешь использовать его? 😉",
         reply_markup=help_use_back_kb(),
     )
@@ -187,9 +182,12 @@ async def help_use(call: CallbackQuery, state: FSMContext) -> None:
         await state.set_state(ModelFlow.confirm_model_desc)
         await state.update_data(model_desc=generated)
 
+        safe = html.escape(generated)
         await edit_text_safe(
             call,
-            f"Супер! 😊 Вот описание модели:\n“{generated}”\n\nВсё верно? ✅",
+            "Супер! 😊 Вот описание/промпт для модели:\n"
+            f"<code>{safe}</code>\n\n"
+            "Всё верно? ✅",
             reply_markup=yes_no_kb(yes_text="✅ Да", no_text="✏️ Изменить"),
         )
         await call.answer()
@@ -207,12 +205,15 @@ async def help_use(call: CallbackQuery, state: FSMContext) -> None:
         desc = d.get("model_desc", "")
         photos = d.get("product_photos", []) or []
 
+        safe_desc = html.escape(desc)
+        safe_gen = html.escape(generated)
+
         await edit_text_safe(
             call,
             "Давай проверим ✅😊\n\n"
-            f"1) Описание модели: “{desc}”\n"
+            f"1) Описание модели: <code>{safe_desc}</code>\n"
             f"2) Фото товара: {len(photos)} шт. 📸\n"
-            f"3) Подача товара: “{generated}”\n\n"
+            f"3) Подача товара: <code>{safe_gen}</code>\n\n"
             "Всё верно?",
             reply_markup=review_edit_kb(),
         )
@@ -221,5 +222,6 @@ async def help_use(call: CallbackQuery, state: FSMContext) -> None:
 
     # fallback
     await state.set_state(return_state)
-    await edit_text_safe(call, f"Готово ✅ Вернул на шаг ввода.\n\n“{generated}”")
+    safe = html.escape(generated)
+    await edit_text_safe(call, f"Готово ✅ Вернул на шаг ввода.\n\n<code>{safe}</code>")
     await call.answer()

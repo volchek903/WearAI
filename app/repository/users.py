@@ -14,6 +14,12 @@ async def get_user_by_tg_id(session: AsyncSession, tg_id: int) -> Optional[User]
     return res.scalar_one_or_none()
 
 
+async def user_exists(session: AsyncSession, tg_id: int) -> bool:
+    stmt = select(User.id).where(User.tgID == tg_id).limit(1)
+    res = await session.execute(stmt)
+    return res.scalar_one_or_none() is not None
+
+
 async def upsert_user(
     session: AsyncSession, tg_id: int, username: Optional[str] = None
 ) -> User:

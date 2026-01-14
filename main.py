@@ -2,20 +2,24 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-from app.db.init_db import init_db
 
+from app.db.init_db import init_db
 from app.db import engine, session_factory
 from app.middlewares import DbSessionMiddleware, UserActionLogMiddleware
+from app.handlers.faq import router as faq_router
+from app.handlers.feedback import router as feedback_router
 from app.handlers.start import router as start_router
-from app.handlers.help import router as help_router
 from app.handlers.scenario_model import router as model_router
 from app.handlers.scenario_tryon import router as tryon_router
+from app.handlers.help import router as help_router
+from app.handlers.settings import router as settings_router
+from app.handlers.animate_photo import router as animate_router
+from app.handlers.feedback_offer_video import router as feedback_offer_video_router
 
 
 def setup_logging() -> None:
@@ -36,16 +40,23 @@ def get_bot_token() -> str:
 
 
 def setup_routers(dp: Dispatcher) -> None:
+    # ВАЖНО: feedback_router должен быть ПЕРВЫМ,
+    # чтобы message-хендлеры FeedbackFlow не перехватывались другими роутерами.
+    dp.include_router(feedback_router)
+
     dp.include_router(start_router)
     dp.include_router(model_router)
     dp.include_router(tryon_router)
+    dp.include_router(animate_router)
+    dp.include_router(faq_router)
+    dp.include_router(feedback_offer_video_router)
+    # Роутеры с более “общими” хендлерами — ниже
     dp.include_router(help_router)
+    dp.include_router(settings_router)
 
 
 def setup_middlewares(dp: Dispatcher) -> None:
-    # логирование действий пользователя
     dp.update.outer_middleware(UserActionLogMiddleware())
-    # сессия БД в хендлеры как параметр session: AsyncSession
     dp.update.outer_middleware(DbSessionMiddleware(session_factory))
 
 
@@ -63,7 +74,6 @@ async def main() -> None:
     setup_middlewares(dp)
     setup_routers(dp)
 
-    # важно: создаём таблицы, если их ещё нет
     await init_db()
 
     try:

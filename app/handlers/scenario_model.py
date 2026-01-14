@@ -1,36 +1,46 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 
+from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 from app.keyboards.menu import MenuCallbacks
 from app.keyboards.confirm import yes_no_kb, review_edit_kb, ConfirmCallbacks
 from app.keyboards.help import help_button_kb
+from app.keyboards.feedback import feedback_kb
 from app.repository.users import increment_generated_photos, upsert_user
 from app.services.album_collector import AlbumCollector
+from app.services.generation import generate_image_kie_from_telegram
+from app.services.kie_ai import KieAIError
 from app.states.model_flow import ModelFlow
+from app.states.feedback_flow import FeedbackFlow
 from app.utils.tg_edit import edit_text_safe
+from app.utils.tg_send import send_image_smart
+from app.utils.kie_errors import kie_error_to_user_text
+
 
 router = Router()
+logger = logging.getLogger(__name__)
 _album = AlbumCollector(debounce_seconds=0.8)
 
 MODEL_DESC_EXAMPLE = (
     "Отлично! 🛍✨\n\n"
     "Опиши, какой ты хочешь видеть модель 👇\n"
-    "Пример: “Девушка 22–25 лет, натуральный макияж, студийный свет, белый фон, стиль casual, "
-    "лёгкая улыбка, поза в пол-оборота”."
+    "Пример: “Мужчина 25–35, студийный свет, белый фон, стиль casual, лёгкая улыбка, поза в пол-оборота”."
 )
 
-PRESENTATION_EXAMPLE = (
-    "Класс, фото получил! ✅\n\n"
-    "Теперь напиши, <b>как модель должна показать товар</b> 👇\n"
+PRODUCT_ACTION_EXAMPLE = (
+    "Класс, фото товара получил! ✅\n\n"
+    "Теперь напиши, <b>что нужно сделать с товаром</b> 👇\n"
     "Примеры:\n"
-    "— “Это кольцо должно быть на пальце правой руки, крупный план.”\n"
-    "— “Эти серьги должны быть на ушах, портрет по плечи.”\n"
-    "— “Эта вещь должна быть на ногтях, макро-кадр.”"
+    "— “Сделай крупный план товара в руке, чтобы были видны детали.”\n"
+    "— “Товар должен быть на модели: портрет по плечи, естественный свет.”\n"
+    "— “Покажи товар на белом фоне, как в каталоге, без лишних объектов.”\n"
+    "— “Сделай акцент на принте/логотипе, высокая резкость.”"
 )
 
 
@@ -78,6 +88,7 @@ async def model_desc_in(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(ModelFlow.confirm_model_desc, F.data == ConfirmCallbacks.NO)
 async def model_desc_edit(call: CallbackQuery, state: FSMContext) -> None:
+    await state.update_data(model_desc="")
     await state.set_state(ModelFlow.model_desc)
 
     await edit_text_safe(
@@ -117,8 +128,10 @@ async def product_photos_in(message: Message, state: FSMContext) -> None:
         file_id = message.photo[-1].file_id
         await state.update_data(product_photos=[file_id])
         await state.set_state(ModelFlow.presentation_desc)
+
         await message.answer(
-            PRESENTATION_EXAMPLE, reply_markup=help_button_kb("presentation_desc")
+            PRODUCT_ACTION_EXAMPLE,
+            reply_markup=help_button_kb("presentation_desc"),
         )
         return
 
@@ -139,8 +152,10 @@ async def product_photos_in(message: Message, state: FSMContext) -> None:
 
     await state.update_data(product_photos=result.file_ids)
     await state.set_state(ModelFlow.presentation_desc)
+
     await message.answer(
-        PRESENTATION_EXAMPLE, reply_markup=help_button_kb("presentation_desc")
+        PRODUCT_ACTION_EXAMPLE,
+        reply_markup=help_button_kb("presentation_desc"),
     )
 
 
@@ -148,21 +163,21 @@ async def product_photos_in(message: Message, state: FSMContext) -> None:
 async def presentation_desc_in(message: Message, state: FSMContext) -> None:
     if not message.text or not message.text.strip():
         await message.answer(
-            "Мне нужен текст 😊 Опиши, пожалуйста, как показываем товар 👇"
+            "Мне нужен текст 😊 Напиши, что нужно сделать с товаром 👇"
         )
         return
 
-    pres = message.text.strip()
+    action_text = message.text.strip()
 
-    if is_text_too_long(pres):
+    if is_text_too_long(action_text):
         await message.answer(
             f"Ой 😅 Текст слишком длинный.\n"
-            f"Максимум {MAX_TEXT_LEN} символов, а у тебя {len(pres)}.\n"
+            f"Максимум {MAX_TEXT_LEN} символов, а у тебя {len(action_text)}.\n"
             "Сократи, пожалуйста, и отправь ещё раз 🙌"
         )
         return
 
-    await state.update_data(presentation_desc=pres)
+    await state.update_data(presentation_desc=action_text)
     await state.set_state(ModelFlow.review)
 
     data = await state.get_data()
@@ -173,7 +188,7 @@ async def presentation_desc_in(message: Message, state: FSMContext) -> None:
         "Давай быстренько проверим ✅😊\n\n"
         f"1) Описание модели: “{desc}”\n"
         f"2) Фото товара: {len(photos)} шт. 📸\n"
-        f"3) Подача товара: “{pres}”\n\n"
+        f"3) Что сделать с товаром: “{action_text}”\n\n"
         "Всё верно?",
         reply_markup=review_edit_kb(),
     )
@@ -181,6 +196,7 @@ async def presentation_desc_in(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(ModelFlow.review, F.data == ConfirmCallbacks.EDIT_MODEL)
 async def review_edit_model(call: CallbackQuery, state: FSMContext) -> None:
+    await state.update_data(model_desc="")
     await state.set_state(ModelFlow.model_desc)
 
     await edit_text_safe(
@@ -193,6 +209,7 @@ async def review_edit_model(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(ModelFlow.review, F.data == ConfirmCallbacks.EDIT_PHOTOS)
 async def review_edit_photos(call: CallbackQuery, state: FSMContext) -> None:
+    await state.update_data(product_photos=[])
     await state.set_state(ModelFlow.product_photos)
 
     await edit_text_safe(
@@ -205,11 +222,13 @@ async def review_edit_photos(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(ModelFlow.review, F.data == ConfirmCallbacks.EDIT_PRESENTATION)
 async def review_edit_presentation(call: CallbackQuery, state: FSMContext) -> None:
+    await state.update_data(presentation_desc="")
     await state.set_state(ModelFlow.presentation_desc)
 
     await edit_text_safe(
         call,
-        "Ок! 😊 Напиши подачу товара заново 👇\n\n" + PRESENTATION_EXAMPLE,
+        "Ок! 😊 Напиши заново, что нужно сделать с товаром 👇\n\n"
+        + PRODUCT_ACTION_EXAMPLE,
         reply_markup=help_button_kb("presentation_desc"),
     )
     await call.answer()
@@ -219,8 +238,106 @@ async def review_edit_presentation(call: CallbackQuery, state: FSMContext) -> No
 async def review_confirmed(
     call: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
-    await increment_generated_photos(session=session, tg_id=call.from_user.id, delta=1)
-    await state.clear()
+    data = await state.get_data()
+    model_desc: str = (data.get("model_desc") or "").strip()
+    action_desc: str = (data.get("presentation_desc") or "").strip()
+    product_photos: list[str] = data.get("product_photos", []) or []
 
-    await edit_text_safe(call, "ОТЛИЧНО ✅😎")
+    if not model_desc or not action_desc or not product_photos:
+        await edit_text_safe(
+            call, "Не вижу всех данных для генерации 😅\nДавай начнём заново: /start"
+        )
+        await call.answer()
+        await state.clear()
+        return
+
+    await edit_text_safe(call, "Генерирую изображение… ⏳")
     await call.answer()
+
+    prompt = (
+        f"{model_desc}\n\n"
+        f"{action_desc}\n\n"
+        "Важно: товар должен строго соответствовать референс-фото (цвет, фактура, форма, принты/логотипы). "
+        "Фотореализм, корректные пропорции, естественный свет, высокое качество."
+    )
+
+    try:
+        results = await generate_image_kie_from_telegram(
+            bot=call.bot,
+            session=session,
+            tg_id=call.from_user.id,
+            prompt=prompt,
+            telegram_photo_file_ids=product_photos,
+        )
+
+        if not results:
+            raise RuntimeError("KIE returned empty result")
+
+        output_files: list[dict[str, str]] = []
+        for filename, img_bytes in results:
+            sent = await send_image_smart(
+                call.message, img_bytes=img_bytes, filename=filename
+            )
+
+            if getattr(sent, "photo", None):
+                output_files.append(
+                    {
+                        "kind": "photo",
+                        "file_id": sent.photo[-1].file_id,
+                        "filename": filename,
+                    }
+                )
+            elif getattr(sent, "document", None):
+                output_files.append(
+                    {
+                        "kind": "document",
+                        "file_id": sent.document.file_id,
+                        "filename": filename,
+                    }
+                )
+
+        await increment_generated_photos(
+            session=session, tg_id=call.from_user.id, delta=1
+        )
+
+        # ВАЖНО: сохраняем только payload для feedback (без “залипания” старых данных)
+        await state.set_data(
+            {
+                "feedback_payload": {
+                    "scenario": "model",
+                    "user_tg_id": call.from_user.id,
+                    "username": call.from_user.username or "",
+                    "model_desc": model_desc,
+                    "action_desc": action_desc,
+                    "kie_prompt": prompt,
+                    "input_photos": product_photos,
+                    "output_files": output_files,
+                }
+            }
+        )
+        await state.set_state(FeedbackFlow.choice)
+
+        await call.message.answer(
+            "Все получилось как вы хотели или обнаружили ошибку?",
+            reply_markup=feedback_kb(),
+        )
+        return
+
+    except KieAIError as e:
+        logger.warning("KIE rejected/failed: %s", e)
+        await edit_text_safe(
+            call, kie_error_to_user_text(e), reply_markup=review_edit_kb()
+        )
+        await call.answer()
+        return
+
+    except Exception as e:
+        logger.exception("MODEL generation failed: %s", e)
+        await edit_text_safe(
+            call,
+            "Не получилось сгенерировать 😅\n"
+            "Попробуй нажать «✅ Всё верно» ещё раз или внеси правки.",
+            reply_markup=review_edit_kb(),
+        )
+        await call.answer()
+        return

@@ -1,0 +1,58 @@
+from __future__ import annotations
+
+from aiogram import F, Router
+from aiogram.types import CallbackQuery
+
+from app.keyboards.faq import FAQ_BACK_CB, faq_kb
+from app.keyboards.menu import MenuCallbacks, main_menu_kb
+
+router = Router()
+
+
+@router.callback_query(F.data == MenuCallbacks.FAQ)
+async def faq_open(cb: CallbackQuery) -> None:
+    if cb.message is None:
+        await cb.answer()
+        return
+
+    text = (
+        "❓ <b>FAQ</b>\n\n"
+        "1) <b>Как правильно отправить фото для «Оживить фото»?</b>\n"
+        "— Отправьте <b>одно фото одним сообщением</b> (не альбомом). Лучше: чёткое, без смаза, лицо/объект крупно, хороший свет.\n\n"
+        "2) <b>Сколько длится видео и что можно анимировать?</b>\n"
+        "— Видео длится <b>5 секунд</b>. Лучше всего получаются <b>мягкие движения</b>: моргание, лёгкая улыбка, небольшой поворот головы, лёгкое движение волос, плавное приближение камеры.\n\n"
+        "3) <b>Почему генерация может не запуститься или зависнуть?</b>\n"
+        "— Чаще всего из-за: плохого качества фото, слишком сложного/запретного промпта, перегрузки сервиса или нестабильного интернета. Попробуйте <b>упростить промпт</b> и отправить фото заново.\n\n"
+        "4) <b>Почему иногда приходит GIF, а не видео?</b>\n"
+        "— Иногда сервис отдаёт <b>превью</b>. Мы стараемся отправлять итог <b>mp4 файлом</b>. Если пришёл GIF — просто запустите генерацию ещё раз.\n\n"
+        "5) <b>Как писать промпт, чтобы получилось точно?</b>\n"
+        "— Пишите <b>1–3 конкретных действия</b> и без противоречий. Пример: «лёгкая улыбка, моргание, голова чуть вправо, камера плавно приближает». Избегайте: «сделай красиво», «как в кино», «измени всё сразу».\n\n"
+        "6) <b>Какие запросы запрещены и не будут генерироваться?</b>\n"
+        "— Запрещены темы: откровенный/сексуальный контент, жестокое насилие, самоповреждение, опасные инструкции, экстремизм, травля/ненависть, подмена личности/дипфейки, подделка документов.\n\n"
+        "7) <b>Оплата и подписка</b>\n"
+        "— Любое пополнение и подписка — это <b>добровольное пожертвование</b> на развитие проекта. Подробности — в статье ниже.\n\n"
+        "Выберите нужный раздел:"
+    )
+
+    try:
+        await cb.message.edit_text(text, parse_mode="HTML", reply_markup=faq_kb())
+    except Exception:
+        await cb.message.answer(text, parse_mode="HTML", reply_markup=faq_kb())
+
+    await cb.answer()
+
+
+@router.callback_query(F.data == FAQ_BACK_CB)
+async def faq_back(cb: CallbackQuery) -> None:
+    if cb.message is None:
+        await cb.answer()
+        return
+
+    text = "Главное меню:"
+
+    try:
+        await cb.message.edit_text(text, reply_markup=main_menu_kb())
+    except Exception:
+        await cb.message.answer(text, reply_markup=main_menu_kb())
+
+    await cb.answer()

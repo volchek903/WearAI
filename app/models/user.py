@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import String, DateTime, Boolean, Integer, BigInteger, func
-from sqlalchemy.orm import Mapped, mapped_column
-
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.models.user_photo_settings import UserPhotoSettings
 from app.models.base import Base
 
 
@@ -42,4 +42,10 @@ class User(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+    photo_settings: Mapped["UserPhotoSettings | None"] = relationship(
+        "UserPhotoSettings",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
     )

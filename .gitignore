@@ -14,3 +14,9 @@ logs/
 *.db
 *.sqlite
 *.sqlite3
+__pycache__
+.pyc
+_kie_debug_uploads
+.vscode
+wearai.db
+alembic
