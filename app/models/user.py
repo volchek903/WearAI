@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from sqlalchemy import String, DateTime, Boolean, Integer, BigInteger, func
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.models.user_photo_settings import UserPhotoSettings
+
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.user_photo_settings import UserPhotoSettings
+    from app.models.admin import Admin
 
 
 class User(Base):
@@ -43,8 +48,18 @@ class User(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+    # 1:1 настройки генерации фото
     photo_settings: Mapped["UserPhotoSettings | None"] = relationship(
         "UserPhotoSettings",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+    # 1:1 признак администратора через таблицу admin
+    admin: Mapped["Admin | None"] = relationship(
+        "Admin",
         back_populates="user",
         uselist=False,
         cascade="all, delete-orphan",

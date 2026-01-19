@@ -7,7 +7,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-
+import os
 from app.db.init_db import init_db
 from app.db import engine, session_factory
 from app.middlewares import DbSessionMiddleware, UserActionLogMiddleware
@@ -20,6 +20,7 @@ from app.handlers.help import router as help_router
 from app.handlers.settings import router as settings_router
 from app.handlers.animate_photo import router as animate_router
 from app.handlers.feedback_offer_video import router as feedback_offer_video_router
+from app.handlers.admin_panel import router as admin_panel_router
 
 
 def setup_logging() -> None:
@@ -31,11 +32,9 @@ def setup_logging() -> None:
 
 
 def get_bot_token() -> str:
-    token = "7998511134:AAFuWlxM9P5q3_HowJOkh9Tv11CgfuR9gBE"
+    token = os.getenv("BOT_TOKEN", "").strip()
     if not token:
-        raise RuntimeError(
-            "BOT_TOKEN is not set. Put it into .env or export BOT_TOKEN=..."
-        )
+        raise RuntimeError("BOT_TOKEN is not set. Export it: export BOT_TOKEN='...'")
     return token
 
 
@@ -50,6 +49,7 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(animate_router)
     dp.include_router(faq_router)
     dp.include_router(feedback_offer_video_router)
+    dp.include_router(admin_panel_router)
     # Роутеры с более “общими” хендлерами — ниже
     dp.include_router(help_router)
     dp.include_router(settings_router)
