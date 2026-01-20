@@ -11,8 +11,11 @@ class MenuCallbacks:
     TRYON = "menu:tryon"
     ANIMATE = "menu:animate"
     HELP = "menu:help"
-    FAQ = "menu:faq"  # NEW
+    FAQ = "menu:faq"
     SETTINGS = "menu:settings"
+
+    # NEW
+    EXTRA = "menu:extra"
 
 
 class SettingsCallbacks:
@@ -23,6 +26,24 @@ class SettingsCallbacks:
     BACK = "settings:back"
 
 
+class ExtraCallbacks:
+    # открыть меню "Дополнительные возможности"
+    OPEN = "extra:open"
+
+    # выбор пакета
+    WANT_ORBIT = "extra:want:orbit"
+    WANT_NOVA = "extra:want:nova"
+    WANT_COSMIC = "extra:want:cosmic"
+
+    # покупка
+    BUY_ORBIT = "extra:buy:orbit"
+    BUY_NOVA = "extra:buy:nova"
+    BUY_COSMIC = "extra:buy:cosmic"
+
+    # навигация назад
+    BACK = "extra:back"
+
+
 def main_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
 
@@ -30,7 +51,11 @@ def main_menu_kb() -> InlineKeyboardMarkup:
     kb.button(text="🧥 Примерить одежду", callback_data=MenuCallbacks.TRYON)
     kb.button(text="🎬 Оживить фото", callback_data=MenuCallbacks.ANIMATE)
     kb.button(text="🪄 Помочь с описанием", callback_data=MenuCallbacks.HELP)
-    kb.button(text="❓ FAQ", callback_data=MenuCallbacks.FAQ)  # NEW
+
+    # NEW
+    kb.button(text="✨ Доп. возможности", callback_data=MenuCallbacks.EXTRA)
+
+    kb.button(text="❓ FAQ", callback_data=MenuCallbacks.FAQ)
     kb.button(text="⚙️ Настройки", callback_data=MenuCallbacks.SETTINGS)
 
     kb.adjust(1)

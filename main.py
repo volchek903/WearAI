@@ -21,6 +21,8 @@ from app.handlers.settings import router as settings_router
 from app.handlers.animate_photo import router as animate_router
 from app.handlers.feedback_offer_video import router as feedback_offer_video_router
 from app.handlers.admin_panel import router as admin_panel_router
+from app.handlers.extra import router as extra_router
+from app.services.subscription_seed import seed_subscriptions
 
 
 def setup_logging() -> None:
@@ -50,6 +52,7 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(faq_router)
     dp.include_router(feedback_offer_video_router)
     dp.include_router(admin_panel_router)
+    dp.include_router(extra_router)
     # Роутеры с более “общими” хендлерами — ниже
     dp.include_router(help_router)
     dp.include_router(settings_router)
@@ -75,6 +78,8 @@ async def main() -> None:
     setup_routers(dp)
 
     await init_db()
+    async with session_factory() as session:
+        await seed_subscriptions(session)
 
     try:
         log.info("Bot started. Polling...")
