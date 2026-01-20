@@ -22,6 +22,7 @@ from app.handlers.animate_photo import router as animate_router
 from app.handlers.feedback_offer_video import router as feedback_offer_video_router
 from app.handlers.admin_panel import router as admin_panel_router
 from app.handlers.extra import router as extra_router
+from app.handlers.admin_access import router as admin_access_router
 from app.services.subscription_seed import seed_subscriptions
 
 
@@ -53,6 +54,7 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(feedback_offer_video_router)
     dp.include_router(admin_panel_router)
     dp.include_router(extra_router)
+    dp.include_router(admin_access_router)
     # Роутеры с более “общими” хендлерами — ниже
     dp.include_router(help_router)
     dp.include_router(settings_router)

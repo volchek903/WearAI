@@ -17,17 +17,21 @@ class ExtraCallbacks:
 
     # навигация
     BACK = "extra:back"
+    TO_MENU = "extra:to_menu"
 
 
 def extra_menu_kb(current_plan_name: str | None) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
 
     if current_plan_name != "Orbit":
-        kb.button(text="Хочу Orbit", callback_data=ExtraCallbacks.WANT_ORBIT)
+        kb.button(text="Хочу Orbit!!!", callback_data=ExtraCallbacks.WANT_ORBIT)
     if current_plan_name != "Nova":
-        kb.button(text="Хочу Nova", callback_data=ExtraCallbacks.WANT_NOVA)
+        kb.button(text="Хочу Nova!!!", callback_data=ExtraCallbacks.WANT_NOVA)
     if current_plan_name != "Cosmic":
-        kb.button(text="Хочу Cosmic", callback_data=ExtraCallbacks.WANT_COSMIC)
+        kb.button(text="Хочу Cosmic!!!", callback_data=ExtraCallbacks.WANT_COSMIC)
+
+    # ✅ кнопка назад в главное меню
+    kb.button(text="⬅️ Назад", callback_data=ExtraCallbacks.TO_MENU)
 
     kb.adjust(1)
     return kb.as_markup()

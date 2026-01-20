@@ -11,6 +11,7 @@ from app.keyboards.extra import ExtraCallbacks, extra_menu_kb, extra_buy_kb
 from app.models.user import User
 from app.models.subscription import Subscription
 from app.models.user_subscription import UserSubscription
+from app.keyboards.menu import main_menu_kb
 
 router = Router()
 
@@ -89,6 +90,15 @@ def _pitch(plan_name: str, plan: Subscription) -> str:
         f"{vibe}\n\n"
         "Если готов — жми <b>Купить</b> 😉"
     )
+
+
+@router.callback_query(F.data == ExtraCallbacks.TO_MENU)
+async def extra_to_menu(call: CallbackQuery) -> None:
+    await call.message.edit_text(
+        "Главное меню 👇",
+        reply_markup=main_menu_kb(),
+    )
+    await call.answer()
 
 
 async def _get_user(session: AsyncSession, tg_id: int) -> User | None:

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Union
 
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
 
 async def edit_text_safe(
-    call: CallbackQuery,
+    target: Union[CallbackQuery, Message],
     text: str,
     reply_markup: Optional[InlineKeyboardMarkup] = None,
 ) -> None:
@@ -17,12 +17,15 @@ async def edit_text_safe(
     - can't edit message
     Поэтому редактируем "по возможности", иначе отправляем новое сообщение.
     """
-    if call.message is None:
+    msg: Message | None = (
+        target.message if isinstance(target, CallbackQuery) else target
+    )
+    if msg is None:
         return
 
     try:
-        await call.message.edit_text(text, reply_markup=reply_markup)
+        await msg.edit_text(text, reply_markup=reply_markup)
     except TelegramBadRequest as e:
         if "message is not modified" in str(e):
             return
-        await call.message.answer(text, reply_markup=reply_markup)
+        await msg.answer(text, reply_markup=reply_markup)

@@ -7,13 +7,45 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 class AdminCallbacks:
     STATS = "admin:stats"
     USERS = "admin:users"
+    ACCESS = "admin:access"
+
+    ADD_ADMIN = "admin:add_admin"
+    REMOVE_ADMIN = "admin:remove_admin"
+    GIVE_SUB = "admin:give_sub"
+
     BACK = "admin:back"
 
 
 def admin_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
+
     kb.button(text="📊 Статистика", callback_data=AdminCallbacks.STATS)
     kb.button(text="👥 Пользователи", callback_data=AdminCallbacks.USERS)
-    kb.button(text="⬅️ Назад", callback_data=AdminCallbacks.BACK)
+    kb.button(text="🔐 Права доступа", callback_data=AdminCallbacks.ACCESS)
+
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def admin_access_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+
+    kb.button(
+        text="➕ Добавить администратора",
+        callback_data=AdminCallbacks.ADD_ADMIN,
+    )
+    kb.button(
+        text="➖ Удалить администратора",
+        callback_data=AdminCallbacks.REMOVE_ADMIN,
+    )
+    kb.button(
+        text="🎁 Выдать подписку",
+        callback_data=AdminCallbacks.GIVE_SUB,
+    )
+    kb.button(
+        text="⬅️ Назад",
+        callback_data=AdminCallbacks.BACK,
+    )
+
     kb.adjust(1)
     return kb.as_markup()
