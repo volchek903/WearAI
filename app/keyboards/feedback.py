@@ -8,7 +8,7 @@ class FeedbackCallbacks:
     BUG = "fb:bug"
     OK = "fb:ok"
     MENU = "fb:menu"
-    ANIMATE = "fb:animate"  # NEW
+    ANIMATE = "fb:animate"
 
     # алиасы для старого кода
     GOOD = OK
@@ -25,8 +25,8 @@ def feedback_kb() -> InlineKeyboardMarkup:
 
 def feedback_offer_video_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="⬅️ Вернуться в меню", callback_data=FeedbackCallbacks.MENU)
     kb.button(text="🎬 Оживить фото", callback_data=FeedbackCallbacks.ANIMATE)
+    kb.button(text="⬅️ Вернуться в меню", callback_data=FeedbackCallbacks.MENU)
     kb.adjust(1)
     return kb.as_markup()
 

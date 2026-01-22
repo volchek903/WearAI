@@ -5,11 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.admin import Admin
 from app.models.user import User
+from app.models.user_subscription import UserSubscription
 
 
-# =========================
-# Проверка админа
-# =========================
 async def is_admin(session: AsyncSession, tg_id: int) -> bool:
     stmt = (
         select(Admin.id)
@@ -20,22 +18,18 @@ async def is_admin(session: AsyncSession, tg_id: int) -> bool:
     return (await session.scalar(stmt)) is not None
 
 
-# =========================
-# Статистика
-# =========================
 async def get_users_stats(session: AsyncSession) -> tuple[int, int]:
     total_users = await session.scalar(select(func.count(User.id)))
 
     active_subs = await session.scalar(
-        select(func.count(User.id)).where(User.subscription_active.is_(True))
+        select(func.count(func.distinct(UserSubscription.user_id))).where(
+            UserSubscription.status == "active"
+        )
     )
 
-    return total_users or 0, active_subs or 0
+    return int(total_users or 0), int(active_subs or 0)
 
 
-# =========================
-# Последние пользователи
-# =========================
 async def get_last_users(
     session: AsyncSession,
     limit: int = 10,

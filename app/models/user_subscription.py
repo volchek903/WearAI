@@ -46,4 +46,5 @@ class UserSubscription(Base):
         SmallInteger, nullable=False, default=1, index=True
     )
 
+    user = relationship("User", back_populates="subscriptions")
     subscription = relationship("Subscription")

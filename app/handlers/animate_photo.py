@@ -9,16 +9,22 @@ from aiogram import F, Router
 from aiogram.enums import ChatAction
 from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile, CallbackQuery, Message
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.config import settings  # settings.kie_api_key (env: KIE_API_KEY)
-from app.keyboards.menu import MenuCallbacks, main_menu_kb
+from app.db.config import settings
+from app.keyboards.menu import MenuCallbacks
+from app.repository.generations import (
+    charge_video_generation,
+    refund_video_generation,
+    NoGenerationsLeft,
+)
 from app.states.animate_photo import AnimatePhotoStates
 from app.utils.kie_kling_client import KieKlingClient
+from app.utils.tg_edit import edit_text_safe
 
 router = Router()
 logger = logging.getLogger(__name__)
 
-# Чтобы не плодить параллельные генерации на одного юзера
 _active_jobs: dict[int, asyncio.Task] = {}
 
 
@@ -59,7 +65,6 @@ async def _status_spinner(
                 text=frames[i % len(frames)],
             )
         except Exception:
-            # Не критично: могли удалить сообщение или Telegram ограничил частоту
             pass
         i += 1
         await asyncio.sleep(2)
@@ -91,13 +96,7 @@ async def animate_entry(cb: CallbackQuery, state: FSMContext) -> None:
         "💡 <b>Совет</b>: лучше работает фото без смаза, с хорошим светом и лицом в кадре."
     )
 
-    # Редактируем прошлое сообщение и УБИРАЕМ кнопки
-    try:
-        await cb.message.edit_text(text, parse_mode="HTML", reply_markup=None)
-    except Exception:
-        # На случай, если редактирование недоступно (редко)
-        await cb.message.answer(text, parse_mode="HTML")
-
+    await edit_text_safe(cb, text, reply_markup=None)
     await cb.answer()
 
 
@@ -109,32 +108,20 @@ async def animate_got_photo(message: Message, state: FSMContext) -> None:
         logger.error("KIE_API_KEY missing in settings")
         return
 
-    # Проверка: не альбом (media_group_id != None означает медиагруппу)
     if message.media_group_id is not None:
         await message.answer(
-            "Пожалуйста, отправьте <b>одно</b> фото (не альбомом).", parse_mode="HTML"
-        )
-        logger.info(
-            "User %s sent media group instead of single photo", message.from_user.id
+            "Пожалуйста, отправьте <b>одно</b> фото (не альбомом).",
+            parse_mode="HTML",
         )
         return
 
-    photo = message.photo[-1]  # последний — самое большое качество у Telegram
+    photo = message.photo[-1]
     tg_file = await message.bot.get_file(photo.file_id)
     file_path = tg_file.file_path
     if not file_path:
         await message.answer("Не удалось получить файл из Telegram. Попробуй ещё раз.")
-        logger.warning("Telegram file_path is empty for user %s", message.from_user.id)
         return
 
-    logger.info(
-        "User %s photo received: file_id=%s path=%s",
-        message.from_user.id,
-        photo.file_id,
-        file_path,
-    )
-
-    # Скачаем фото и загрузим в KIE, чтобы получить публичный image_url
     image_bytes = await _download_telegram_file(message.bot.token, file_path)
     filename = Path(file_path).name or "photo.jpg"
 
@@ -151,32 +138,29 @@ async def animate_got_photo(message: Message, state: FSMContext) -> None:
         logger.exception("KIE upload failed for user %s", message.from_user.id)
         return
 
-    logger.info(
-        "User %s uploaded to KIE. image_url=%s", message.from_user.id, image_url
-    )
-
     await state.update_data(image_url=image_url)
     await state.set_state(AnimatePhotoStates.waiting_prompt)
 
-    await message.answer(
-        "Отлично! Теперь напишите, что вы хотите, чтобы происходило на данной фотке.",
-    )
+    await message.answer("Отлично! Теперь напишите, что должно происходить на видео.")
 
 
 @router.message(AnimatePhotoStates.waiting_photo)
 async def animate_waiting_photo_wrong(message: Message) -> None:
     await message.answer(
-        "Сейчас нужно фото. Пришлите <b>одно</b> фото сообщением.", parse_mode="HTML"
+        "Сейчас нужно фото. Пришлите <b>одно</b> фото сообщением.",
+        parse_mode="HTML",
     )
 
 
 async def _run_video_job(
-    chat_id: int, bot, task_id: str, user_id: int, status_message_id: int
+    *,
+    chat_id: int,
+    bot,
+    task_id: str,
+    user_id: int,
+    status_message_id: int,
+    session: AsyncSession,
 ) -> None:
-    """
-    Фоновая задача: ждём готовности и отправляем видео файлом.
-    + анимация загрузки (spinner + chat action)
-    """
     stop = asyncio.Event()
     spinner_task = asyncio.create_task(
         _status_spinner(bot, chat_id, status_message_id, stop)
@@ -186,50 +170,38 @@ async def _run_video_job(
     client = KieKlingClient(settings.kie_api_key)
 
     try:
-        logger.info("User %s task started: task_id=%s", user_id, task_id)
-
         res = await client.wait_for_success(
             task_id, poll_interval_s=10, max_wait_s=12 * 60
         )
 
         if res.state == "timeout":
+            await refund_video_generation(session, user_id)
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
                 text="Таймаут ожидания результата. Попробуйте ещё раз.",
             )
-            logger.warning("User %s task timeout: task_id=%s", user_id, task_id)
             return
 
         if res.fail_msg:
+            await refund_video_generation(session, user_id)
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
                 text=f"Генерация завершилась ошибкой: {res.fail_msg}",
             )
-            logger.warning(
-                "User %s task failed: task_id=%s fail=%s",
-                user_id,
-                task_id,
-                res.fail_msg,
-            )
             return
 
         if not res.result_url:
+            await refund_video_generation(session, user_id)
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
                 text="Готово, но не удалось найти ссылку на результат.",
             )
-            logger.error(
-                "User %s success without result_url: task_id=%s", user_id, task_id
-            )
             return
 
         direct_url = await client.to_direct_download_url(res.result_url)
-        logger.info("User %s result url: %s -> %s", user_id, res.result_url, direct_url)
-
-        # Скачиваем и отправляем файлом (стабильнее и не превращается в GIF)
         video_bytes = await _download_bytes(direct_url, timeout_s=240)
         video_file = BufferedInputFile(video_bytes, filename="animation.mp4")
 
@@ -245,10 +217,9 @@ async def _run_video_job(
             supports_streaming=True,
         )
 
-        logger.info("User %s video sent OK: task_id=%s", user_id, task_id)
-
     except Exception as e:
         logger.exception("User %s error in job: task_id=%s", user_id, task_id)
+        await refund_video_generation(session, user_id)
         try:
             await bot.edit_message_text(
                 chat_id=chat_id,
@@ -262,18 +233,18 @@ async def _run_video_job(
         for t in (spinner_task, action_task):
             t.cancel()
         _active_jobs.pop(user_id, None)
-        logger.info("User %s job cleaned up", user_id)
 
 
 @router.message(AnimatePhotoStates.waiting_prompt, F.text)
-async def animate_got_prompt(message: Message, state: FSMContext) -> None:
+async def animate_got_prompt(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
     user_id = message.from_user.id
 
     if user_id in _active_jobs and not _active_jobs[user_id].done():
         await message.answer(
             "У вас уже запущена генерация. Дождитесь результата или попробуйте позже."
         )
-        logger.info("User %s tried to start second job while active", user_id)
         return
 
     data = await state.get_data()
@@ -283,18 +254,23 @@ async def animate_got_prompt(message: Message, state: FSMContext) -> None:
             "Фото не найдено в контексте. Начните заново: «Оживить фото» → отправьте фото."
         )
         await state.clear()
-        logger.warning("User %s missing image_url in state", user_id)
         return
 
-    prompt = message.text.strip()
+    prompt = (message.text or "").strip()
     if not prompt:
         await message.answer("Промпт пустой. Напишите, что должно происходить в видео.")
         return
 
+    try:
+        await charge_video_generation(session, user_id)
+    except NoGenerationsLeft:
+        await message.answer(
+            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс."
+        )
+        return
+
     client = KieKlingClient(settings.kie_api_key)
     try:
-        # duration="5" — строго 5 секунд
-        # cfg_scale=1.0 — сильнее придерживаться промпта
         task_id = await client.create_kling_task(
             prompt=prompt,
             image_url=image_url,
@@ -303,14 +279,10 @@ async def animate_got_prompt(message: Message, state: FSMContext) -> None:
             cfg_scale=1.0,
         )
     except Exception as e:
+        await refund_video_generation(session, user_id)
         await message.answer(f"Не удалось запустить генерацию: {e}")
         await state.clear()
-        logger.exception("User %s create task failed", user_id)
         return
-
-    logger.info(
-        "User %s created task: task_id=%s prompt_len=%s", user_id, task_id, len(prompt)
-    )
 
     status_msg = await message.answer("⏳ Генерирую видео…")
     await state.clear()
@@ -322,6 +294,7 @@ async def animate_got_prompt(message: Message, state: FSMContext) -> None:
             task_id=task_id,
             user_id=user_id,
             status_message_id=status_msg.message_id,
+            session=session,
         )
     )
     _active_jobs[user_id] = job

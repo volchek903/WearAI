@@ -10,10 +10,9 @@ from app.models.user_photo_settings import UserPhotoSettings
 async def get_photo_settings(
     session: AsyncSession, user_id: int
 ) -> UserPhotoSettings | None:
-    res = await session.execute(
+    return await session.scalar(
         select(UserPhotoSettings).where(UserPhotoSettings.user_id == user_id)
     )
-    return res.scalar_one_or_none()
 
 
 async def ensure_photo_settings(

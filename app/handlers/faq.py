@@ -5,6 +5,7 @@ from aiogram.types import CallbackQuery
 
 from app.keyboards.faq import FAQ_BACK_CB, faq_kb
 from app.keyboards.menu import MenuCallbacks, main_menu_kb
+from app.utils.tg_edit import edit_text_safe
 
 router = Router()
 
@@ -34,11 +35,7 @@ async def faq_open(cb: CallbackQuery) -> None:
         "Выберите нужный раздел:"
     )
 
-    try:
-        await cb.message.edit_text(text, parse_mode="HTML", reply_markup=faq_kb())
-    except Exception:
-        await cb.message.answer(text, parse_mode="HTML", reply_markup=faq_kb())
-
+    await edit_text_safe(cb, text, reply_markup=faq_kb())
     await cb.answer()
 
 
@@ -48,11 +45,5 @@ async def faq_back(cb: CallbackQuery) -> None:
         await cb.answer()
         return
 
-    text = "Главное меню:"
-
-    try:
-        await cb.message.edit_text(text, reply_markup=main_menu_kb())
-    except Exception:
-        await cb.message.answer(text, reply_markup=main_menu_kb())
-
+    await edit_text_safe(cb, "Главное меню:", reply_markup=main_menu_kb())
     await cb.answer()

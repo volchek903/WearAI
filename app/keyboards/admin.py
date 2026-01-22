@@ -22,6 +22,7 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
     kb.button(text="📊 Статистика", callback_data=AdminCallbacks.STATS)
     kb.button(text="👥 Пользователи", callback_data=AdminCallbacks.USERS)
     kb.button(text="🔐 Права доступа", callback_data=AdminCallbacks.ACCESS)
+    kb.button(text="⬅️ Назад", callback_data=AdminCallbacks.BACK)
 
     kb.adjust(1)
     return kb.as_markup()
@@ -30,22 +31,12 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
 def admin_access_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
 
+    kb.button(text="➕ Добавить администратора", callback_data=AdminCallbacks.ADD_ADMIN)
     kb.button(
-        text="➕ Добавить администратора",
-        callback_data=AdminCallbacks.ADD_ADMIN,
+        text="➖ Удалить администратора", callback_data=AdminCallbacks.REMOVE_ADMIN
     )
-    kb.button(
-        text="➖ Удалить администратора",
-        callback_data=AdminCallbacks.REMOVE_ADMIN,
-    )
-    kb.button(
-        text="🎁 Выдать подписку",
-        callback_data=AdminCallbacks.GIVE_SUB,
-    )
-    kb.button(
-        text="⬅️ Назад",
-        callback_data=AdminCallbacks.BACK,
-    )
+    kb.button(text="🎁 Выдать подписку", callback_data=AdminCallbacks.GIVE_SUB)
+    kb.button(text="⬅️ Назад", callback_data=AdminCallbacks.BACK)
 
     kb.adjust(1)
     return kb.as_markup()

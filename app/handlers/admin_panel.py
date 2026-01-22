@@ -6,42 +6,23 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.admin import AdminCallbacks, admin_menu_kb
-from app.repository.admin import (
-    is_admin,
-    get_users_stats,
-    get_last_users,
-)
+from app.repository.admin import is_admin, get_last_users, get_users_stats
 from app.utils.tg_edit import edit_text_safe
 
 router = Router()
 
 
-# =========================
-# Вход в админку
-# =========================
 @router.message(Command("admin"))
-async def admin_entry(
-    message: Message,
-    session: AsyncSession,
-) -> None:
+async def admin_entry(message: Message, session: AsyncSession) -> None:
     if not await is_admin(session, message.from_user.id):
         await message.answer("⛔️ Доступ запрещён.")
         return
 
-    await message.answer(
-        "⚙️ Админка",
-        reply_markup=admin_menu_kb(),
-    )
+    await message.answer("⚙️ Админка", reply_markup=admin_menu_kb())
 
 
-# =========================
-# Статистика
-# =========================
 @router.callback_query(F.data == AdminCallbacks.STATS)
-async def admin_stats(
-    call: CallbackQuery,
-    session: AsyncSession,
-) -> None:
+async def admin_stats(call: CallbackQuery, session: AsyncSession) -> None:
     total_users, active_subs = await get_users_stats(session)
 
     text = (
@@ -50,22 +31,12 @@ async def admin_stats(
         f"✅ Активных подписок: <code>{active_subs}</code>"
     )
 
-    await edit_text_safe(
-        call,
-        text,
-        reply_markup=admin_menu_kb(),
-    )
+    await edit_text_safe(call, text, reply_markup=admin_menu_kb())
     await call.answer()
 
 
-# =========================
-# Пользователи
-# =========================
 @router.callback_query(F.data == AdminCallbacks.USERS)
-async def admin_users(
-    call: CallbackQuery,
-    session: AsyncSession,
-) -> None:
+async def admin_users(call: CallbackQuery, session: AsyncSession) -> None:
     rows = await get_last_users(session, limit=10)
 
     if not rows:
@@ -75,25 +46,13 @@ async def admin_users(
         for uid, tg_id, username, created_at in rows:
             uname = username or "-"
             lines.append(f"• id={uid} tg={tg_id} @{uname} ({created_at:%Y-%m-%d})")
-
         text = "👥 <b>Последние 10 пользователей</b>\n\n" + "\n".join(lines)
 
-    await edit_text_safe(
-        call,
-        text,
-        reply_markup=admin_menu_kb(),
-    )
+    await edit_text_safe(call, text, reply_markup=admin_menu_kb())
     await call.answer()
 
 
-# =========================
-# Назад
-# =========================
 @router.callback_query(F.data == AdminCallbacks.BACK)
 async def admin_back(call: CallbackQuery) -> None:
-    await edit_text_safe(
-        call,
-        "⚙️ Админка",
-        reply_markup=admin_menu_kb(),
-    )
+    await edit_text_safe(call, "⚙️ Админка", reply_markup=admin_menu_kb())
     await call.answer()

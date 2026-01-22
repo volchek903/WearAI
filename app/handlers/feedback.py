@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 ADMIN_TG_ID = 830091750
 
-TG_TEXT_LIMIT = 3800  # безопасно под HTML/Markdown/разметку
-TG_CAPTION_LIMIT = 900  # оставляем запас (лимит 1024)
+TG_TEXT_LIMIT = 3800
+TG_CAPTION_LIMIT = 900
 
 
 def _chunk_text(text: str, limit: int = TG_TEXT_LIMIT) -> list[str]:
@@ -112,8 +112,8 @@ def _format_report(payload: dict[str, Any], user_text: str) -> str:
 
     if scenario == "tryon":
         lines += [
-            f"body_part: {(payload.get('body_part') or '').strip()}",
-            f"style_prompt: {(payload.get('style_prompt') or '').strip()}",
+            "tryon_desc:",
+            (payload.get("tryon_desc") or "").strip(),
             "",
         ]
 
@@ -128,8 +128,6 @@ def _format_report(payload: dict[str, Any], user_text: str) -> str:
     return "\n".join(lines).strip()
 
 
-# ✅ MENU: обрабатываем только там, где она реально нужна (когда пользователь пишет текст ошибки).
-# Так мы НЕ перехватываем MENU из FeedbackFlow.offer_video (его обработает feedback_offer_video.py)
 @router.callback_query(FeedbackFlow.text, F.data == FeedbackCallbacks.MENU)
 async def feedback_back_to_menu(call: CallbackQuery, state: FSMContext) -> None:
     if call.message is None:
@@ -139,10 +137,6 @@ async def feedback_back_to_menu(call: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await call.message.answer("Ок. Возвращаю в меню.", reply_markup=main_menu_kb())
     await call.answer()
-
-
-# ❗️ВАЖНО: обработчика fb:ok тут НЕ ДОЛЖНО БЫТЬ.
-# Его должен обрабатывать feedback_offer_video.py (чтобы редактировалось сообщение и появлялась новая клава).
 
 
 @router.callback_query(FeedbackFlow.choice, F.data == FeedbackCallbacks.BUG)
@@ -167,19 +161,16 @@ async def feedback_text_in(message: Message, state: FSMContext) -> None:
     if not isinstance(payload, dict):
         payload = {}
 
-    # гарантируем user info
     payload.setdefault("user_tg_id", message.from_user.id)
     payload.setdefault("username", message.from_user.username or "")
 
     user_text = (message.text or "").strip()
 
-    # 1) Текстовый отчёт админу
     report_text = _format_report(payload, user_text)
     await _send_admin_long_text(message.bot, report_text)
 
     scenario = payload.get("scenario", "unknown")
 
-    # 2) Входные фото админу
     input_photos = payload.get("input_photos")
 
     if isinstance(input_photos, dict):
@@ -202,7 +193,6 @@ async def feedback_text_in(message: Message, state: FSMContext) -> None:
                     caption=f"IN ({scenario}): product_photo_{i}",
                 )
 
-    # 3) Выходные результаты админу
     output_files = payload.get("output_files") or []
     if isinstance(output_files, list):
         for i, item in enumerate(output_files, start=1):

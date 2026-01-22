@@ -30,7 +30,6 @@ def extra_menu_kb(current_plan_name: str | None) -> InlineKeyboardMarkup:
     if current_plan_name != "Cosmic":
         kb.button(text="Хочу Cosmic!!!", callback_data=ExtraCallbacks.WANT_COSMIC)
 
-    # ✅ кнопка назад в главное меню
     kb.button(text="⬅️ Назад", callback_data=ExtraCallbacks.TO_MENU)
 
     kb.adjust(1)
@@ -38,9 +37,6 @@ def extra_menu_kb(current_plan_name: str | None) -> InlineKeyboardMarkup:
 
 
 def extra_buy_kb(plan_name: str) -> InlineKeyboardMarkup:
-    """
-    Кнопка Купить + Назад.
-    """
     kb = InlineKeyboardBuilder()
 
     if plan_name == "Orbit":

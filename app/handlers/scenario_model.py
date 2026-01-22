@@ -13,6 +13,11 @@ from app.keyboards.confirm import yes_no_kb, review_edit_kb, ConfirmCallbacks
 from app.keyboards.help import help_button_kb
 from app.keyboards.feedback import feedback_kb
 from app.repository.users import increment_generated_photos, upsert_user
+from app.repository.generations import (
+    charge_photo_generation,
+    refund_photo_generation,
+    NoGenerationsLeft,
+)
 from app.services.album_collector import AlbumCollector
 from app.services.generation import generate_image_kie_from_telegram
 from app.services.kie_ai import KieAIError
@@ -21,9 +26,6 @@ from app.states.feedback_flow import FeedbackFlow
 from app.utils.tg_edit import edit_text_safe
 from app.utils.tg_send import send_image_smart
 from app.utils.kie_errors import kie_error_to_user_text
-
-# ✅ NEW: сохраняем сгенерированное изображение на диск,
-# чтобы потом "Оживить" брало именно его (а не старый URL/кеш)
 from app.utils.generated_files import save_generated_image_bytes
 
 
@@ -127,7 +129,6 @@ async def product_photos_in(message: Message, state: FSMContext) -> None:
         )
         return
 
-    # одиночное фото — разрешаем
     if not message.media_group_id:
         file_id = message.photo[-1].file_id
         await state.update_data(product_photos=[file_id])
@@ -138,7 +139,6 @@ async def product_photos_in(message: Message, state: FSMContext) -> None:
         )
         return
 
-    # альбом — собираем
     await _album.push(
         message.chat.id, message.media_group_id, message.photo[-1].file_id
     )
@@ -256,6 +256,19 @@ async def review_confirmed(
     await edit_text_safe(call, "Генерирую изображение… ⏳")
     await call.answer()
 
+    user = await upsert_user(session, call.from_user.id, call.from_user.username)
+
+    try:
+        await charge_photo_generation(session, user.id)  # ✅ user_id, не tg_id
+    except NoGenerationsLeft:
+        await edit_text_safe(
+            call,
+            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс.",
+            reply_markup=review_edit_kb(),
+        )
+        await call.answer()
+        return
+
     prompt = (
         f"{model_desc}\n\n"
         f"{action_desc}\n\n"
@@ -276,13 +289,10 @@ async def review_confirmed(
             raise RuntimeError("KIE returned empty result")
 
         output_files: list[dict[str, str]] = []
-
-        # ✅ NEW: локальные пути текущей генерации (для видео)
         local_output_paths: list[str] = []
         best_local_path: str = ""
 
         for filename, img_bytes in results:
-            # сохраняем на диск "текущую" картинку
             local_path = save_generated_image_bytes(
                 img_bytes=img_bytes,
                 filename=filename,
@@ -318,7 +328,6 @@ async def review_confirmed(
             session=session, tg_id=call.from_user.id, delta=1
         )
 
-        # ВАЖНО: сохраняем payload для feedback + путь к локальному файлу текущей генерации
         await state.set_data(
             {
                 "feedback_payload": {
@@ -330,10 +339,8 @@ async def review_confirmed(
                     "kie_prompt": prompt,
                     "input_photos": product_photos,
                     "output_files": output_files,
-                    # ✅ NEW:
                     "local_output_paths": local_output_paths,
                     "best_local_path": best_local_path,
-                    # сюда уже НЕ надо класть last_generated_image_url
                 }
             }
         )
@@ -347,6 +354,7 @@ async def review_confirmed(
 
     except KieAIError as e:
         logger.warning("KIE rejected/failed: %s", e)
+        await refund_photo_generation(session, user.id)  # ✅ user_id
         await edit_text_safe(
             call, kie_error_to_user_text(e), reply_markup=review_edit_kb()
         )
@@ -355,6 +363,7 @@ async def review_confirmed(
 
     except Exception as e:
         logger.exception("MODEL generation failed: %s", e)
+        await refund_photo_generation(session, user.id)  # ✅ user_id
         await edit_text_safe(
             call,
             "Не получилось сгенерировать 😅\n"

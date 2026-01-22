@@ -3,7 +3,7 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from app.keyboards.help import HelpCallbacks  # <-- ДОБАВЬ
+from app.keyboards.help import HelpCallbacks
 
 
 class ConfirmCallbacks:
@@ -16,7 +16,8 @@ class ConfirmCallbacks:
 
 
 def yes_no_kb(
-    yes_text: str = "✅ Подтвердить", no_text: str = "❌ Изменить"
+    yes_text: str = "✅ Подтвердить",
+    no_text: str = "❌ Изменить",
 ) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text=yes_text, callback_data=ConfirmCallbacks.YES)
@@ -36,14 +37,13 @@ def review_edit_kb() -> InlineKeyboardMarkup:
 
 
 def yes_no_tryon_kb() -> InlineKeyboardMarkup:
-    return yes_no_kb(yes_text="✅ Да, подтверждаю", no_text="❌ Нет, выбрать другую")
+    return yes_no_kb(
+        yes_text="✅ Да, подтверждаю",
+        no_text="❌ Нет, выбрать другую",
+    )
 
 
 def yes_no_tryon_kb_with_help() -> InlineKeyboardMarkup:
-    """
-    Для экрана подтверждения примерки: добавляем кнопку помощи по стилю (tryon_desc).
-    callback_data соответствует твоему help-handler: help:start:{kind}
-    """
     kb = InlineKeyboardBuilder()
     kb.button(text="✅ Да, подтверждаю", callback_data=ConfirmCallbacks.YES)
     kb.button(text="❌ Нет, выбрать другую", callback_data=ConfirmCallbacks.NO)

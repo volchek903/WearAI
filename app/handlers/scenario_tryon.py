@@ -12,6 +12,11 @@ from app.keyboards.confirm import yes_no_tryon_kb_with_help, ConfirmCallbacks
 from app.keyboards.help import help_button_kb
 from app.keyboards.feedback import feedback_kb
 from app.repository.users import increment_generated_photos, upsert_user
+from app.repository.generations import (
+    charge_photo_generation,
+    refund_photo_generation,
+    NoGenerationsLeft,
+)
 from app.services.generation import generate_image_kie_from_telegram
 from app.services.kie_ai import KieAIError
 from app.states.tryon_flow import TryOnFlow
@@ -20,8 +25,6 @@ from app.utils.kie_errors import kie_error_to_user_text
 from app.utils.tg_edit import edit_text_safe
 from app.utils.tg_send import send_image_smart
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
-
-# ✅ NEW: сохраняем результат на диск, чтобы видео брало "текущую" генерацию
 from app.utils.generated_files import save_generated_image_bytes
 
 
@@ -94,7 +97,6 @@ async def item_photo_in(message: Message, state: FSMContext) -> None:
         await message.answer("Ой 😅 Сессия сбилась. Нажми /start и начни заново 🙌")
         return
 
-    # ✅ важно: перезаписываем item_photo, чтобы не оставались старые значения
     await state.update_data(item_photo=item_file_id)
     await state.set_state(TryOnFlow.confirm)
 
@@ -120,7 +122,6 @@ async def item_photo_in(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(TryOnFlow.confirm, F.data == ConfirmCallbacks.NO)
 async def tryon_choose_other(call: CallbackQuery, state: FSMContext) -> None:
-    # ✅ обнуляем выбранную вещь
     await state.update_data(item_photo=None)
     await state.set_state(TryOnFlow.item_photo)
 
@@ -130,7 +131,6 @@ async def tryon_choose_other(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(TryOnFlow.confirm, F.data == ConfirmCallbacks.YES)
 async def tryon_confirmed_go_prompt(call: CallbackQuery, state: FSMContext) -> None:
-    # После подтверждения — просим промпт
     await state.set_state(TryOnFlow.tryon_desc)
 
     await edit_text_safe(
@@ -170,6 +170,16 @@ async def tryon_desc_in(
 
     await message.answer("Делаю примерку… ⏳")
 
+    user = await upsert_user(session, message.from_user.id, message.from_user.username)
+
+    try:
+        await charge_photo_generation(session, user.id)  # ✅ user_id, не tg_id
+    except NoGenerationsLeft:
+        await message.answer(
+            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс."
+        )
+        return
+
     prompt = (
         "Create a photorealistic virtual try-on result.\n"
         "Use the first image as the person reference (keep face/body identity).\n"
@@ -192,8 +202,6 @@ async def tryon_desc_in(
             raise RuntimeError("KIE returned empty result")
 
         output_files: list[dict[str, str]] = []
-
-        # ✅ NEW: локальные пути текущей генерации (для видео)
         local_output_paths: list[str] = []
         best_local_path: str = ""
 
@@ -233,7 +241,6 @@ async def tryon_desc_in(
             session=session, tg_id=message.from_user.id, delta=1
         )
 
-        # ✅ ВАЖНО: сохраняем payload + локальный файл текущей генерации
         await state.set_data(
             {
                 "feedback_payload": {
@@ -247,7 +254,6 @@ async def tryon_desc_in(
                         "item_photo": item_photo,
                     },
                     "output_files": output_files,
-                    # ✅ NEW:
                     "local_output_paths": local_output_paths,
                     "best_local_path": best_local_path,
                 }
@@ -263,12 +269,13 @@ async def tryon_desc_in(
 
     except KieAIError as e:
         logger.warning("TRYON KIE failed: %s", e)
+        await refund_photo_generation(session, user.id)  # ✅ user_id
         await message.answer(kie_error_to_user_text(e))
-        # оставляем в tryon_desc — пусть пользователь поправит промпт и отправит ещё раз
         return
 
     except Exception as e:
         logger.exception("TRYON generation failed: %s", e)
+        await refund_photo_generation(session, user.id)  # ✅ user_id
         await message.answer(
             "Не получилось сделать примерку 😅\n"
             "Попробуй изменить описание и отправь ещё раз."

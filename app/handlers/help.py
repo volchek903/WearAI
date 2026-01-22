@@ -58,18 +58,15 @@ async def help_start(
 ) -> None:
     await upsert_user(session, call.from_user.id, call.from_user.username)
 
-    # формат: help:start:{kind} (судя по split(":", 2))
     kind = call.data.split(":", 2)[2].strip()
     return_state = await state.get_state()
     await state.update_data(help_kind=kind, return_state=return_state)
 
-    # подсказки для фото: просто редактируем текущий экран
     if kind in {"product_photos", "user_photo", "item_photo"}:
         await edit_text_safe(call, _tips_for_photo(kind))
         await call.answer()
         return
 
-    # генерация промпта через модель
     await state.set_state(HelpFlow.input)
 
     if kind == "model_desc":
@@ -119,8 +116,6 @@ async def help_input(message: Message, state: FSMContext) -> None:
     kind = (data.get("help_kind") or "").strip()
 
     try:
-        # ВАЖНО: kind должен совпадать с ожидаемыми секциями в prompt_helper.py
-        # Например: model_desc / presentation_desc / tryon_desc
         generated = await generate_nano_banana_prompt_ru(
             section=kind, user_text=details
         )
@@ -177,7 +172,6 @@ async def help_use(call: CallbackQuery, state: FSMContext) -> None:
         await call.answer()
         return
 
-    # use -> подтверждение описания модели
     if kind == "model_desc" and return_state == ModelFlow.model_desc.state:
         await state.set_state(ModelFlow.confirm_model_desc)
         await state.update_data(model_desc=generated)
@@ -193,7 +187,6 @@ async def help_use(call: CallbackQuery, state: FSMContext) -> None:
         await call.answer()
         return
 
-    # use -> итоговый review в сценарии модели
     if (
         kind == "presentation_desc"
         and return_state == ModelFlow.presentation_desc.state
@@ -220,7 +213,6 @@ async def help_use(call: CallbackQuery, state: FSMContext) -> None:
         await call.answer()
         return
 
-    # fallback
     await state.set_state(return_state)
     safe = html.escape(generated)
     await edit_text_safe(call, f"Готово ✅ Вернул на шаг ввода.\n\n<code>{safe}</code>")

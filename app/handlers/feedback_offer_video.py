@@ -14,7 +14,6 @@ from app.db.config import settings
 from app.keyboards.feedback import (
     FeedbackCallbacks,
     feedback_offer_video_kb,
-    back_to_menu_kb,
 )
 from app.keyboards.menu import main_menu_kb
 from app.states.animate_photo import AnimatePhotoStates
@@ -37,12 +36,6 @@ async def _download_telegram_file(bot_token: str, file_path: str) -> bytes:
 
 
 def _pick_best_output_file(fp: dict) -> tuple[str, str]:
-    """
-    Берём лучший output из feedback_payload.output_files:
-    - приоритет photo
-    - затем document
-    Возвращаем (file_id, filename)
-    """
     output_files = fp.get("output_files") or []
     if not isinstance(output_files, list) or not output_files:
         raise RuntimeError(
@@ -69,13 +62,6 @@ def _pick_best_output_file(fp: dict) -> tuple[str, str]:
 
 
 def _read_local_best_image_from_feedback(fp: dict) -> tuple[bytes, str, str]:
-    """
-    Пытаемся взять ТЕКУЩУЮ сгенерированную картинку с диска (чтобы видео не брало “старое”).
-    Ожидаем, что генератор положил в feedback_payload:
-      - best_local_path: str
-      - local_output_paths: list[str] (опционально)
-    Возвращаем: (bytes, filename, source_path)
-    """
     best = fp.get("best_local_path")
     src_path: str | None = str(best) if isinstance(best, str) and best.strip() else None
 
@@ -99,18 +85,6 @@ def _read_local_best_image_from_feedback(fp: dict) -> tuple[bytes, str, str]:
 
 
 async def _get_or_upload_kling_image_url(cb: CallbackQuery, state: FSMContext) -> str:
-    """
-    Делаем публичный image_url для Kling.
-
-    Приоритет (важно!):
-    1) Берём байты из локального файла текущей генерации (best_local_path),
-       чтобы исключить “подтягивание” старого результата.
-    2) Если локального файла нет — fallback: скачиваем из Telegram по file_id результата.
-
-    Кешируем в feedback_payload:
-      - kling_image_url
-      - kling_image_source_path (чтобы не использовать кеш, если файл другой)
-    """
     data = await state.get_data()
     fp = data.get("feedback_payload")
     if not isinstance(fp, dict):
@@ -120,11 +94,9 @@ async def _get_or_upload_kling_image_url(cb: CallbackQuery, state: FSMContext) -
     if scenario not in {"model", "tryon"}:
         raise RuntimeError("Оживление доступно только после «Модель» или «Примерка».")
 
-    # Если уже есть URL и он относится к тому же source_path — можно переиспользовать
     cached_url = fp.get("kling_image_url")
     cached_src = fp.get("kling_image_source_path")
 
-    # Попробуем сначала локальный файл
     image_bytes: bytes | None = None
     filename: str = "image.png"
     source_path: str | None = None
@@ -140,13 +112,11 @@ async def _get_or_upload_kling_image_url(cb: CallbackQuery, state: FSMContext) -
         ):
             return cached_url.strip()
     except Exception as e:
-        # локального файла нет — пойдём в Telegram fallback
         logger.warning("No local image for video, fallback to Telegram. err=%s", e)
 
     if not settings.kie_api_key:
         raise RuntimeError("Не настроен KIE_API_KEY.")
 
-    # Fallback: Telegram file_id -> bytes
     if image_bytes is None:
         file_id, filename_from_payload = _pick_best_output_file(fp)
         tg_file = await cb.bot.get_file(file_id)
@@ -164,7 +134,6 @@ async def _get_or_upload_kling_image_url(cb: CallbackQuery, state: FSMContext) -
         ):
             return cached_url.strip()
 
-    # Чтобы не ловить кеш по одинаковым путям/именам — делаем upload уникальным
     tag = f"{int(time.time()*1000)}_{uuid.uuid4().hex[:8]}"
     p = Path(filename)
     unique_filename = f"{p.stem or 'image'}_{tag}{p.suffix or '.png'}"
@@ -182,7 +151,6 @@ async def _get_or_upload_kling_image_url(cb: CallbackQuery, state: FSMContext) -
     return image_url
 
 
-# ✅ Всё хорошо -> редактируем сообщение -> предлагаем видео
 @router.callback_query(FeedbackFlow.choice, F.data == FeedbackCallbacks.OK)
 async def fb_ok(cb: CallbackQuery, state: FSMContext) -> None:
     if cb.message is None:
@@ -200,35 +168,13 @@ async def fb_ok(cb: CallbackQuery, state: FSMContext) -> None:
         return
 
     text = (
-        "✅ <b>Отлично!</b>\n\n"
-        "Желаете сгенерировать <b>видео на основе этого фото</b>?"
+        "✅ <b>Отлично!</b>\n\nЖелаете сгенерировать <b>видео на основе этого фото</b>?"
     )
     await edit_text_safe(cb, text, reply_markup=feedback_offer_video_kb())
     await state.set_state(FeedbackFlow.offer_video)
     await cb.answer()
 
 
-# 🛠 Сообщить об ошибке -> просим текст
-@router.callback_query(FeedbackFlow.choice, F.data == FeedbackCallbacks.BUG)
-async def fb_bug(cb: CallbackQuery, state: FSMContext) -> None:
-    if cb.message is None:
-        await cb.answer()
-        return
-
-    text = (
-        "🛠 <b>Сообщить об ошибке</b>\n\n"
-        "Опишите, пожалуйста, что пошло не так:\n"
-        "— что ожидали\n"
-        "— что получили\n"
-        "— если есть, приложите скрин\n\n"
-        "После сообщения я верну вас в меню."
-    )
-    await edit_text_safe(cb, text, reply_markup=back_to_menu_kb())
-    await state.set_state(FeedbackFlow.text)
-    await cb.answer()
-
-
-# ⬅️ В меню (работает и на offer_video, и на text, и на choice)
 @router.callback_query(F.data == FeedbackCallbacks.MENU)
 async def fb_menu(cb: CallbackQuery, state: FSMContext) -> None:
     if cb.message is None:
@@ -240,7 +186,6 @@ async def fb_menu(cb: CallbackQuery, state: FSMContext) -> None:
     await cb.answer()
 
 
-# 🎬 Оживить фото -> спрашиваем промпт и переводим в AnimatePhotoStates.waiting_prompt
 @router.callback_query(FeedbackFlow.offer_video, F.data == FeedbackCallbacks.ANIMATE)
 async def fb_animate(cb: CallbackQuery, state: FSMContext) -> None:
     if cb.message is None:
@@ -268,7 +213,6 @@ async def fb_animate(cb: CallbackQuery, state: FSMContext) -> None:
     await cb.answer()
 
 
-# Текст ошибки от пользователя
 @router.message(FeedbackFlow.text)
 async def fb_text(message: Message, state: FSMContext) -> None:
     txt = (message.text or "").strip()

@@ -3,15 +3,18 @@ from __future__ import annotations
 
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.keyboards.menu import MenuCallbacks
+from app.keyboards.menu import MenuCallbacks, main_menu_kb
 from app.keyboards.extra import ExtraCallbacks, extra_menu_kb, extra_buy_kb
-from app.models.user import User
 from app.models.subscription import Subscription
-from app.models.user_subscription import UserSubscription
-from app.keyboards.menu import main_menu_kb
+from app.repository.extra import (
+    get_user,
+    get_active_plan_name,
+    get_active_remaining,
+    get_plan,
+    get_all_plans,
+)
 
 router = Router()
 
@@ -42,7 +45,6 @@ def _table(plans: list[Subscription]) -> str:
             f"{p.name:<10} {price:<7} {days:<5} {p.video_generations:<6} {p.photo_generations:<6}"
         )
 
-    # HTML pre must be escaped
     return f"<pre>{_escape('\n'.join(lines))}</pre>"
 
 
@@ -94,84 +96,31 @@ def _pitch(plan_name: str, plan: Subscription) -> str:
 
 @router.callback_query(F.data == ExtraCallbacks.TO_MENU)
 async def extra_to_menu(call: CallbackQuery) -> None:
-    await call.message.edit_text(
-        "Главное меню 👇",
-        reply_markup=main_menu_kb(),
-    )
+    if call.message:
+        await call.message.edit_text("Главное меню 👇", reply_markup=main_menu_kb())
     await call.answer()
-
-
-async def _get_user(session: AsyncSession, tg_id: int) -> User | None:
-    res = await session.execute(select(User).where(User.tg_id == tg_id))
-    return res.scalar_one_or_none()
-
-
-async def _get_active_plan_name(session: AsyncSession, user_id: int) -> str:
-    """
-    Активная подписка берётся из user_subscription.status == 1.
-    Если нет — считаем Launch.
-    """
-    stmt = (
-        select(Subscription.name)
-        .select_from(UserSubscription)
-        .join(Subscription, Subscription.id == UserSubscription.subscription_id)
-        .where(UserSubscription.user_id == user_id, UserSubscription.status == 1)
-        .order_by(UserSubscription.activated_at.desc())
-        .limit(1)
-    )
-    res = await session.execute(stmt)
-    name = res.scalar_one_or_none()
-    return name or "Launch"
-
-
-async def _get_active_remaining(session: AsyncSession, user_id: int) -> tuple[int, int]:
-    """
-    Остатки берём из активной user_subscription (status == 1).
-    Если нет — free остатки (2 видео, 3 фото) или можно 0/0.
-    """
-    stmt = (
-        select(UserSubscription.remaining_video, UserSubscription.remaining_photo)
-        .where(UserSubscription.user_id == user_id, UserSubscription.status == 1)
-        .order_by(UserSubscription.activated_at.desc())
-        .limit(1)
-    )
-    res = await session.execute(stmt)
-    row = res.first()
-    if not row:
-        return 2, 3
-    return int(row[0]), int(row[1])
-
-
-async def _get_plan(session: AsyncSession, plan_name: str) -> Subscription | None:
-    res = await session.execute(
-        select(Subscription).where(Subscription.name == plan_name)
-    )
-    return res.scalar_one_or_none()
-
-
-async def _get_all_plans(session: AsyncSession) -> list[Subscription]:
-    res = await session.execute(select(Subscription).order_by(Subscription.id.asc()))
-    return list(res.scalars().all())
 
 
 @router.callback_query(F.data == MenuCallbacks.EXTRA)
 async def extra_open(call: CallbackQuery, session: AsyncSession) -> None:
-    user = await _get_user(session, call.from_user.id)
+    user = await get_user(session, call.from_user.id)
 
     if not user:
         current_name = "Launch"
         remaining_video, remaining_photo = 2, 3
     else:
-        current_name = await _get_active_plan_name(session, user.id)
-        remaining_video, remaining_photo = await _get_active_remaining(session, user.id)
+        current_name = await get_active_plan_name(session, user.id)
+        remaining_video, remaining_photo = await get_active_remaining(session, user.id)
 
-    plans = await _get_all_plans(session)
+    plans = await get_all_plans(session)
     table_html = _table(plans)
 
-    await call.message.edit_text(
-        _extra_text(current_name, remaining_video, remaining_photo, table_html),
-        reply_markup=extra_menu_kb(current_name),
-    )
+    if call.message:
+        await call.message.edit_text(
+            _extra_text(current_name, remaining_video, remaining_photo, table_html),
+            reply_markup=extra_menu_kb(current_name),
+            parse_mode="HTML",
+        )
     await call.answer()
 
 
@@ -191,15 +140,17 @@ async def extra_want(call: CallbackQuery, session: AsyncSession) -> None:
         else "Nova" if call.data == ExtraCallbacks.WANT_NOVA else "Cosmic"
     )
 
-    plan = await _get_plan(session, plan_name)
+    plan = await get_plan(session, plan_name)
     if not plan:
         await call.answer("Пакет не найден в базе 😕", show_alert=True)
         return
 
-    await call.message.edit_text(
-        _pitch(plan_name, plan),
-        reply_markup=extra_buy_kb(plan_name),
-    )
+    if call.message:
+        await call.message.edit_text(
+            _pitch(plan_name, plan),
+            reply_markup=extra_buy_kb(plan_name),
+            parse_mode="HTML",
+        )
     await call.answer()
 
 
@@ -218,9 +169,10 @@ async def extra_back(call: CallbackQuery, session: AsyncSession) -> None:
     )
 )
 async def extra_buy(call: CallbackQuery) -> None:
-    # тут будет оплата (invoice/stripe/ссылка и т.д.)
-    await call.message.edit_text(
-        "🔥 Супер! Сейчас оформим покупку.\n\n"
-        "Я подготовлю оплату и после подтверждения пакет активируется автоматически ✅"
-    )
+    if call.message:
+        await call.message.edit_text(
+            "🔥 Супер! Сейчас оформим покупку.\n\n"
+            "Я подготовлю оплату и после подтверждения пакет активируется автоматически ✅",
+            parse_mode="HTML",
+        )
     await call.answer()

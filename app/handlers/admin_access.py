@@ -6,11 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.keyboards.admin import (
-    AdminCallbacks,
-    admin_access_kb,
-    admin_menu_kb,
-)
+from app.keyboards.admin import AdminCallbacks, admin_access_kb, admin_menu_kb
 from app.keyboards.confirm import ConfirmCallbacks, yes_no_kb
 from app.repository.access import (
     get_user_by_tg_id,
@@ -36,13 +32,13 @@ async def access_menu(call: CallbackQuery) -> None:
 
 @router.callback_query(F.data == AdminCallbacks.ADD_ADMIN)
 async def add_admin_start(call: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
     await state.set_state(AdminAccessFSM.waiting_user_id)
     await state.update_data(action="add_admin")
 
     await edit_text_safe(
         call,
-        "➕ Добавить администратора\n\n"
-        "Перешли сообщение пользователя или отправь его tgID",
+        "➕ Добавить администратора\n\nПерешли сообщение пользователя или отправь его tgID",
         reply_markup=admin_access_kb(),
     )
     await call.answer()
@@ -50,13 +46,13 @@ async def add_admin_start(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data == AdminCallbacks.REMOVE_ADMIN)
 async def remove_admin_start(call: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
     await state.set_state(AdminAccessFSM.waiting_user_id)
     await state.update_data(action="remove_admin")
 
     await edit_text_safe(
         call,
-        "➖ Удалить администратора\n\n"
-        "Перешли сообщение пользователя или отправь его tgID",
+        "➖ Удалить администратора\n\nПерешли сообщение пользователя или отправь его tgID",
         reply_markup=admin_access_kb(),
     )
     await call.answer()
@@ -64,12 +60,13 @@ async def remove_admin_start(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data == AdminCallbacks.GIVE_SUB)
 async def give_sub_start(call: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
     await state.set_state(AdminAccessFSM.waiting_user_id)
     await state.update_data(action="give_sub")
 
     await edit_text_safe(
         call,
-        "🎁 Выдать подписку\n\n" "Перешли сообщение пользователя или отправь его tgID",
+        "🎁 Выдать подписку\n\nПерешли сообщение пользователя или отправь его tgID",
         reply_markup=admin_access_kb(),
     )
     await call.answer()
@@ -83,9 +80,9 @@ async def process_user_id(message: Message, state: FSMContext) -> None:
         tg_id = message.forward_from.id
     elif message.text:
         try:
-            tg_id = int(message.text)
+            tg_id = int(message.text.strip())
         except ValueError:
-            pass
+            tg_id = None
 
     if not tg_id:
         await message.answer("❌ Отправь tgID пользователя или перешли его сообщение")
@@ -110,7 +107,7 @@ async def process_user_id(message: Message, state: FSMContext) -> None:
 @router.message(AdminAccessFSM.waiting_sub_days)
 async def process_sub_days(message: Message, state: FSMContext) -> None:
     try:
-        days = int(message.text)
+        days = int((message.text or "").strip())
         if days <= 0:
             raise ValueError
     except ValueError:
@@ -127,19 +124,22 @@ async def process_sub_days(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(
     F.data == ConfirmCallbacks.YES,
-    StateFilter(
-        AdminAccessFSM.waiting_user_id,
-        AdminAccessFSM.waiting_sub_days,
-    ),
+    StateFilter(AdminAccessFSM.waiting_user_id, AdminAccessFSM.waiting_sub_days),
 )
 async def confirm_yes(
-    call: CallbackQuery,
-    session: AsyncSession,
-    state: FSMContext,
+    call: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
     data = await state.get_data()
     action = data.get("action")
-    tg_id = data.get("tg_id")
+
+    tg_id_raw = data.get("tg_id")
+    try:
+        tg_id = int(tg_id_raw)
+    except Exception:
+        await state.clear()
+        await edit_text_safe(call, "❌ Некорректный tgID", reply_markup=admin_menu_kb())
+        await call.answer()
+        return
 
     user = await get_user_by_tg_id(session, tg_id)
     if not user:
@@ -147,6 +147,7 @@ async def confirm_yes(
         await edit_text_safe(
             call, "❌ Пользователь не найден", reply_markup=admin_menu_kb()
         )
+        await call.answer()
         return
 
     if action == "add_admin":
@@ -166,8 +167,8 @@ async def confirm_yes(
     elif action == "give_sub":
         days = data.get("days")
         if days:
-            await give_subscription_days(session, user, days)
-            text = f"🎉 Подписка выдана на {days} дней"
+            await give_subscription_days(session, user, int(days))
+            text = f"🎉 Подписка выдана на {int(days)} дней"
         else:
             await give_subscription(session, user)
             text = "🎉 Подписка выдана"
@@ -182,10 +183,7 @@ async def confirm_yes(
 
 @router.callback_query(
     F.data == ConfirmCallbacks.NO,
-    StateFilter(
-        AdminAccessFSM.waiting_user_id,
-        AdminAccessFSM.waiting_sub_days,
-    ),
+    StateFilter(AdminAccessFSM.waiting_user_id, AdminAccessFSM.waiting_sub_days),
 )
 async def confirm_no(call: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
