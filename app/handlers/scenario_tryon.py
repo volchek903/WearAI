@@ -1,3 +1,4 @@
+# app/handlers/scenario_tryon.py
 from __future__ import annotations
 
 import logging
@@ -13,6 +14,7 @@ from app.keyboards.help import help_button_kb
 from app.keyboards.feedback import feedback_kb
 from app.repository.users import increment_generated_photos, upsert_user
 from app.repository.generations import (
+    ensure_default_subscription,
     charge_photo_generation,
     refund_photo_generation,
     NoGenerationsLeft,
@@ -170,10 +172,17 @@ async def tryon_desc_in(
 
     await message.answer("Делаю примерку… ⏳")
 
-    user = await upsert_user(session, message.from_user.id, message.from_user.username)
+    # гарантируем пользователя
+    await upsert_user(session, message.from_user.id, message.from_user.username)
+
+    tg_id = message.from_user.id
+
+    # ✅ ключевой фикс: гарантируем активную подписку
+    await ensure_default_subscription(session, tg_id)
 
     try:
-        await charge_photo_generation(session, user.id)  # ✅ user_id, не tg_id
+        # ✅ списание по tg_id (как в generations.py версии A)
+        await charge_photo_generation(session, tg_id)
     except NoGenerationsLeft:
         await message.answer(
             "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс."
@@ -193,7 +202,7 @@ async def tryon_desc_in(
         results = await generate_image_kie_from_telegram(
             bot=message.bot,
             session=session,
-            tg_id=message.from_user.id,
+            tg_id=tg_id,  # ✅ тут тоже tg_id
             prompt=prompt,
             telegram_photo_file_ids=[user_photo, item_photo],
         )
@@ -210,7 +219,7 @@ async def tryon_desc_in(
                 img_bytes=img_bytes,
                 filename=filename,
                 scenario="tryon",
-                tg_id=message.from_user.id,
+                tg_id=tg_id,
             )
             local_output_paths.append(local_path)
             if not best_local_path:
@@ -237,15 +246,13 @@ async def tryon_desc_in(
                     }
                 )
 
-        await increment_generated_photos(
-            session=session, tg_id=message.from_user.id, delta=1
-        )
+        await increment_generated_photos(session=session, tg_id=tg_id, delta=1)
 
         await state.set_data(
             {
                 "feedback_payload": {
                     "scenario": "tryon",
-                    "user_tg_id": message.from_user.id,
+                    "user_tg_id": tg_id,
                     "username": message.from_user.username or "",
                     "tryon_desc": style_prompt,
                     "kie_prompt": prompt,
@@ -269,13 +276,13 @@ async def tryon_desc_in(
 
     except KieAIError as e:
         logger.warning("TRYON KIE failed: %s", e)
-        await refund_photo_generation(session, user.id)  # ✅ user_id
+        await refund_photo_generation(session, tg_id)  # ✅ tg_id
         await message.answer(kie_error_to_user_text(e))
         return
 
     except Exception as e:
         logger.exception("TRYON generation failed: %s", e)
-        await refund_photo_generation(session, user.id)  # ✅ user_id
+        await refund_photo_generation(session, tg_id)  # ✅ tg_id
         await message.answer(
             "Не получилось сделать примерку 😅\n"
             "Попробуй изменить описание и отправь ещё раз."

@@ -11,10 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from app.db.config import settings
-from app.keyboards.feedback import (
-    FeedbackCallbacks,
-    feedback_offer_video_kb,
-)
+from app.keyboards.feedback import FeedbackCallbacks, feedback_offer_video_kb
 from app.keyboards.menu import main_menu_kb
 from app.states.animate_photo import AnimatePhotoStates
 from app.states.feedback_flow import FeedbackFlow
@@ -186,11 +183,45 @@ async def fb_menu(cb: CallbackQuery, state: FSMContext) -> None:
     await cb.answer()
 
 
-@router.callback_query(FeedbackFlow.offer_video, F.data == FeedbackCallbacks.ANIMATE)
+# ✅ ФИКС задержки UX: сразу отвечаем на callback + показываем "подготавливаю..."
+@router.callback_query(F.data == FeedbackCallbacks.ANIMATE)
 async def fb_animate(cb: CallbackQuery, state: FSMContext) -> None:
     if cb.message is None:
         await cb.answer()
         return
+
+    # 1) Сразу убираем "часики" у кнопки
+    await cb.answer()
+
+    cur_state = await state.get_state()
+    data = await state.get_data()
+    fp = data.get("feedback_payload")
+
+    logger.info(
+        "[fb_animate] tg_id=%s state=%s has_payload=%s scenario=%s",
+        cb.from_user.id,
+        cur_state,
+        isinstance(fp, dict),
+        (fp.get("scenario") if isinstance(fp, dict) else None),
+    )
+
+    if not isinstance(fp, dict):
+        await edit_text_safe(
+            cb,
+            "Не вижу данных последней генерации 😅\n"
+            "Сгенерируйте изображение заново и попробуйте ещё раз.",
+            reply_markup=main_menu_kb(),
+        )
+        await state.clear()
+        return
+
+    # 2) Сразу рисуем промежуточный экран (самое важное для ощущения скорости)
+    await edit_text_safe(
+        cb,
+        "⏳ Подготавливаю фото для видео…\n\n"
+        "Это может занять пару секунд (загрузка в сервис).",
+        reply_markup=None,
+    )
 
     try:
         image_url = await _get_or_upload_kling_image_url(cb, state)
@@ -198,7 +229,6 @@ async def fb_animate(cb: CallbackQuery, state: FSMContext) -> None:
         logger.warning("Cannot start animate from feedback: %s", e)
         await edit_text_safe(cb, f"Ошибка: {e}", reply_markup=main_menu_kb())
         await state.clear()
-        await cb.answer()
         return
 
     await state.update_data(image_url=image_url)
@@ -210,7 +240,6 @@ async def fb_animate(cb: CallbackQuery, state: FSMContext) -> None:
         "💡 Пример: «лёгкая улыбка, моргание, голова чуть вправо, камера плавно приближает»"
     )
     await edit_text_safe(cb, text, reply_markup=None)
-    await cb.answer()
 
 
 @router.message(FeedbackFlow.text)

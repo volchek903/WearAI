@@ -39,7 +39,9 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) 
     )
 
     await ensure_photo_settings(session=session, user_id=user.id)
-    await ensure_default_subscription(session=session, user_id=user.id)
+
+    # ✅ FIX: ensure_default_subscription теперь работает по tg_id
+    await ensure_default_subscription(session=session, tg_id=message.from_user.id)
 
     await message.answer(
         "Привет! Я WEARAI 👋\n\n"

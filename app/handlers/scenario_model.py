@@ -1,3 +1,4 @@
+# app/handlers/scenario_model.py
 from __future__ import annotations
 
 import logging
@@ -13,7 +14,10 @@ from app.keyboards.confirm import yes_no_kb, review_edit_kb, ConfirmCallbacks
 from app.keyboards.help import help_button_kb
 from app.keyboards.feedback import feedback_kb
 from app.repository.users import increment_generated_photos, upsert_user
+
+# 1) В импортах добавь ensure_default_subscription:
 from app.repository.generations import (
+    ensure_default_subscription,  # ✅ NEW
     charge_photo_generation,
     refund_photo_generation,
     NoGenerationsLeft,
@@ -236,6 +240,7 @@ async def review_edit_presentation(call: CallbackQuery, state: FSMContext) -> No
     await call.answer()
 
 
+# ✅ FIXED review_confirmed (версия A: списание по users.id, но ensure_default_subscription ждёт tg_id)
 @router.callback_query(ModelFlow.review, F.data == ConfirmCallbacks.YES)
 async def review_confirmed(
     call: CallbackQuery, state: FSMContext, session: AsyncSession
@@ -256,10 +261,19 @@ async def review_confirmed(
     await edit_text_safe(call, "Генерирую изображение… ⏳")
     await call.answer()
 
+    # гарантируем пользователя
     user = await upsert_user(session, call.from_user.id, call.from_user.username)
 
+    # ✅ ВАЖНО:
+    # ensure_default_subscription(session, tg_id)  -> ждёт TG id (по твоему generations.py версии A)
+    # charge_photo_generation(session, tg_id)     -> ждёт TG id (по твоему generations.py версии A)
+    tg_id = call.from_user.id
+
+    # гарантируем дефолтную подписку, если нет активной
+    await ensure_default_subscription(session, tg_id)
+
     try:
-        await charge_photo_generation(session, user.id)  # ✅ user_id, не tg_id
+        await charge_photo_generation(session, tg_id)
     except NoGenerationsLeft:
         await edit_text_safe(
             call,
@@ -280,7 +294,7 @@ async def review_confirmed(
         results = await generate_image_kie_from_telegram(
             bot=call.bot,
             session=session,
-            tg_id=call.from_user.id,
+            tg_id=tg_id,  # тут именно tg_id нужен (photo_settings + tg download)
             prompt=prompt,
             telegram_photo_file_ids=product_photos,
         )
@@ -297,7 +311,7 @@ async def review_confirmed(
                 img_bytes=img_bytes,
                 filename=filename,
                 scenario="model",
-                tg_id=call.from_user.id,
+                tg_id=tg_id,
             )
             local_output_paths.append(local_path)
             if not best_local_path:
@@ -324,15 +338,13 @@ async def review_confirmed(
                     }
                 )
 
-        await increment_generated_photos(
-            session=session, tg_id=call.from_user.id, delta=1
-        )
+        await increment_generated_photos(session=session, tg_id=tg_id, delta=1)
 
         await state.set_data(
             {
                 "feedback_payload": {
                     "scenario": "model",
-                    "user_tg_id": call.from_user.id,
+                    "user_tg_id": tg_id,
                     "username": call.from_user.username or "",
                     "model_desc": model_desc,
                     "action_desc": action_desc,
@@ -354,7 +366,7 @@ async def review_confirmed(
 
     except KieAIError as e:
         logger.warning("KIE rejected/failed: %s", e)
-        await refund_photo_generation(session, user.id)  # ✅ user_id
+        await refund_photo_generation(session, tg_id)
         await edit_text_safe(
             call, kie_error_to_user_text(e), reply_markup=review_edit_kb()
         )
@@ -363,11 +375,10 @@ async def review_confirmed(
 
     except Exception as e:
         logger.exception("MODEL generation failed: %s", e)
-        await refund_photo_generation(session, user.id)  # ✅ user_id
+        await refund_photo_generation(session, tg_id)
         await edit_text_safe(
             call,
-            "Не получилось сгенерировать 😅\n"
-            "Попробуй нажать «✅ Всё верно» ещё раз или внеси правки.",
+            "Не получилось сгенерировать 😅\nПопробуй нажать «✅ Всё верно» ещё раз или внеси правки.",
             reply_markup=review_edit_kb(),
         )
         await call.answer()

@@ -9,10 +9,14 @@ from aiogram import F, Router
 from aiogram.enums import ChatAction
 from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile, CallbackQuery, Message
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.config import settings
 from app.keyboards.menu import MenuCallbacks
+from app.models.subscription import Subscription
+from app.models.user import User
+from app.models.user_subscription import UserSubscription
 from app.repository.generations import (
     charge_video_generation,
     refund_video_generation,
@@ -25,6 +29,7 @@ from app.utils.tg_edit import edit_text_safe
 router = Router()
 logger = logging.getLogger(__name__)
 
+# key = tg_id (telegram id) — чтобы не путать с users.id
 _active_jobs: dict[int, asyncio.Task] = {}
 
 
@@ -157,7 +162,7 @@ async def _run_video_job(
     chat_id: int,
     bot,
     task_id: str,
-    user_id: int,
+    tg_id: int,
     status_message_id: int,
     session: AsyncSession,
 ) -> None:
@@ -175,7 +180,7 @@ async def _run_video_job(
         )
 
         if res.state == "timeout":
-            await refund_video_generation(session, user_id)
+            await refund_video_generation(session, tg_id)
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
@@ -184,7 +189,7 @@ async def _run_video_job(
             return
 
         if res.fail_msg:
-            await refund_video_generation(session, user_id)
+            await refund_video_generation(session, tg_id)
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
@@ -193,7 +198,7 @@ async def _run_video_job(
             return
 
         if not res.result_url:
-            await refund_video_generation(session, user_id)
+            await refund_video_generation(session, tg_id)
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
@@ -218,8 +223,8 @@ async def _run_video_job(
         )
 
     except Exception as e:
-        logger.exception("User %s error in job: task_id=%s", user_id, task_id)
-        await refund_video_generation(session, user_id)
+        logger.exception("User %s error in job: task_id=%s", tg_id, task_id)
+        await refund_video_generation(session, tg_id)
         try:
             await bot.edit_message_text(
                 chat_id=chat_id,
@@ -232,16 +237,16 @@ async def _run_video_job(
         stop.set()
         for t in (spinner_task, action_task):
             t.cancel()
-        _active_jobs.pop(user_id, None)
+        _active_jobs.pop(tg_id, None)
 
 
 @router.message(AnimatePhotoStates.waiting_prompt, F.text)
 async def animate_got_prompt(
     message: Message, state: FSMContext, session: AsyncSession
 ) -> None:
-    user_id = message.from_user.id
+    tg_id = message.from_user.id
 
-    if user_id in _active_jobs and not _active_jobs[user_id].done():
+    if tg_id in _active_jobs and not _active_jobs[tg_id].done():
         await message.answer(
             "У вас уже запущена генерация. Дождитесь результата или попробуйте позже."
         )
@@ -261,8 +266,49 @@ async def animate_got_prompt(
         await message.answer("Промпт пустой. Напишите, что должно происходить в видео.")
         return
 
+    # --- DEBUG (можно потом убрать) ---
+    logger.warning("ANIMATE_DEBUG tg_id=%s", tg_id)
+    db_user_id = await session.scalar(select(User.id).where(User.tg_id == tg_id))
+    logger.warning("ANIMATE_DEBUG db_user_id=%s", db_user_id)
+
+    if db_user_id:
+        row = await session.execute(
+            select(
+                UserSubscription.id,
+                UserSubscription.status,
+                UserSubscription.remaining_video,
+                UserSubscription.remaining_photo,
+                UserSubscription.expires_at,
+                Subscription.name,
+            )
+            .select_from(UserSubscription)
+            .join(Subscription, Subscription.id == UserSubscription.subscription_id)
+            .where(UserSubscription.user_id == db_user_id)
+            .order_by(UserSubscription.activated_at.desc())
+            .limit(5)
+        )
+        logger.warning("ANIMATE_DEBUG last_subscriptions=%s", row.all())
+
+        row_active = await session.execute(
+            select(
+                UserSubscription.id,
+                UserSubscription.remaining_video,
+                UserSubscription.remaining_photo,
+                UserSubscription.expires_at,
+                Subscription.name,
+            )
+            .select_from(UserSubscription)
+            .join(Subscription, Subscription.id == UserSubscription.subscription_id)
+            .where(UserSubscription.user_id == db_user_id, UserSubscription.status == 1)
+            .order_by(UserSubscription.activated_at.desc())
+            .limit(1)
+        )
+        logger.warning("ANIMATE_DEBUG active_subscription=%s", row_active.first())
+    # --- /DEBUG ---
+
     try:
-        await charge_video_generation(session, user_id)
+        # ✅ ВАЖНО: generations.py (версия A) ждёт tg_id
+        await charge_video_generation(session, tg_id)
     except NoGenerationsLeft:
         await message.answer(
             "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс."
@@ -279,7 +325,7 @@ async def animate_got_prompt(
             cfg_scale=1.0,
         )
     except Exception as e:
-        await refund_video_generation(session, user_id)
+        await refund_video_generation(session, tg_id)
         await message.answer(f"Не удалось запустить генерацию: {e}")
         await state.clear()
         return
@@ -292,12 +338,12 @@ async def animate_got_prompt(
             chat_id=message.chat.id,
             bot=message.bot,
             task_id=task_id,
-            user_id=user_id,
+            tg_id=tg_id,
             status_message_id=status_msg.message_id,
             session=session,
         )
     )
-    _active_jobs[user_id] = job
+    _active_jobs[tg_id] = job
 
 
 @router.message(AnimatePhotoStates.waiting_prompt)

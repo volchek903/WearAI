@@ -21,7 +21,7 @@ def _normalize_output_format(v: str) -> str:
 
 def _normalize_resolution(v: str) -> str:
     v = (v or "").strip().upper()
-    if v not in {"1K", "2K"}:  # "4K"
+    if v not in {"1K", "2K"}:
         return "2K"
     return v
 
@@ -63,17 +63,15 @@ async def get_user_photo_settings(
     default = PhotoSettingsDTO()
 
     # 1) user
-    res = await session.execute(select(User).where(User.tg_id == tg_id))
-    user = res.scalar_one_or_none()
+    user = await session.scalar(select(User).where(User.tg_id == tg_id))
     if not user:
-        # теоретически не должно быть (ты вызываешь upsert_user), но оставим безопасно
+        # Обычно не должно быть (ты делаешь upsert_user), но пусть будет безопасно
         return default
 
     # 2) settings
-    res2 = await session.execute(
+    s = await session.scalar(
         select(UserPhotoSettings).where(UserPhotoSettings.user_id == user.id)
     )
-    s = res2.scalar_one_or_none()
 
     # 3) если нет — создаём дефолтные
     if s is None:
@@ -117,7 +115,7 @@ async def generate_image_kie_from_telegram(
     file_ids = list(telegram_photo_file_ids)[:5]
     images_bytes: list[bytes] = []
     for fid in file_ids:
-        # FIX: tg_file_id_to_bytes требует keyword-only аргумент tg_id
+        # tg_file_id_to_bytes требует keyword-only аргумент tg_id
         b = await tg_file_id_to_bytes(bot, fid, tg_id=tg_id)
         images_bytes.append(b)
 

@@ -14,7 +14,7 @@ class PromptHelperError(RuntimeError):
 @dataclass(slots=True)
 class OpenRouterConfig:
     api_key: str
-    model: str = "bytedance-seed/seed-1.6-flash"
+    model: str = "openai/gpt-oss-120b"
     base_url: str = "https://openrouter.ai/api/v1"
     timeout_s: float = 60.0
     http_referer: str | None = None  # optional
