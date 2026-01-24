@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-import os
+
 from app.db.init_db import init_db
 from app.db import engine, session_factory
 from app.middlewares import DbSessionMiddleware, UserActionLogMiddleware
+
 from app.handlers.faq import router as faq_router
 from app.handlers.feedback import router as feedback_router
 from app.handlers.start import router as start_router
@@ -23,7 +25,9 @@ from app.handlers.feedback_offer_video import router as feedback_offer_video_rou
 from app.handlers.admin_panel import router as admin_panel_router
 from app.handlers.extra import router as extra_router
 from app.handlers.admin_access import router as admin_access_router
+
 from app.services.subscription_seed import seed_subscriptions
+from app.services.payment_poller import run_payment_poller  # NEW
 
 
 def setup_logging() -> None:
@@ -83,10 +87,26 @@ async def main() -> None:
     async with session_factory() as session:
         await seed_subscriptions(session)
 
+    # NEW: запускаем polling платежей (без вебхуков)
+    poller_task = asyncio.create_task(
+        run_payment_poller(
+            bot=bot,
+            sessionmaker=session_factory,  # у тебя это async_sessionmaker[AsyncSession]
+            interval_sec=int(os.getenv("PAYMENTS_POLL_INTERVAL", "20")),
+            batch_size=int(os.getenv("PAYMENTS_POLL_BATCH", "50")),
+        )
+    )
+
     try:
         log.info("Bot started. Polling...")
         await dp.start_polling(bot)
     finally:
+        poller_task.cancel()
+        try:
+            await poller_task
+        except asyncio.CancelledError:
+            pass
+
         await engine.dispose()
         log.info("Shutdown OK: DB engine disposed.")
 

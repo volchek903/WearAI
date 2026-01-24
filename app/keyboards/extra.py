@@ -1,6 +1,7 @@
+# app/keyboards/extra.py
 from __future__ import annotations
 
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
@@ -14,6 +15,9 @@ class ExtraCallbacks:
     BUY_ORBIT = "extra:buy:orbit"
     BUY_NOVA = "extra:buy:nova"
     BUY_COSMIC = "extra:buy:cosmic"
+
+    # NEW: ручная проверка оплаты (polling)
+    CHECK_PREFIX = "extra:check:"  # + <payment_id>
 
     # навигация
     BACK = "extra:back"
@@ -48,5 +52,29 @@ def extra_buy_kb(plan_name: str) -> InlineKeyboardMarkup:
 
     kb.button(text="⬅️ Назад", callback_data=ExtraCallbacks.BACK)
 
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+# Старый вариант (просто URL оплаты)
+def extra_pay_url_kb(redirect_url: str) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.row(InlineKeyboardButton(text="💳 Оплатить", url=redirect_url))
+    kb.row(InlineKeyboardButton(text="⬅️ Назад", callback_data=ExtraCallbacks.BACK))
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+# NEW: вариант под polling (Оплатить + Проверить оплату)
+def extra_pay_poll_kb(redirect_url: str, payment_id: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.row(InlineKeyboardButton(text="💳 Оплатить", url=redirect_url))
+    kb.row(
+        InlineKeyboardButton(
+            text="🔄 Проверить оплату",
+            callback_data=f"{ExtraCallbacks.CHECK_PREFIX}{payment_id}",
+        )
+    )
+    kb.row(InlineKeyboardButton(text="⬅️ Назад", callback_data=ExtraCallbacks.BACK))
     kb.adjust(1)
     return kb.as_markup()
