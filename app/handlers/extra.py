@@ -45,7 +45,8 @@ def _table(plans: list[Subscription]) -> str:
             f"{p.name:<10} {price:<7} {days:<5} {p.video_generations:<6} {p.photo_generations:<6}"
         )
 
-    return f"<pre>{_escape('\n'.join(lines))}</pre>"
+    joined = "\n".join(lines)
+    return f"<pre>{_escape(joined)}</pre>"
 
 
 def _extra_text(

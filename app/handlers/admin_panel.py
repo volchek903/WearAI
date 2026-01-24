@@ -15,9 +15,7 @@ router = Router()
 @router.message(Command("admin"))
 async def admin_entry(message: Message, session: AsyncSession) -> None:
     if not await is_admin(session, message.from_user.id):
-        await message.answer("⛔️ Доступ запрещён.")
         return
-
     await message.answer("⚙️ Админка", reply_markup=admin_menu_kb())
 
 
