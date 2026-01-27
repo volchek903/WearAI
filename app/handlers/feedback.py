@@ -135,7 +135,9 @@ async def feedback_back_to_menu(call: CallbackQuery, state: FSMContext) -> None:
         return
 
     await state.clear()
-    await call.message.answer("Ок. Возвращаю в меню.", reply_markup=main_menu_kb())
+    await call.message.answer(
+        "Хорошо! Возвращаю в меню 👇", reply_markup=main_menu_kb()
+    )
     await call.answer()
 
 
@@ -147,7 +149,7 @@ async def feedback_bug(call: CallbackQuery, state: FSMContext) -> None:
 
     await state.set_state(FeedbackFlow.text)
     await call.message.answer(
-        "Опиши, пожалуйста, что именно не так (1–3 предложения).\n"
+        "Опиши, пожалуйста, что именно не так (1–3 предложения) ✍️\n"
         "Например: «не тот товар», «исказился цвет», «лицо поменялось», «плохие руки» и т.д.",
         reply_markup=back_to_menu_kb(),
     )
@@ -210,6 +212,6 @@ async def feedback_text_in(message: Message, state: FSMContext) -> None:
                 )
 
     await message.answer(
-        "Спасибо! Сообщение передано в поддержку.", reply_markup=main_menu_kb()
+        "Спасибо! ✅ Сообщение передано в поддержку.", reply_markup=main_menu_kb()
     )
     await state.clear()

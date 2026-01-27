@@ -27,14 +27,14 @@ class PostGenCallbacks:
 def postgen_feedback_kb(ctx: str = "model") -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="🛠 Сообщить об ошибке", callback_data=PostGenCallbacks.report(ctx))
-    kb.button(text="✅ Всё хорошо", callback_data=PostGenCallbacks.ok(ctx))
+    kb.button(text="✅ Всё отлично", callback_data=PostGenCallbacks.ok(ctx))
     kb.adjust(1)
     return kb.as_markup()
 
 
 def postgen_offer_video_kb(ctx: str = "model") -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="⬅️ Вернуться в меню", callback_data=PostGenCallbacks.menu(ctx))
+    kb.button(text="⬅️ В меню", callback_data=PostGenCallbacks.menu(ctx))
     kb.button(text="🎬 Оживить фото", callback_data=PostGenCallbacks.animate(ctx))
     kb.adjust(1)
     return kb.as_markup()

@@ -159,13 +159,13 @@ async def fb_ok(cb: CallbackQuery, state: FSMContext) -> None:
     scenario = str(fp.get("scenario") or "")
 
     if scenario not in {"model", "tryon"}:
-        await edit_text_safe(cb, "Главное меню:", reply_markup=main_menu_kb())
+        await edit_text_safe(cb, "Главное меню 👇", reply_markup=main_menu_kb())
         await state.clear()
         await cb.answer()
         return
 
     text = (
-        "✅ <b>Отлично!</b>\n\nЖелаете сгенерировать <b>видео на основе этого фото</b>?"
+        "✅ <b>Отлично!</b>\n\nХочешь сгенерировать <b>видео на основе этого фото</b>?"
     )
     await edit_text_safe(cb, text, reply_markup=feedback_offer_video_kb())
     await state.set_state(FeedbackFlow.offer_video)
@@ -178,7 +178,7 @@ async def fb_menu(cb: CallbackQuery, state: FSMContext) -> None:
         await cb.answer()
         return
 
-    await edit_text_safe(cb, "Главное меню:", reply_markup=main_menu_kb())
+    await edit_text_safe(cb, "Главное меню 👇", reply_markup=main_menu_kb())
     await state.clear()
     await cb.answer()
 
@@ -236,7 +236,7 @@ async def fb_animate(cb: CallbackQuery, state: FSMContext) -> None:
 
     text = (
         "🎬 <b>Оживить фото</b>\n\n"
-        "Напишите, что должно произойти в видео на основе этой фотки.\n\n"
+        "Напиши, что должно произойти в видео на основе этой фотки.\n\n"
         "💡 Пример: «лёгкая улыбка, моргание, голова чуть вправо, камера плавно приближает»"
     )
     await edit_text_safe(cb, text, reply_markup=None)
@@ -246,7 +246,7 @@ async def fb_animate(cb: CallbackQuery, state: FSMContext) -> None:
 async def fb_text(message: Message, state: FSMContext) -> None:
     txt = (message.text or "").strip()
     if not txt:
-        await message.answer("Нужен текст 🙂 Опишите проблему одним сообщением.")
+        await message.answer("Нужен текст ✍️ Опишите проблему одним сообщением.")
         return
 
     data = await state.get_data()
@@ -259,7 +259,7 @@ async def fb_text(message: Message, state: FSMContext) -> None:
     )
 
     await message.answer(
-        "Спасибо! ✅ Я записал сообщение. Возвращаю в меню.",
+        "Спасибо! ✅ Сообщение записал. Возвращаю в меню.",
         reply_markup=main_menu_kb(),
     )
     await state.clear()

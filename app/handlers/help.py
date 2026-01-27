@@ -90,7 +90,7 @@ async def help_start(
             "Сгенерирую промпт на русском для nano-banana-pro 😉"
         )
     else:
-        text = "Ок 🙂 Напиши детали, и я сделаю промпт на русском для nano-banana-pro."
+        text = "Хорошо 😊 Напиши детали, и я сделаю промпт на русском для nano-banana-pro."
 
     await edit_text_safe(call, text)
     await call.answer()
@@ -99,14 +99,14 @@ async def help_start(
 @router.message(HelpFlow.input)
 async def help_input(message: Message, state: FSMContext) -> None:
     if not message.text or not message.text.strip():
-        await message.answer("Напиши, пожалуйста, текстом 😊")
+        await message.answer("Напиши, пожалуйста, текстом ✍️")
         return
 
     details = message.text.strip()
 
     if is_text_too_long(details):
         await message.answer(
-            f"Ой 😅 Слишком длинно.\n"
+            f"Ой, слишком длинно 😅\n"
             f"Максимум {MAX_TEXT_LEN} символов, а у тебя {len(details)}.\n"
             "Сократи, пожалуйста, и отправь ещё раз 🙌"
         )
@@ -155,7 +155,7 @@ async def help_back(call: CallbackQuery, state: FSMContext) -> None:
     else:
         await state.clear()
 
-    await edit_text_safe(call, "Ок 😄 возвращаю к вводу. Продолжай 👇")
+    await edit_text_safe(call, "Хорошо 😄 Возвращаю к вводу. Продолжай 👇")
     await call.answer()
 
 
@@ -168,7 +168,7 @@ async def help_use(call: CallbackQuery, state: FSMContext) -> None:
 
     if not return_state:
         await state.clear()
-        await edit_text_safe(call, "Ок ✅")
+        await edit_text_safe(call, "Готово ✅")
         await call.answer()
         return
 

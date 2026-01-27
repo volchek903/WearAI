@@ -19,10 +19,10 @@ def faq_kb() -> InlineKeyboardMarkup:
     kb.button(text="📘 Как избежать ошибок генерации", url=ARTICLE_GUIDE_URL)
     kb.button(text="💳 Пополнение и подписка", url=ARTICLE_DONATION_URL)
 
-    kb.button(text="☑️ Политика конфиденциальности", url=PRIVACY_URL)
-    kb.button(text="☑️ Пользовательское соглашение", url=TERMS_URL)
-    kb.button(text="💬 Связаться с менеджером", url=MANAGER_URL)
-    kb.button(text="⬅️ Назад в меню", callback_data=FAQ_BACK_CB)
+    kb.button(text="🔒 Политика конфиденциальности", url=PRIVACY_URL)
+    kb.button(text="📄 Пользовательское соглашение", url=TERMS_URL)
+    kb.button(text="💬 Написать менеджеру", url=MANAGER_URL)
+    kb.button(text="⬅️ В меню", callback_data=FAQ_BACK_CB)
 
     kb.adjust(1)
     return kb.as_markup()

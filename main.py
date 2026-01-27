@@ -1,4 +1,3 @@
-# main.py
 from __future__ import annotations
 
 import asyncio
@@ -28,8 +27,8 @@ from app.handlers.extra import router as extra_router
 from app.handlers.admin_access import router as admin_access_router
 
 from app.services.subscription_seed import seed_subscriptions
-from app.services.payment_poller import run_payment_poller
-from app.services.subscription_expirer import run_subscription_expirer  # ✅ NEW
+from app.services.subscription_expirer import run_subscription_expirer
+from app.services.payment_poller import run_payment_poller  # NEW
 
 
 def setup_logging() -> None:
@@ -61,7 +60,6 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(admin_panel_router)
     dp.include_router(extra_router)
     dp.include_router(admin_access_router)
-
     # Роутеры с более “общими” хендлерами — ниже
     dp.include_router(help_router)
     dp.include_router(settings_router)
@@ -90,36 +88,31 @@ async def main() -> None:
     async with session_factory() as session:
         await seed_subscriptions(session)
 
-    # ✅ NEW: polling платежей (без вебхуков)
+    # NEW: запускаем polling платежей (без вебхуков)
     poller_task = asyncio.create_task(
         run_payment_poller(
             bot=bot,
-            sessionmaker=session_factory,
+            sessionmaker=session_factory,  # у тебя это async_sessionmaker[AsyncSession]
             interval_sec=int(os.getenv("PAYMENTS_POLL_INTERVAL", "20")),
             batch_size=int(os.getenv("PAYMENTS_POLL_BATCH", "50")),
         )
     )
-
-    # ✅ NEW: ежедневная проверка истёкших подписок (00:01 UTC+3)
+    # NEW: ежедневная проверка просроченных подписок в 00:01 UTC+3
     expirer_task = asyncio.create_task(
-        run_subscription_expirer(
-            sessionmaker=session_factory,
-            batch_size=int(os.getenv("SUB_EXPIRE_BATCH", "500")),
-        )
+        run_subscription_expirer(sessionmaker=session_factory)
     )
 
     try:
         log.info("Bot started. Polling...")
         await dp.start_polling(bot)
     finally:
-        # останавливаем фоновые таски
-        for t in (poller_task, expirer_task):
-            t.cancel()
-        for t in (poller_task, expirer_task):
-            try:
-                await t
-            except asyncio.CancelledError:
-                pass
+        poller_task.cancel()
+        expirer_task.cancel()
+        try:
+            await poller_task
+            await expirer_task
+        except asyncio.CancelledError:
+            pass
 
         await engine.dispose()
         log.info("Shutdown OK: DB engine disposed.")

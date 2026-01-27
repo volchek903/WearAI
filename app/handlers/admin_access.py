@@ -104,7 +104,7 @@ async def process_user_id(
             tg_id = None
 
     if not tg_id:
-        await message.answer("❌ Отправь tgID пользователя или перешли его сообщение")
+        await message.answer("❌ Отправь tgID пользователя или перешли его сообщение 🙏")
         return
 
     data = await state.get_data()
@@ -121,19 +121,19 @@ async def process_user_id(
     if action == "give_sub":
         plans = await get_all_plans(session)
         if not plans:
-            await message.answer("❌ В базе нет планов subscription")
+            await message.answer("❌ В базе нет планов подписки")
             return
 
         await state.set_state(AdminAccessFSM.waiting_sub_plan)
         await message.answer(
-            "Выбери подписку, которую выдать пользователю:",
+            "Выбери подписку для пользователя 👇",
             reply_markup=_plans_kb(plans),
         )
         return
 
     # для add_admin / remove_admin — обычное подтверждение
     await message.answer(
-        f"Подтвердить действие для пользователя <code>{tg_id}</code>?",
+        f"Подтвердить действие для пользователя <code>{tg_id}</code>? ✅",
         reply_markup=yes_no_kb(),
     )
 
@@ -144,7 +144,7 @@ async def process_user_id(
 async def pick_subscription_plan(call: CallbackQuery, state: FSMContext) -> None:
     plan_id_str = (call.data or "").replace(SUB_PICK_PREFIX, "", 1)
     if not plan_id_str.isdigit():
-        await call.answer("Некорректный план", show_alert=True)
+        await call.answer("Некорректный план 😕", show_alert=True)
         return
 
     plan_id = int(plan_id_str)
@@ -153,7 +153,7 @@ async def pick_subscription_plan(call: CallbackQuery, state: FSMContext) -> None
     # дальше спрашиваем подтверждение
     await edit_text_safe(
         call,
-        f"Вы уверены, что хотите выдать подписку (plan_id=<code>{plan_id}</code>) этому пользователю?",
+        f"Вы уверены, что хотите выдать подписку (plan_id=<code>{plan_id}</code>) этому пользователю? ✅",
         reply_markup=yes_no_kb(),
     )
     await call.answer()
@@ -174,7 +174,7 @@ async def confirm_yes(
         tg_id = int(tg_id_raw)
     except Exception:
         await state.clear()
-        await edit_text_safe(call, "❌ Некорректный tgID", reply_markup=admin_menu_kb())
+        await edit_text_safe(call, "❌ Некорректный tgID 😕", reply_markup=admin_menu_kb())
         await call.answer()
         return
 
@@ -182,7 +182,7 @@ async def confirm_yes(
     if not user:
         await state.clear()
         await edit_text_safe(
-            call, "❌ Пользователь не найден", reply_markup=admin_menu_kb()
+            call, "❌ Пользователь не найден 😕", reply_markup=admin_menu_kb()
         )
         await call.answer()
         return
