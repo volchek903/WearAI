@@ -33,7 +33,7 @@ def render_settings_text(aspect_ratio: str, resolution: str, output_format: str)
         f"• input.aspect_ratio: <b>{aspect_ratio}</b>\n"
         f"• resolution: <b>{resolution}</b>\n"
         f"• output_format: <b>{output_format}</b>\n\n"
-        "Нажимай на параметр, чтобы изменить."
+        "Нажимай на параметр, чтобы изменить ✨"
     )
 
 
@@ -70,7 +70,7 @@ async def change_aspect(call: CallbackQuery, session: AsyncSession) -> None:
         render_settings_text(s.aspect_ratio, s.resolution, s.output_format),
         reply_markup=photo_settings_kb(s),
     )
-    await call.answer("Соотношение изменено")
+    await call.answer("✅ Соотношение изменено")
 
 
 @router.callback_query(F.data == SettingsCallbacks.RESOLUTION)
@@ -86,7 +86,7 @@ async def change_resolution(call: CallbackQuery, session: AsyncSession) -> None:
         render_settings_text(s.aspect_ratio, s.resolution, s.output_format),
         reply_markup=photo_settings_kb(s),
     )
-    await call.answer("Разрешение изменено")
+    await call.answer("✅ Разрешение изменено")
 
 
 @router.callback_query(F.data == SettingsCallbacks.FORMAT)
@@ -102,7 +102,7 @@ async def change_format(call: CallbackQuery, session: AsyncSession) -> None:
         render_settings_text(s.aspect_ratio, s.resolution, s.output_format),
         reply_markup=photo_settings_kb(s),
     )
-    await call.answer("Формат изменён")
+    await call.answer("✅ Формат изменён")
 
 
 @router.callback_query(F.data == SettingsCallbacks.RESET)
@@ -115,10 +115,10 @@ async def reset(call: CallbackQuery, session: AsyncSession) -> None:
         render_settings_text(s.aspect_ratio, s.resolution, s.output_format),
         reply_markup=photo_settings_kb(s),
     )
-    await call.answer("Сброшено")
+    await call.answer("🔄 Сброшено")
 
 
 @router.callback_query(F.data == SettingsCallbacks.BACK)
 async def back(call: CallbackQuery) -> None:
-    await edit_text_safe(call, "Выбери режим ниже 👇", reply_markup=main_menu_kb())
+    await edit_text_safe(call, "Выбери режим ниже 👇✨", reply_markup=main_menu_kb())
     await call.answer()

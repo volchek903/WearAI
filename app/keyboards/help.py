@@ -10,7 +10,7 @@ class HelpCallbacks:
     BACK = "help:back"
 
 
-def help_button_kb(kind: str, text: str = "🪄 Помочь") -> InlineKeyboardMarkup:
+def help_button_kb(kind: str, text: str = "🪄 Нужна помощь") -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text=text, callback_data=f"{HelpCallbacks.START}:{kind}")
     kb.adjust(1)
@@ -32,7 +32,7 @@ def help_choose_kb() -> InlineKeyboardMarkup:
 
 def help_use_back_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="✅ Использовать", callback_data=HelpCallbacks.USE)
-    kb.button(text="↩️ Вернуться", callback_data=HelpCallbacks.BACK)
+    kb.button(text="✅ Использовать текст", callback_data=HelpCallbacks.USE)
+    kb.button(text="⬅️ Назад", callback_data=HelpCallbacks.BACK)
     kb.adjust(2)
     return kb.as_markup()

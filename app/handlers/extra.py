@@ -369,27 +369,27 @@ async def extra_check_payment(call: CallbackQuery, session: AsyncSession) -> Non
     payment_id_str = raw.replace(ExtraCallbacks.CHECK_PREFIX, "", 1)
 
     if not payment_id_str.isdigit():
-        await call.answer("Некорректный идентификатор платежа", show_alert=True)
+        await call.answer("Некорректный идентификатор платежа 😕", show_alert=True)
         return
 
     payment_id = int(payment_id_str)
     payment = await get_payment_by_id(session, payment_id)
 
     if not payment:
-        await call.answer("Платёж не найден", show_alert=True)
+        await call.answer("Платёж не найден 😕", show_alert=True)
         return
 
     payment_tg_id = _payment_tg_id(payment)
     if not payment_tg_id:
-        await call.answer("Не удалось определить пользователя платежа", show_alert=True)
+        await call.answer("Не удалось определить пользователя платежа 😕", show_alert=True)
         return
 
     if payment_tg_id != call.from_user.id:
-        await call.answer("Это не ваш платёж", show_alert=True)
+        await call.answer("Это не ваш платёж 🙅‍♂️", show_alert=True)
         return
 
     if payment.status == PaymentStatus.CONFIRMED:
-        await call.answer("✅ Уже подтверждено, пакет активирован", show_alert=True)
+        await call.answer("✅ Уже подтверждено — пакет активирован", show_alert=True)
         return
 
     client = build_platega_client()
@@ -424,5 +424,6 @@ async def extra_check_payment(call: CallbackQuery, session: AsyncSession) -> Non
         return
 
     await call.answer(
-        "Платёж ещё обрабатывается. Попробуй снова через минуту 🙂", show_alert=True
+        "Платёж ещё обрабатывается ⏳ Попробуй снова через минуту.",
+        show_alert=True,
     )

@@ -27,6 +27,7 @@ from app.handlers.extra import router as extra_router
 from app.handlers.admin_access import router as admin_access_router
 
 from app.services.subscription_seed import seed_subscriptions
+from app.services.subscription_expirer import run_subscription_expirer
 from app.services.payment_poller import run_payment_poller  # NEW
 
 
@@ -96,14 +97,20 @@ async def main() -> None:
             batch_size=int(os.getenv("PAYMENTS_POLL_BATCH", "50")),
         )
     )
+    # NEW: ежедневная проверка просроченных подписок в 00:01 UTC+3
+    expirer_task = asyncio.create_task(
+        run_subscription_expirer(sessionmaker=session_factory)
+    )
 
     try:
         log.info("Bot started. Polling...")
         await dp.start_polling(bot)
     finally:
         poller_task.cancel()
+        expirer_task.cancel()
         try:
             await poller_task
+            await expirer_task
         except asyncio.CancelledError:
             pass
 

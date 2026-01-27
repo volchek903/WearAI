@@ -95,7 +95,7 @@ async def animate_entry(cb: CallbackQuery, state: FSMContext) -> None:
 
     text = (
         "🎬 <b>Оживить фото</b>\n\n"
-        "Пришлите <b>одно фото</b>, которое хотите оживить.\n"
+        "Пришлите <b>одно фото</b>, которое хотите оживить 📸\n"
         "<i>(Не альбом / не несколько фото одним сообщением)</i>\n\n"
         "После этого я попрошу промпт и начну генерацию видео на <b>5 секунд</b>.\n\n"
         "💡 <b>Совет</b>: лучше работает фото без смаза, с хорошим светом и лицом в кадре."
@@ -108,14 +108,14 @@ async def animate_entry(cb: CallbackQuery, state: FSMContext) -> None:
 @router.message(AnimatePhotoStates.waiting_photo, F.photo)
 async def animate_got_photo(message: Message, state: FSMContext) -> None:
     if not settings.kie_api_key:
-        await message.answer("Не настроен KIE_API_KEY в .env.")
+        await message.answer("Не настроен KIE_API_KEY в .env 😕")
         await state.clear()
         logger.error("KIE_API_KEY missing in settings")
         return
 
     if message.media_group_id is not None:
         await message.answer(
-            "Пожалуйста, отправьте <b>одно</b> фото (не альбомом).",
+            "Пожалуйста, отправьте <b>одно</b> фото (не альбомом) 📸",
             parse_mode="HTML",
         )
         return
@@ -124,7 +124,7 @@ async def animate_got_photo(message: Message, state: FSMContext) -> None:
     tg_file = await message.bot.get_file(photo.file_id)
     file_path = tg_file.file_path
     if not file_path:
-        await message.answer("Не удалось получить файл из Telegram. Попробуй ещё раз.")
+        await message.answer("Не удалось получить файл из Telegram 😕 Попробуй ещё раз.")
         return
 
     image_bytes = await _download_telegram_file(message.bot.token, file_path)
@@ -138,7 +138,7 @@ async def animate_got_photo(message: Message, state: FSMContext) -> None:
             upload_path=f"images/wearai/animate/{message.from_user.id}",
         )
     except Exception as e:
-        await message.answer(f"Ошибка загрузки фото в KIE: {e}")
+        await message.answer(f"Ошибка загрузки фото в KIE 😕: {e}")
         await state.clear()
         logger.exception("KIE upload failed for user %s", message.from_user.id)
         return
@@ -146,13 +146,13 @@ async def animate_got_photo(message: Message, state: FSMContext) -> None:
     await state.update_data(image_url=image_url)
     await state.set_state(AnimatePhotoStates.waiting_prompt)
 
-    await message.answer("Отлично! Теперь напишите, что должно происходить на видео.")
+    await message.answer("Отлично! ✨ Теперь напишите, что должно происходить на видео.")
 
 
 @router.message(AnimatePhotoStates.waiting_photo)
 async def animate_waiting_photo_wrong(message: Message) -> None:
     await message.answer(
-        "Сейчас нужно фото. Пришлите <b>одно</b> фото сообщением.",
+        "Сейчас нужно фото 📸 Пришлите <b>одно</b> фото сообщением.",
         parse_mode="HTML",
     )
 
@@ -184,7 +184,7 @@ async def _run_video_job(
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
-                text="Таймаут ожидания результата. Попробуйте ещё раз.",
+                text="Таймаут ожидания результата ⏳ Попробуйте ещё раз.",
             )
             return
 
@@ -202,7 +202,7 @@ async def _run_video_job(
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
-                text="Готово, но не удалось найти ссылку на результат.",
+                text="Готово, но не удалось найти ссылку на результат 😕",
             )
             return
 
@@ -213,12 +213,12 @@ async def _run_video_job(
         await bot.edit_message_text(
             chat_id=chat_id,
             message_id=status_message_id,
-            text="✅ Готово. Отправляю видео…",
+            text="✅ Готово! Отправляю видео…",
         )
         await bot.send_video(
             chat_id=chat_id,
             video=video_file,
-            caption="Готово. Если нужно — дай следующий промпт.",
+            caption="Готово! Если нужно — дай следующий промпт ✍️",
             supports_streaming=True,
         )
 
@@ -248,7 +248,7 @@ async def animate_got_prompt(
 
     if tg_id in _active_jobs and not _active_jobs[tg_id].done():
         await message.answer(
-            "У вас уже запущена генерация. Дождитесь результата или попробуйте позже."
+            "У тебя уже запущена генерация ⏳ Дождись результата или попробуй позже."
         )
         return
 
@@ -256,14 +256,14 @@ async def animate_got_prompt(
     image_url = data.get("image_url")
     if not image_url:
         await message.answer(
-            "Фото не найдено в контексте. Начните заново: «Оживить фото» → отправьте фото."
+            "Фото не найдено в контексте 😕 Начни заново: «Оживить фото» → отправь фото."
         )
         await state.clear()
         return
 
     prompt = (message.text or "").strip()
     if not prompt:
-        await message.answer("Промпт пустой. Напишите, что должно происходить в видео.")
+        await message.answer("Промпт пустой ✍️ Напиши, что должно происходить в видео.")
         return
 
     # --- DEBUG (можно потом убрать) ---
@@ -311,7 +311,7 @@ async def animate_got_prompt(
         await charge_video_generation(session, tg_id)
     except NoGenerationsLeft:
         await message.answer(
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс."
+            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳"
         )
         return
 
@@ -326,7 +326,7 @@ async def animate_got_prompt(
         )
     except Exception as e:
         await refund_video_generation(session, tg_id)
-        await message.answer(f"Не удалось запустить генерацию: {e}")
+        await message.answer(f"Не удалось запустить генерацию 😕: {e}")
         await state.clear()
         return
 
@@ -349,5 +349,5 @@ async def animate_got_prompt(
 @router.message(AnimatePhotoStates.waiting_prompt)
 async def animate_waiting_prompt_wrong(message: Message) -> None:
     await message.answer(
-        "Теперь нужен текстовый промпт: что должно происходить в видео."
+        "Теперь нужен текстовый промпт ✍️ Что должно происходить в видео?"
     )

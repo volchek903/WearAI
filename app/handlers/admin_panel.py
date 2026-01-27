@@ -38,7 +38,7 @@ async def admin_users(call: CallbackQuery, session: AsyncSession) -> None:
     rows = await get_last_users(session, limit=10)
 
     if not rows:
-        text = "👥 <b>Пользователи</b>\n\nПока пусто."
+        text = "👥 <b>Пользователи</b>\n\nПока пусто 💤"
     else:
         lines: list[str] = []
         for uid, tg_id, username, created_at in rows:

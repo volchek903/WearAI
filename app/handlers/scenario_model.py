@@ -44,7 +44,7 @@ MODEL_DESC_EXAMPLE = (
 )
 
 PRODUCT_ACTION_EXAMPLE = (
-    "Класс, фото товара получил! ✅\n\n"
+    "Класс! Фото товара получил ✅\n\n"
     "Теперь напиши, <b>что нужно сделать с товаром</b> 👇\n"
     "Примеры:\n"
     "— “Сделай крупный план товара в руке, чтобы были видны детали.”\n"
@@ -73,7 +73,7 @@ async def start_model_flow(
 async def model_desc_in(message: Message, state: FSMContext) -> None:
     if not message.text or not message.text.strip():
         await message.answer(
-            "Ой 😅 Мне нужен текст. Опиши модель словами, пожалуйста 🙌"
+            "Мне нужен текст 😊 Опиши модель словами, пожалуйста 🙌"
         )
         return
 
@@ -81,7 +81,7 @@ async def model_desc_in(message: Message, state: FSMContext) -> None:
 
     if is_text_too_long(desc):
         await message.answer(
-            f"Ой 😅 Текст слишком длинный.\n"
+            f"Ой, текст слишком длинный 😅\n"
             f"Максимум {MAX_TEXT_LEN} символов, а у тебя {len(desc)}.\n"
             "Сократи, пожалуйста, и отправь ещё раз 🙌"
         )
@@ -91,7 +91,7 @@ async def model_desc_in(message: Message, state: FSMContext) -> None:
     await state.set_state(ModelFlow.confirm_model_desc)
 
     await message.answer(
-        f"Супер! 😊 Вот так я понял твою модель:\n“{desc}”\n\nВсё верно? ✅",
+        f"Супер! 😊 Вот описание, как я понял модель:\n“{desc}”\n\nВсё верно? ✅",
         reply_markup=yes_no_kb(yes_text="✅ Да", no_text="✏️ Изменить"),
     )
 
@@ -103,7 +103,7 @@ async def model_desc_edit(call: CallbackQuery, state: FSMContext) -> None:
 
     await edit_text_safe(
         call,
-        "Ок! 😄 Тогда опиши модель заново 👇\n\n"
+        "Хорошо 😄 Тогда опиши модель заново 👇\n\n"
         + MODEL_DESC_EXAMPLE.split("\n\n", 1)[1],
         reply_markup=help_button_kb("model_desc"),
     )
@@ -153,7 +153,7 @@ async def product_photos_in(message: Message, state: FSMContext) -> None:
 
     if not (1 <= len(result.file_ids) <= 5):
         await message.answer(
-            "Ой 😅 Тут должно быть <b>от 1 до 5 фото</b> одним сообщением. Попробуй ещё раз 📸🙌"
+            "Ой, тут должно быть <b>от 1 до 5 фото</b> одним сообщением. Попробуй ещё раз 📸🙌"
         )
         return
 
@@ -169,7 +169,7 @@ async def product_photos_in(message: Message, state: FSMContext) -> None:
 async def presentation_desc_in(message: Message, state: FSMContext) -> None:
     if not message.text or not message.text.strip():
         await message.answer(
-            "Мне нужен текст 😊 Напиши, что нужно сделать с товаром 👇"
+            "Нужен текст ✍️ Напиши, что нужно сделать с товаром 👇"
         )
         return
 
@@ -177,7 +177,7 @@ async def presentation_desc_in(message: Message, state: FSMContext) -> None:
 
     if is_text_too_long(action_text):
         await message.answer(
-            f"Ой 😅 Текст слишком длинный.\n"
+            f"Ой, текст слишком длинный 😅\n"
             f"Максимум {MAX_TEXT_LEN} символов, а у тебя {len(action_text)}.\n"
             "Сократи, пожалуйста, и отправь ещё раз 🙌"
         )
@@ -191,7 +191,7 @@ async def presentation_desc_in(message: Message, state: FSMContext) -> None:
     photos = data.get("product_photos", []) or []
 
     await message.answer(
-        "Давай быстренько проверим ✅😊\n\n"
+        "Давай быстро проверим ✅😊\n\n"
         f"1) Описание модели: “{desc}”\n"
         f"2) Фото товара: {len(photos)} шт. 📸\n"
         f"3) Что сделать с товаром: “{action_text}”\n\n"
@@ -207,7 +207,8 @@ async def review_edit_model(call: CallbackQuery, state: FSMContext) -> None:
 
     await edit_text_safe(
         call,
-        "Ок! 😄 Меняем описание модели 👇\n\n" + MODEL_DESC_EXAMPLE.split("\n\n", 1)[1],
+        "Хорошо 😄 Меняем описание модели 👇\n\n"
+        + MODEL_DESC_EXAMPLE.split("\n\n", 1)[1],
         reply_markup=help_button_kb("model_desc"),
     )
     await call.answer()
@@ -220,7 +221,7 @@ async def review_edit_photos(call: CallbackQuery, state: FSMContext) -> None:
 
     await edit_text_safe(
         call,
-        "Ок! 😄 Пришли фото товара заново (1–5 фото одним сообщением) 📸",
+        "Хорошо 😄 Пришли фото товара заново (1–5 фото одним сообщением) 📸",
         reply_markup=help_button_kb("product_photos", text="📸 Как лучше сфоткать?"),
     )
     await call.answer()
@@ -233,7 +234,7 @@ async def review_edit_presentation(call: CallbackQuery, state: FSMContext) -> No
 
     await edit_text_safe(
         call,
-        "Ок! 😊 Напиши заново, что нужно сделать с товаром 👇\n\n"
+        "Хорошо 😊 Напиши заново, что нужно сделать с товаром 👇\n\n"
         + PRODUCT_ACTION_EXAMPLE,
         reply_markup=help_button_kb("presentation_desc"),
     )
@@ -252,7 +253,8 @@ async def review_confirmed(
 
     if not model_desc or not action_desc or not product_photos:
         await edit_text_safe(
-            call, "Не вижу всех данных для генерации 😅\nДавай начнём заново: /start"
+            call,
+            "Не вижу всех данных для генерации 😅\nДавай начнём заново: /start",
         )
         await call.answer()
         await state.clear()
@@ -277,7 +279,7 @@ async def review_confirmed(
     except NoGenerationsLeft:
         await edit_text_safe(
             call,
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс.",
+            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
             reply_markup=review_edit_kb(),
         )
         await call.answer()
@@ -359,7 +361,7 @@ async def review_confirmed(
         await state.set_state(FeedbackFlow.choice)
 
         await call.message.answer(
-            "Все получилось как вы хотели или обнаружили ошибку?",
+            "Всё получилось как ты хотел(а) или есть ошибка? 😊",
             reply_markup=feedback_kb(),
         )
         return
@@ -378,7 +380,8 @@ async def review_confirmed(
         await refund_photo_generation(session, tg_id)
         await edit_text_safe(
             call,
-            "Не получилось сгенерировать 😅\nПопробуй нажать «✅ Всё верно» ещё раз или внеси правки.",
+            "Не получилось сгенерировать 😅\n"
+            "Попробуй нажать «✅ Всё верно» ещё раз или внеси правки.",
             reply_markup=review_edit_kb(),
         )
         await call.answer()

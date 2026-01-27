@@ -18,7 +18,7 @@ class FeedbackCallbacks:
 def feedback_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="🛠 Сообщить об ошибке", callback_data=FeedbackCallbacks.BUG)
-    kb.button(text="✅ Всё хорошо", callback_data=FeedbackCallbacks.OK)
+    kb.button(text="✅ Всё отлично", callback_data=FeedbackCallbacks.OK)
     kb.adjust(1)
     return kb.as_markup()
 

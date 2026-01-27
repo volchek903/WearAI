@@ -54,7 +54,7 @@ async def start_tryon_flow(
 
     await edit_text_safe(
         call,
-        "Поехали! 👕✨\n\nПришли свою фотографию (1 фото) 🤳",
+        "Поехали! 👕✨\n\nПришли свою фотографию (1 фото) 🤳📸",
         reply_markup=help_button_kb("user_photo", text="🤳 Как лучше сделать фото?"),
     )
     await call.answer()
@@ -63,11 +63,11 @@ async def start_tryon_flow(
 @router.message(TryOnFlow.user_photo)
 async def user_photo_in(message: Message, state: FSMContext) -> None:
     if message.media_group_id:
-        await message.answer("Пожалуйста, пришли одну фотографию (не альбом) 🤳🙂")
+        await message.answer("Пожалуйста, пришли одну фотографию (не альбом) 🤳")
         return
     if not message.photo:
         await message.answer(
-            "Мне нужна именно фотография 🤳🙂 Пришли, пожалуйста, 1 фото."
+            "Нужна именно фотография 🤳 Пришли, пожалуйста, 1 фото."
         )
         return
 
@@ -76,7 +76,7 @@ async def user_photo_in(message: Message, state: FSMContext) -> None:
     await state.set_state(TryOnFlow.item_photo)
 
     await message.answer(
-        "Фото получил! ✅😊\n\nТеперь пришли фото вещи (1 фото) 📦📸",
+        "Фото получил ✅😊\n\nТеперь пришли фото вещи (1 фото) 📦📸",
         reply_markup=help_button_kb("item_photo", text="📦 Как лучше сфоткать вещь?"),
     )
 
@@ -84,10 +84,10 @@ async def user_photo_in(message: Message, state: FSMContext) -> None:
 @router.message(TryOnFlow.item_photo)
 async def item_photo_in(message: Message, state: FSMContext) -> None:
     if message.media_group_id:
-        await message.answer("Пожалуйста, пришли одно фото вещи (не альбом) 📸🙂")
+        await message.answer("Пожалуйста, пришли одно фото вещи (не альбом) 📸")
         return
     if not message.photo:
-        await message.answer("Хочу именно фото вещи 📸🙂 Пришли, пожалуйста, 1 фото.")
+        await message.answer("Хочу именно фото вещи 📸 Пришли, пожалуйста, 1 фото.")
         return
 
     item_file_id = message.photo[-1].file_id
@@ -96,7 +96,7 @@ async def item_photo_in(message: Message, state: FSMContext) -> None:
 
     if not user_file_id:
         await state.clear()
-        await message.answer("Ой 😅 Сессия сбилась. Нажми /start и начни заново 🙌")
+        await message.answer("Ой, сессия сбилась 😅 Нажми /start и начни заново 🙌")
         return
 
     await state.update_data(item_photo=item_file_id)
@@ -118,7 +118,7 @@ async def item_photo_in(message: Message, state: FSMContext) -> None:
         await message.answer("Точно надеваем именно эту вещь? ✅🙂")
 
     await message.answer(
-        "Жду твоё решение 👇🙂", reply_markup=yes_no_tryon_kb_with_help()
+        "Жду твоё решение 👇", reply_markup=yes_no_tryon_kb_with_help()
     )
 
 
@@ -127,7 +127,7 @@ async def tryon_choose_other(call: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(item_photo=None)
     await state.set_state(TryOnFlow.item_photo)
 
-    await edit_text_safe(call, "Ок! 😄 Пришли другое фото вещи (1 фото) 📸")
+    await edit_text_safe(call, "Хорошо 😄 Пришли другое фото вещи (1 фото) 📸")
     await call.answer()
 
 
@@ -148,14 +148,14 @@ async def tryon_desc_in(
     message: Message, state: FSMContext, session: AsyncSession
 ) -> None:
     if not message.text or not message.text.strip():
-        await message.answer("Мне нужен текст 🙂 Напиши, что нужно сделать с вещью.")
+        await message.answer("Нужен текст ✍️ Напиши, что нужно сделать с вещью.")
         return
 
     style_prompt = message.text.strip()
 
     if is_text_too_long(style_prompt):
         await message.answer(
-            f"Ой 😅 Текст слишком длинный.\n"
+            f"Ой, текст слишком длинный 😅\n"
             f"Максимум {MAX_TEXT_LEN} символов, а у тебя {len(style_prompt)}.\n"
             "Сократи, пожалуйста, и отправь ещё раз 🙌"
         )
@@ -167,7 +167,7 @@ async def tryon_desc_in(
 
     if not user_photo or not item_photo:
         await state.clear()
-        await message.answer("Ой 😅 Сессия сбилась. Нажми /start и начни заново 🙌")
+        await message.answer("Ой, сессия сбилась 😅 Нажми /start и начни заново 🙌")
         return
 
     await message.answer("Делаю примерку… ⏳")
@@ -185,7 +185,7 @@ async def tryon_desc_in(
         await charge_photo_generation(session, tg_id)
     except NoGenerationsLeft:
         await message.answer(
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс."
+            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳"
         )
         return
 
@@ -269,7 +269,7 @@ async def tryon_desc_in(
         await state.set_state(FeedbackFlow.choice)
 
         await message.answer(
-            "Все получилось как вы хотели или обнаружили ошибку?",
+            "Всё получилось как ты хотел(а) или есть ошибка? 😊",
             reply_markup=feedback_kb(),
         )
         return

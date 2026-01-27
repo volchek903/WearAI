@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram import Router, F
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.admin import AdminCallbacks, admin_access_kb, admin_menu_kb
@@ -13,13 +16,27 @@ from app.repository.access import (
     is_user_admin,
     add_admin,
     remove_admin,
-    give_subscription,
-    give_subscription_days,
+    give_subscription_plan,  # ✅ NEW
 )
+from app.repository.extra import get_all_plans  # ✅ NEW: планы из таблицы subscription
 from app.states.admin_access import AdminAccessFSM
 from app.utils.tg_edit import edit_text_safe
 
 router = Router()
+logger = logging.getLogger(__name__)
+
+# callback_data для выбора плана
+SUB_PICK_PREFIX = "admin_access:pick_sub:"
+
+
+def _plans_kb(plans) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for p in plans:
+        # можно сделать красивее: f"{p.name} · {p.duration_days}д · {p.video_generations}/{p.photo_generations}"
+        kb.button(text=f"📦 {p.name}", callback_data=f"{SUB_PICK_PREFIX}{p.id}")
+    kb.button(text="⬅️ Назад", callback_data=AdminCallbacks.BACK)
+    kb.adjust(1)
+    return kb.as_markup()
 
 
 @router.callback_query(F.data == AdminCallbacks.ACCESS)
@@ -73,7 +90,9 @@ async def give_sub_start(call: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.message(AdminAccessFSM.waiting_user_id)
-async def process_user_id(message: Message, state: FSMContext) -> None:
+async def process_user_id(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
     tg_id: int | None = None
 
     if message.forward_from:
@@ -85,7 +104,7 @@ async def process_user_id(message: Message, state: FSMContext) -> None:
             tg_id = None
 
     if not tg_id:
-        await message.answer("❌ Отправь tgID пользователя или перешли его сообщение")
+        await message.answer("❌ Отправь tgID пользователя или перешли его сообщение 🙏")
         return
 
     data = await state.get_data()
@@ -93,38 +112,56 @@ async def process_user_id(message: Message, state: FSMContext) -> None:
 
     await state.update_data(tg_id=tg_id)
 
+    # Сразу проверим, что юзер есть
+    user = await get_user_by_tg_id(session, tg_id)
+    if not user:
+        await message.answer("❌ Пользователь не найден в базе (пусть нажмёт /start)")
+        return
+
     if action == "give_sub":
-        await state.set_state(AdminAccessFSM.waiting_sub_days)
-        await message.answer("Введи количество дней подписки")
+        plans = await get_all_plans(session)
+        if not plans:
+            await message.answer("❌ В базе нет планов подписки")
+            return
+
+        await state.set_state(AdminAccessFSM.waiting_sub_plan)
+        await message.answer(
+            "Выбери подписку для пользователя 👇",
+            reply_markup=_plans_kb(plans),
+        )
         return
 
+    # для add_admin / remove_admin — обычное подтверждение
     await message.answer(
-        f"Подтвердить действие для пользователя <code>{tg_id}</code>?",
-        reply_markup=yes_no_kb(),
-    )
-
-
-@router.message(AdminAccessFSM.waiting_sub_days)
-async def process_sub_days(message: Message, state: FSMContext) -> None:
-    try:
-        days = int((message.text or "").strip())
-        if days <= 0:
-            raise ValueError
-    except ValueError:
-        await message.answer("❌ Введи положительное число дней")
-        return
-
-    await state.update_data(days=days)
-
-    await message.answer(
-        f"Выдать подписку на <b>{days}</b> дней?",
+        f"Подтвердить действие для пользователя <code>{tg_id}</code>? ✅",
         reply_markup=yes_no_kb(),
     )
 
 
 @router.callback_query(
+    StateFilter(AdminAccessFSM.waiting_sub_plan), F.data.startswith(SUB_PICK_PREFIX)
+)
+async def pick_subscription_plan(call: CallbackQuery, state: FSMContext) -> None:
+    plan_id_str = (call.data or "").replace(SUB_PICK_PREFIX, "", 1)
+    if not plan_id_str.isdigit():
+        await call.answer("Некорректный план 😕", show_alert=True)
+        return
+
+    plan_id = int(plan_id_str)
+    await state.update_data(plan_id=plan_id)
+
+    # дальше спрашиваем подтверждение
+    await edit_text_safe(
+        call,
+        f"Вы уверены, что хотите выдать подписку (plan_id=<code>{plan_id}</code>) этому пользователю? ✅",
+        reply_markup=yes_no_kb(),
+    )
+    await call.answer()
+
+
+@router.callback_query(
     F.data == ConfirmCallbacks.YES,
-    StateFilter(AdminAccessFSM.waiting_user_id, AdminAccessFSM.waiting_sub_days),
+    StateFilter(AdminAccessFSM.waiting_user_id, AdminAccessFSM.waiting_sub_plan),
 )
 async def confirm_yes(
     call: CallbackQuery, session: AsyncSession, state: FSMContext
@@ -137,7 +174,7 @@ async def confirm_yes(
         tg_id = int(tg_id_raw)
     except Exception:
         await state.clear()
-        await edit_text_safe(call, "❌ Некорректный tgID", reply_markup=admin_menu_kb())
+        await edit_text_safe(call, "❌ Некорректный tgID 😕", reply_markup=admin_menu_kb())
         await call.answer()
         return
 
@@ -145,7 +182,7 @@ async def confirm_yes(
     if not user:
         await state.clear()
         await edit_text_safe(
-            call, "❌ Пользователь не найден", reply_markup=admin_menu_kb()
+            call, "❌ Пользователь не найден 😕", reply_markup=admin_menu_kb()
         )
         await call.answer()
         return
@@ -165,13 +202,13 @@ async def confirm_yes(
             text = "⚠️ Не администратор"
 
     elif action == "give_sub":
-        days = data.get("days")
-        if days:
-            await give_subscription_days(session, user, int(days))
-            text = f"🎉 Подписка выдана на {int(days)} дней"
+        plan_id = data.get("plan_id")
+        if not plan_id:
+            text = "❌ Не выбран план подписки"
         else:
-            await give_subscription(session, user)
-            text = "🎉 Подписка выдана"
+            # ✅ FIX: деактивируем текущую активную + создаём новую выбранную
+            await give_subscription_plan(session, user, int(plan_id))
+            text = "🎉 Подписка выдана (старая отключена, новая активирована)"
 
     else:
         text = "❌ Неизвестное действие"
@@ -183,7 +220,7 @@ async def confirm_yes(
 
 @router.callback_query(
     F.data == ConfirmCallbacks.NO,
-    StateFilter(AdminAccessFSM.waiting_user_id, AdminAccessFSM.waiting_sub_days),
+    StateFilter(AdminAccessFSM.waiting_user_id, AdminAccessFSM.waiting_sub_plan),
 )
 async def confirm_no(call: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
