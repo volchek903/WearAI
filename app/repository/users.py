@@ -37,6 +37,24 @@ async def upsert_user(
     return user
 
 
+async def get_or_create_user(
+    session: AsyncSession, tg_id: int, username: Optional[str] = None
+) -> tuple[User, bool]:
+    user = await get_user_by_tg_id(session, tg_id)
+    if user is None:
+        user = User(tg_id=tg_id, username=username, generated_photos=0)
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        return user, True
+
+    if username is not None and user.username != username:
+        user.username = username
+        await session.commit()
+        await session.refresh(user)
+
+    return user, False
+
 async def increment_generated_photos(
     session: AsyncSession, tg_id: int, delta: int = 1
 ) -> None:
