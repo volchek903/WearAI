@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.menu import main_menu_kb, MenuCallbacks
 from app.keyboards.help import help_choose_kb
-from app.repository.users import upsert_user
+from app.repository.users import get_or_create_user
+from app.repository.referrals import parse_referrer_tg_id, process_referral_for_new_user
 from app.repository.photo_settings import ensure_photo_settings
 from app.repository.generations import ensure_default_subscription
 from app.repository.extra import get_plan
@@ -102,7 +103,7 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) 
     )
 
     # --- апсертим юзера и дефолтные настройки ---
-    user = await upsert_user(
+    user, created = await get_or_create_user(
         session=session,
         tg_id=message.from_user.id,
         username=message.from_user.username,
@@ -110,6 +111,12 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) 
 
     await ensure_photo_settings(session=session, user_id=user.id)
     await ensure_default_subscription(session=session, tg_id=message.from_user.id)
+
+    ref_tg_id = parse_referrer_tg_id(start_payload)
+    if created and ref_tg_id:
+        await process_referral_for_new_user(
+            session, new_user=user, referrer_tg_id=ref_tg_id
+        )
 
     # --- если вернулись из оплаты: проверяем PENDING и пытаемся подтвердить ---
     if start_payload in {"pay_ok", "pay_fail"}:

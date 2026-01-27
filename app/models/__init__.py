@@ -3,5 +3,6 @@ from .user import User
 from .user_photo_settings import UserPhotoSettings
 from .admin import Admin
 from .subscription import Subscription
+from .referral import Referral
 
-__all__ = ["Base", "User", "Admin", "UserPhotoSettings", "Subscription"]
+__all__ = ["Base", "User", "Admin", "UserPhotoSettings", "Subscription", "Referral"]

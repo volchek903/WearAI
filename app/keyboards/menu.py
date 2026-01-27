@@ -14,6 +14,7 @@ class MenuCallbacks:
     FAQ = "menu:faq"
     SETTINGS = "menu:settings"
     EXTRA = "menu:extra"
+    REFERRAL = "menu:referral"
 
 
 class SettingsCallbacks:
@@ -32,6 +33,7 @@ def main_menu_kb() -> InlineKeyboardMarkup:
     kb.button(text="🎬 Оживить фото", callback_data=MenuCallbacks.ANIMATE)
     kb.button(text="🪄 Помочь с описанием", callback_data=MenuCallbacks.HELP)
     kb.button(text="✨ Доп. возможности", callback_data=MenuCallbacks.EXTRA)
+    kb.button(text="🤝 Реферальная система", callback_data=MenuCallbacks.REFERRAL)
     kb.button(text="❓ Вопросы (FAQ)", callback_data=MenuCallbacks.FAQ)
     kb.button(text="⚙️ Настройки", callback_data=MenuCallbacks.SETTINGS)
 

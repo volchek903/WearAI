@@ -1,0 +1,79 @@
+from __future__ import annotations
+
+import logging
+
+from aiogram import F, Router
+from aiogram.types import CallbackQuery
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.keyboards.menu import MenuCallbacks, main_menu_kb
+from app.keyboards.referrals import ReferralCallbacks, referral_kb
+from app.repository.referrals import get_referrals_count
+from app.repository.users import get_or_create_user
+from app.utils.tg_edit import edit_text_safe
+
+router = Router()
+logger = logging.getLogger(__name__)
+
+INVITE_BAIT_TEXT = (
+    "🔥 Хочешь быстро делать стильные фото товаров и примерки?\n"
+    "WEARAI помогает создавать контент за минуты.\n\n"
+    "Присоединяйся по моей ссылке 👇"
+)
+
+
+async def _get_ref_link(bot, tg_id: int) -> str:
+    try:
+        me = await bot.get_me()
+        if me.username:
+            return f"https://t.me/{me.username}?start=ref_{tg_id}"
+    except Exception:
+        logger.exception("referrals: failed to get bot username")
+    return f"/start ref_{tg_id}"
+
+
+def _referral_text(ref_link: str, count: int) -> str:
+    return (
+        "🤝 <b>Реферальная система</b>\n\n"
+        "Приглашай друзей по своей ссылке — получай подписки:\n"
+        "• <b>10</b> приглашённых → <b>2-я подписка</b> из базы\n"
+        "• <b>50</b> приглашённых → <b>3-я подписка</b> из базы\n"
+        "Если текущая подписка хуже/такая же/дешевле — заменяем на новую.\n\n"
+        f"У тебя приглашено: <b>{count}</b>\n"
+        f"Твоя ссылка:\n<code>{ref_link}</code>\n\n"
+        "Нажми «Поделиться», чтобы получить готовый текст."
+    )
+
+
+@router.callback_query(F.data == MenuCallbacks.REFERRAL)
+async def referral_open(call: CallbackQuery, session: AsyncSession) -> None:
+    user, _ = await get_or_create_user(
+        session, call.from_user.id, call.from_user.username
+    )
+    count = await get_referrals_count(session, user.id)
+    ref_link = await _get_ref_link(call.bot, user.tg_id)
+
+    await edit_text_safe(
+        call,
+        _referral_text(ref_link, count),
+        reply_markup=referral_kb(),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == ReferralCallbacks.SHARE)
+async def referral_share(call: CallbackQuery, session: AsyncSession) -> None:
+    user, _ = await get_or_create_user(
+        session, call.from_user.id, call.from_user.username
+    )
+    ref_link = await _get_ref_link(call.bot, user.tg_id)
+
+    text = f"{INVITE_BAIT_TEXT}\n{ref_link}"
+    await call.message.answer(text, disable_web_page_preview=False)
+    await call.answer()
+
+
+@router.callback_query(F.data == ReferralCallbacks.BACK)
+async def referral_back(call: CallbackQuery) -> None:
+    await edit_text_safe(call, "Главное меню 👇", reply_markup=main_menu_kb())
+    await call.answer()
