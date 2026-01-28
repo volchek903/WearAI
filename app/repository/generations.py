@@ -51,8 +51,12 @@ async def ensure_default_subscription(session: AsyncSession, tg_id: int) -> None
         return
 
     sub = await session.scalar(
-        select(Subscription).order_by(Subscription.id.asc()).limit(1)
+        select(Subscription).where(Subscription.name == "Base").limit(1)
     )
+    if not sub:
+        sub = await session.scalar(
+            select(Subscription).order_by(Subscription.id.asc()).limit(1)
+        )
     print(
         f"[DEBUG ensure_default_subscription] picked sub="
         f"{getattr(sub, 'id', None)} {getattr(sub, 'name', None)}"

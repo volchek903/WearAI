@@ -4,6 +4,7 @@ from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 FAQ_BACK_CB = "faq:back"
+FAQ_REFERRAL_CB = "faq:referral"
 
 PRIVACY_URL = "https://telegra.ph/Politika-konfidencialnosti-08-15-17"
 TERMS_URL = "https://telegra.ph/Polzovatelskoe-soglashenie-08-15-10"
@@ -18,6 +19,7 @@ def faq_kb() -> InlineKeyboardMarkup:
 
     kb.button(text="📘 Как избежать ошибок генерации", url=ARTICLE_GUIDE_URL)
     kb.button(text="💳 Пополнение и подписка", url=ARTICLE_DONATION_URL)
+    kb.button(text="🤝 Реферальная система", callback_data=FAQ_REFERRAL_CB)
 
     kb.button(text="🔒 Политика конфиденциальности", url=PRIVACY_URL)
     kb.button(text="📄 Пользовательское соглашение", url=TERMS_URL)

@@ -48,7 +48,7 @@ async def run_payment_poller(
     - при CONFIRMED: начисляем пакет, помечаем CONFIRMED, уведомляем пользователя
     - при CANCELED/CHARGEBACK: помечаем соответствующий статус
     """
-    client = build_platega_client()
+    client = None
     logger.info(
         "payment_poller: started interval_sec=%s batch_size=%s",
         interval_sec,
@@ -57,6 +57,16 @@ async def run_payment_poller(
 
     while True:
         try:
+            if client is None:
+                try:
+                    client = build_platega_client()
+                except Exception:
+                    logger.exception(
+                        "payment_poller: platega client init failed (missing env?)"
+                    )
+                    await asyncio.sleep(interval_sec)
+                    continue
+
             async with sessionmaker() as session:
                 pending = await get_pending_payments_batch(session, limit=batch_size)
 

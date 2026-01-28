@@ -29,5 +29,6 @@ class Subscription(Base):
 
     user_subscriptions: Mapped[list["UserSubscription"]] = relationship(
         "UserSubscription",
+        back_populates="subscription",
         cascade="all, delete-orphan",
     )

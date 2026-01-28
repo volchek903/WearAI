@@ -140,12 +140,17 @@ def _escape(s: str) -> str:
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _strike(text: str) -> str:
+    # Use Unicode combining long stroke for a strikethrough effect inside <pre>.
+    return "".join(ch + "\u0336" for ch in text)
+
+
 def _table(plans: list[Subscription]) -> str:
     by_name = {p.name: p for p in plans}
 
     lines = [
-        "Пакет      Цена     Дней   Видео   Фото",
-        "----------------------------------------",
+        "Пакет      Цена (₽)                 Дней   Видео   Фото",
+        "--------------------------------------------------------",
     ]
 
     for name in ORDER:
@@ -153,11 +158,16 @@ def _table(plans: list[Subscription]) -> str:
         if not p:
             continue
 
-        price = "Free" if float(p.price) == 0 else f"${float(p.price):.0f}"
+        if float(p.price) == 0:
+            price = "Бесплатно"
+        else:
+            old_price = int(float(p.price))
+            new_price = int(round(old_price * 0.9))
+            price = f"{new_price} ₽ {_strike(f'{old_price} ₽')}"
         days = "-" if p.duration_days == 0 else str(p.duration_days)
 
         lines.append(
-            f"{p.name:<10} {price:<7} {days:<5} {p.video_generations:<6} {p.photo_generations:<6}"
+            f"{p.name:<10} {price:<24} {days:<5} {p.video_generations:<6} {p.photo_generations:<6}"
         )
 
     joined = "\n".join(lines)
@@ -189,7 +199,11 @@ def _pitch(plan_name: str, plan: Subscription) -> str:
         intro = "Воу… <b>Cosmic</b> — уровень «я пришёл забирать рынок» 🤯🌌"
         vibe = "Максимальная свобода: много генераций, можно закрывать линейки товаров без стресса."
 
-    price = "Free" if float(plan.price) == 0 else f"<b>${float(plan.price):.0f}</b>"
+    price = (
+        "Бесплатно"
+        if float(plan.price) == 0
+        else f"<b>{int(float(plan.price))} ₽</b>"
+    )
     days = (
         "без срока"
         if plan.duration_days == 0
@@ -274,15 +288,29 @@ async def extra_back(call: CallbackQuery, session: AsyncSession) -> None:
 
 @router.callback_query(
     F.data.in_(
-        {ExtraCallbacks.BUY_ORBIT, ExtraCallbacks.BUY_NOVA, ExtraCallbacks.BUY_COSMIC}
+        {
+            ExtraCallbacks.BUY_ORBIT,
+            ExtraCallbacks.BUY_NOVA,
+            ExtraCallbacks.BUY_COSMIC,
+            ExtraCallbacks.BUY_ORBIT_CRYPTO,
+            ExtraCallbacks.BUY_NOVA_CRYPTO,
+            ExtraCallbacks.BUY_COSMIC_CRYPTO,
+        }
     )
 )
 async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
-    plan_name = (
-        "Orbit"
-        if call.data == ExtraCallbacks.BUY_ORBIT
-        else "Nova" if call.data == ExtraCallbacks.BUY_NOVA else "Cosmic"
-    )
+    if call.data in {
+        ExtraCallbacks.BUY_ORBIT,
+        ExtraCallbacks.BUY_ORBIT_CRYPTO,
+    }:
+        plan_name = "Orbit"
+    elif call.data in {
+        ExtraCallbacks.BUY_NOVA,
+        ExtraCallbacks.BUY_NOVA_CRYPTO,
+    }:
+        plan_name = "Nova"
+    else:
+        plan_name = "Cosmic"
 
     plan = await get_plan(session, plan_name)
     if not plan:
@@ -292,8 +320,15 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
     amount = int(float(plan.price))
     currency = "RUB"
 
-    client = build_platega_client()
+    try:
+        client = build_platega_client()
+    except Exception:
+        logger.exception("extra_buy: platega client init failed")
+        await call.answer("Платёжный сервис не настроен", show_alert=True)
+        return
     payload = {"tgUserId": call.from_user.id, "planName": plan.name}
+
+    pay_method = 13 if call.data.endswith(":crypto") else 2
 
     if call.message:
         await call.message.edit_text(
@@ -306,7 +341,7 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
             currency=currency,
             description=f"Donation plan {plan.name}",
             payload=payload,
-            payment_method=2,
+            payment_method=pay_method,
         )
     except Exception:
         logger.exception(
@@ -392,7 +427,12 @@ async def extra_check_payment(call: CallbackQuery, session: AsyncSession) -> Non
         await call.answer("✅ Уже подтверждено — пакет активирован", show_alert=True)
         return
 
-    client = build_platega_client()
+    try:
+        client = build_platega_client()
+    except Exception:
+        logger.exception("extra_check_payment: platega client init failed")
+        await call.answer("Платёжный сервис не настроен", show_alert=True)
+        return
     status = await client.get_transaction_status(payment.platega_transaction_id)
 
     logger.info(

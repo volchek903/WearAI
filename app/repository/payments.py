@@ -11,6 +11,7 @@ from app.models.payment import Payment, PaymentStatus
 from app.models.subscription import Subscription
 from app.models.user_subscription import UserSubscription
 from app.repository.extra import get_user  # tg_id -> users row
+from app.repository.access import give_subscription_plan
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +181,7 @@ async def apply_plan_to_user(
                 user.id,
                 tg_user_id,
             )
+            await give_subscription_plan(session, user, int(plan.id))
             return
 
         before_subscription_id = active.subscription_id

@@ -1,0 +1,10 @@
+venv
+__pycache__
+*.pyc
+.git
+.gitignore
+.vscode
+logs
+wearai.db
+_generated
+_kie_debug_uploads

@@ -38,9 +38,15 @@ def _seconds_until_next_run(now_utc: datetime) -> int:
 
 async def _get_base_subscription(session: AsyncSession) -> Subscription | None:
     """
-    Базовая подписка = самый первый план по id.
-    Если хочешь жёстко Launch — можно заменить на where(Subscription.name=="Launch").
+    Базовая подписка = план с именем "Base".
+    Если его нет — берём самый первый план по id.
     """
+    base = await session.scalar(
+        select(Subscription).where(Subscription.name == "Base").limit(1)
+    )
+    if base:
+        return base
+    logger.warning("subscription_expirer: base plan 'Base' not found, fallback to first")
     return await session.scalar(
         select(Subscription).order_by(Subscription.id.asc()).limit(1)
     )

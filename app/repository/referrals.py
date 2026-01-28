@@ -33,11 +33,9 @@ def parse_referrer_tg_id(start_payload: str) -> int | None:
     return int(ref) if ref.isdigit() else None
 
 
-async def _get_plan_by_index(session: AsyncSession, index: int) -> Subscription | None:
-    if index < 0:
-        return None
+async def _get_plan_by_name(session: AsyncSession, name: str) -> Subscription | None:
     return await session.scalar(
-        select(Subscription).order_by(Subscription.id.asc()).offset(index).limit(1)
+        select(Subscription).where(Subscription.name == name).limit(1)
     )
 
 
@@ -101,12 +99,12 @@ async def process_referral_for_new_user(
     if count not in {10, 50}:
         return
 
-    target_index = 1 if count == 10 else 2  # 2-я и 3-я подписка (0-based index)
-    target_plan = await _get_plan_by_index(session, target_index)
+    target_name = "Orbit" if count == 10 else "Nova"
+    target_plan = await _get_plan_by_name(session, target_name)
     if target_plan is None:
         logger.warning(
-            "referrals: target plan not found index=%s referrer_tg_id=%s",
-            target_index,
+            "referrals: target plan not found name=%s referrer_tg_id=%s",
+            target_name,
             referrer_tg_id,
         )
         return

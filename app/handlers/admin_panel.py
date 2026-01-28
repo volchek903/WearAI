@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import os
+import sys
+
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
@@ -12,11 +16,25 @@ from app.utils.tg_edit import edit_text_safe
 router = Router()
 
 
+async def _restart_process(message: Message) -> None:
+    # Give the bot time to send the confirmation message before restarting.
+    await message.answer("🔄 Перезапускаю бота…")
+    await asyncio.sleep(1)
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
+
 @router.message(Command("admin"))
 async def admin_entry(message: Message, session: AsyncSession) -> None:
     if not await is_admin(session, message.from_user.id):
         return
     await message.answer("⚙️ Админка", reply_markup=admin_menu_kb())
+
+
+@router.message(Command("restart"))
+async def admin_restart(message: Message, session: AsyncSession) -> None:
+    if message.from_user.id != 830091750:
+        return
+    await _restart_process(message)
 
 
 @router.callback_query(F.data == AdminCallbacks.STATS)

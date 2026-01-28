@@ -6,7 +6,8 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.keyboards.menu import MenuCallbacks, main_menu_kb
+from app.keyboards.menu import main_menu_kb
+from app.keyboards.faq import FAQ_REFERRAL_CB
 from app.keyboards.referrals import ReferralCallbacks, referral_kb
 from app.repository.referrals import get_referrals_count
 from app.repository.users import get_or_create_user
@@ -36,8 +37,8 @@ def _referral_text(ref_link: str, count: int) -> str:
     return (
         "🤝 <b>Реферальная система</b>\n\n"
         "Приглашай друзей по своей ссылке — получай подписки:\n"
-        "• <b>10</b> приглашённых → <b>2-я подписка</b> из базы\n"
-        "• <b>50</b> приглашённых → <b>3-я подписка</b> из базы\n"
+        "• <b>10</b> приглашённых → <b>подписка Orbit</b>\n"
+        "• <b>50</b> приглашённых → <b>подписка Nova</b>\n"
         "Если текущая подписка хуже/такая же/дешевле — заменяем на новую.\n\n"
         f"У тебя приглашено: <b>{count}</b>\n"
         f"Твоя ссылка:\n<code>{ref_link}</code>\n\n"
@@ -45,8 +46,10 @@ def _referral_text(ref_link: str, count: int) -> str:
     )
 
 
-@router.callback_query(F.data == MenuCallbacks.REFERRAL)
-async def referral_open(call: CallbackQuery, session: AsyncSession) -> None:
+@router.callback_query(F.data == FAQ_REFERRAL_CB)
+async def referral_open_from_faq(
+    call: CallbackQuery, session: AsyncSession
+) -> None:
     user, _ = await get_or_create_user(
         session, call.from_user.id, call.from_user.username
     )

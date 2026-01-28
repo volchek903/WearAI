@@ -21,6 +21,7 @@ from app.handlers.scenario_tryon import router as tryon_router
 from app.handlers.help import router as help_router
 from app.handlers.settings import router as settings_router
 from app.handlers.animate_photo import router as animate_router
+from app.handlers.menu import router as menu_router
 from app.handlers.feedback_offer_video import router as feedback_offer_video_router
 from app.handlers.admin_panel import router as admin_panel_router
 from app.handlers.extra import router as extra_router
@@ -30,6 +31,7 @@ from app.handlers.referrals import router as referrals_router
 from app.services.subscription_seed import seed_subscriptions
 from app.services.subscription_expirer import run_subscription_expirer
 from app.services.payment_poller import run_payment_poller  # NEW
+from app.utils.tg_logging import install_tg_error_logging
 
 
 def setup_logging() -> None:
@@ -53,6 +55,7 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(feedback_router)
 
     dp.include_router(start_router)
+    dp.include_router(menu_router)
     dp.include_router(model_router)
     dp.include_router(tryon_router)
     dp.include_router(animate_router)
@@ -80,6 +83,7 @@ async def main() -> None:
         token=get_bot_token(),
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
+    install_tg_error_logging(bot=bot, chat_id=830091750)
 
     dp = Dispatcher(storage=MemoryStorage())
 

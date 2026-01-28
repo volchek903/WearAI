@@ -47,4 +47,4 @@ class UserSubscription(Base):
     )
 
     user = relationship("User", back_populates="subscriptions")
-    subscription = relationship("Subscription")
+    subscription = relationship("Subscription", back_populates="user_subscriptions")

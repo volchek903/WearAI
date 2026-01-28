@@ -10,11 +10,13 @@ class MenuCallbacks:
     MODEL = "menu:model"
     TRYON = "menu:tryon"
     ANIMATE = "menu:animate"
+    PHOTO = "menu:photo"
+    VIDEO = "menu:video"
     HELP = "menu:help"
     FAQ = "menu:faq"
     SETTINGS = "menu:settings"
     EXTRA = "menu:extra"
-    REFERRAL = "menu:referral"
+    BACK = "menu:back"
 
 
 class SettingsCallbacks:
@@ -28,15 +30,30 @@ class SettingsCallbacks:
 def main_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
 
-    kb.button(text="🛍️ Модель с товаром", callback_data=MenuCallbacks.MODEL)
-    kb.button(text="🧥 Примерить одежду", callback_data=MenuCallbacks.TRYON)
-    kb.button(text="🎬 Оживить фото", callback_data=MenuCallbacks.ANIMATE)
-    kb.button(text="🪄 Помочь с описанием", callback_data=MenuCallbacks.HELP)
+    kb.button(text="🖼 Работа с фото", callback_data=MenuCallbacks.PHOTO)
+    kb.button(text="🎬 Работа с видео", callback_data=MenuCallbacks.VIDEO)
+    kb.button(text="🪄 Помощь в генерации", callback_data=MenuCallbacks.HELP)
     kb.button(text="✨ Доп. возможности", callback_data=MenuCallbacks.EXTRA)
-    kb.button(text="🤝 Реферальная система", callback_data=MenuCallbacks.REFERRAL)
     kb.button(text="❓ Вопросы (FAQ)", callback_data=MenuCallbacks.FAQ)
     kb.button(text="⚙️ Настройки", callback_data=MenuCallbacks.SETTINGS)
 
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def photo_menu_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🛍️ Модель с товаром", callback_data=MenuCallbacks.MODEL)
+    kb.button(text="🧥 Примерить одежду", callback_data=MenuCallbacks.TRYON)
+    kb.button(text="⬅️ В меню", callback_data=MenuCallbacks.BACK)
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def video_menu_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🎬 Оживить видео", callback_data=MenuCallbacks.ANIMATE)
+    kb.button(text="⬅️ В меню", callback_data=MenuCallbacks.BACK)
     kb.adjust(1)
     return kb.as_markup()
 

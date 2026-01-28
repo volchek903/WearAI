@@ -48,7 +48,7 @@ def yes_no_tryon_kb_with_help() -> InlineKeyboardMarkup:
     kb.button(text="✅ Да, подтверждаю", callback_data=ConfirmCallbacks.YES)
     kb.button(text="🔁 Выбрать другую", callback_data=ConfirmCallbacks.NO)
     kb.button(
-        text="🪄 Помочь со стилем", callback_data=f"{HelpCallbacks.START}:tryon_desc"
+        text="🪄 Сгенерировать стиль", callback_data=f"{HelpCallbacks.START}:tryon_desc"
     )
     kb.adjust(2, 1)
     return kb.as_markup()

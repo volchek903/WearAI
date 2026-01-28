@@ -12,9 +12,12 @@ class ExtraCallbacks:
     WANT_COSMIC = "extra:want:cosmic"
 
     # покупка
-    BUY_ORBIT = "extra:buy:orbit"
-    BUY_NOVA = "extra:buy:nova"
-    BUY_COSMIC = "extra:buy:cosmic"
+    BUY_ORBIT = "extra:buy:orbit:sbp"
+    BUY_NOVA = "extra:buy:nova:sbp"
+    BUY_COSMIC = "extra:buy:cosmic:sbp"
+    BUY_ORBIT_CRYPTO = "extra:buy:orbit:crypto"
+    BUY_NOVA_CRYPTO = "extra:buy:nova:crypto"
+    BUY_COSMIC_CRYPTO = "extra:buy:cosmic:crypto"
 
     # NEW: ручная проверка оплаты (polling)
     CHECK_PREFIX = "extra:check:"  # + <payment_id>
@@ -44,15 +47,18 @@ def extra_buy_kb(plan_name: str) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
 
     if plan_name == "Orbit":
-        kb.button(text="💳 Купить", callback_data=ExtraCallbacks.BUY_ORBIT)
+        kb.button(text="💳 Купить (СБП)", callback_data=ExtraCallbacks.BUY_ORBIT)
+        kb.button(text="₿ Купить (Крипто)", callback_data=ExtraCallbacks.BUY_ORBIT_CRYPTO)
     elif plan_name == "Nova":
-        kb.button(text="💳 Купить", callback_data=ExtraCallbacks.BUY_NOVA)
+        kb.button(text="💳 Купить (СБП)", callback_data=ExtraCallbacks.BUY_NOVA)
+        kb.button(text="₿ Купить (Крипто)", callback_data=ExtraCallbacks.BUY_NOVA_CRYPTO)
     elif plan_name == "Cosmic":
-        kb.button(text="💳 Купить", callback_data=ExtraCallbacks.BUY_COSMIC)
+        kb.button(text="💳 Купить (СБП)", callback_data=ExtraCallbacks.BUY_COSMIC)
+        kb.button(text="₿ Купить (Крипто)", callback_data=ExtraCallbacks.BUY_COSMIC_CRYPTO)
 
     kb.button(text="⬅️ Назад", callback_data=ExtraCallbacks.BACK)
 
-    kb.adjust(1)
+    kb.adjust(1, 1)
     return kb.as_markup()
 
 
