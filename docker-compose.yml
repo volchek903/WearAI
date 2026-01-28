@@ -5,7 +5,9 @@ services:
     build: .
     env_file:
       - .env
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:////app/data/wearai.db
     volumes:
-      - ./wearai.db:/app/wearai.db
+      - ./data:/app/data
       - ./logs:/app/logs
     restart: unless-stopped
