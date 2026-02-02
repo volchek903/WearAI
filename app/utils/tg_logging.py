@@ -17,6 +17,8 @@ class TgErrorReporter(logging.Handler):
         chat_id: int,
         max_lines: int = 30,
         cooldown_sec: int = 20,
+        ignore_loggers: set[str] | None = None,
+        ignore_phrases: set[str] | None = None,
     ) -> None:
         super().__init__(level=logging.INFO)
         self._bot = bot
@@ -24,6 +26,8 @@ class TgErrorReporter(logging.Handler):
         self._buf: deque[str] = deque(maxlen=max_lines)
         self._cooldown_sec = cooldown_sec
         self._last_sent = 0.0
+        self._ignore_loggers = ignore_loggers or set()
+        self._ignore_phrases = ignore_phrases or set()
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
@@ -31,6 +35,11 @@ class TgErrorReporter(logging.Handler):
             self._buf.append(line)
 
             if record.levelno < logging.ERROR:
+                return
+
+            if record.name in self._ignore_loggers:
+                return
+            if any(p in line for p in self._ignore_phrases):
                 return
 
             now = time.time()
@@ -70,7 +79,17 @@ def install_tg_error_logging(
     logger: logging.Logger | None = None,
 ) -> None:
     logger = logger or logging.getLogger()
-    handler = TgErrorReporter(bot=bot, chat_id=chat_id)
+    handler = TgErrorReporter(
+        bot=bot,
+        chat_id=chat_id,
+        ignore_loggers={"aiogram.dispatcher"},
+        ignore_phrases={
+            "Failed to fetch updates - TelegramNetworkError",
+            "Failed to fetch updates - TelegramServerError",
+            "ServerDisconnectedError",
+            "Bad Gateway",
+        },
+    )
     formatter = logging.Formatter(
         fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",

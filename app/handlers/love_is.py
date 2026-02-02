@@ -13,6 +13,8 @@ from aiogram.types import CallbackQuery, InputMediaPhoto, Message, BufferedInput
 from sqlalchemy.ext.asyncio import AsyncSession
 from PIL import Image
 
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
 from app.keyboards.menu import MenuCallbacks, photo_menu_kb
 from app.keyboards.love_is import LoveIsCallbacks, love_is_post_kb
 from app.repository.generations import (
@@ -48,9 +50,16 @@ async def love_is_start(call: CallbackQuery, state: FSMContext) -> None:
         call,
         "❤️ <b>ИИ Love is</b>\n\n"
         "Пришли 1–2 фото (лучше: мужчина и женщина) одним сообщением или альбомом 📸",
-        reply_markup=photo_menu_kb(),
+        reply_markup=_back_only_kb(),
     )
     await call.answer()
+
+
+def _back_only_kb():
+    kb = InlineKeyboardBuilder()
+    kb.button(text="⬅️ В меню", callback_data=MenuCallbacks.BACK)
+    kb.adjust(1)
+    return kb.as_markup()
 
 
 @router.message(LoveIsFlow.photos)

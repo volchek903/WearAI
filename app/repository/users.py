@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from sqlalchemy import select, update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
@@ -23,11 +24,16 @@ async def upsert_user(
     user = await get_user_by_tg_id(session, tg_id)
 
     if user is None:
-        user = User(tg_id=tg_id, username=username, generated_photos=0)
-        session.add(user)
+        stmt = sqlite_insert(User).values(
+            tg_id=tg_id, username=username, generated_photos=0
+        )
+        stmt = stmt.on_conflict_do_nothing(index_elements=["tg_id"])
+        await session.execute(stmt)
         await session.commit()
-        await session.refresh(user)
-        return user
+        user = await get_user_by_tg_id(session, tg_id)
+        if user is None:
+            # Fallback: should not happen, but keep safe.
+            raise RuntimeError("upsert_user: failed to create or fetch user")
 
     if username is not None and user.username != username:
         user.username = username
@@ -41,19 +47,25 @@ async def get_or_create_user(
     session: AsyncSession, tg_id: int, username: Optional[str] = None
 ) -> tuple[User, bool]:
     user = await get_user_by_tg_id(session, tg_id)
+    created = False
     if user is None:
-        user = User(tg_id=tg_id, username=username, generated_photos=0)
-        session.add(user)
+        stmt = sqlite_insert(User).values(
+            tg_id=tg_id, username=username, generated_photos=0
+        )
+        stmt = stmt.on_conflict_do_nothing(index_elements=["tg_id"])
+        result = await session.execute(stmt)
         await session.commit()
-        await session.refresh(user)
-        return user, True
+        user = await get_user_by_tg_id(session, tg_id)
+        if user is None:
+            raise RuntimeError("get_or_create_user: failed to create or fetch user")
+        created = result.rowcount == 1
 
     if username is not None and user.username != username:
         user.username = username
         await session.commit()
         await session.refresh(user)
 
-    return user, False
+    return user, created
 
 async def increment_generated_photos(
     session: AsyncSession, tg_id: int, delta: int = 1
