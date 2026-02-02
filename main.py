@@ -22,6 +22,7 @@ from app.handlers.help import router as help_router
 from app.handlers.settings import router as settings_router
 from app.handlers.animate_photo import router as animate_router
 from app.handlers.menu import router as menu_router
+from app.handlers.love_is import router as love_is_router
 from app.handlers.feedback_offer_video import router as feedback_offer_video_router
 from app.handlers.admin_panel import router as admin_panel_router
 from app.handlers.extra import router as extra_router
@@ -58,6 +59,7 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(menu_router)
     dp.include_router(model_router)
     dp.include_router(tryon_router)
+    dp.include_router(love_is_router)
     dp.include_router(animate_router)
     dp.include_router(faq_router)
     dp.include_router(feedback_offer_video_router)

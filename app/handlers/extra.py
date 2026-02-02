@@ -161,9 +161,9 @@ def _table(plans: list[Subscription]) -> str:
         if float(p.price) == 0:
             price = "Бесплатно"
         else:
-            old_price = int(float(p.price))
-            new_price = int(round(old_price * 0.9))
-            price = f"{new_price} ₽ {_strike(f'{old_price} ₽')}"
+            current_price = int(float(p.price))
+            old_price = int(round(current_price * 1.1))
+            price = f"{current_price} ₽ {_strike(f'{old_price} ₽')}"
         days = "-" if p.duration_days == 0 else str(p.duration_days)
 
         lines.append(
