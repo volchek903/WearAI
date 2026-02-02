@@ -12,6 +12,7 @@ class MenuCallbacks:
     ANIMATE = "menu:animate"
     PHOTO = "menu:photo"
     VIDEO = "menu:video"
+    LOVE_IS = "menu:love_is"
     HELP = "menu:help"
     FAQ = "menu:faq"
     SETTINGS = "menu:settings"
@@ -45,6 +46,7 @@ def photo_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="🛍️ Модель с товаром", callback_data=MenuCallbacks.MODEL)
     kb.button(text="🧥 Примерить одежду", callback_data=MenuCallbacks.TRYON)
+    kb.button(text="❤️ ИИ Love is", callback_data=MenuCallbacks.LOVE_IS)
     kb.button(text="⬅️ В меню", callback_data=MenuCallbacks.BACK)
     kb.adjust(1)
     return kb.as_markup()

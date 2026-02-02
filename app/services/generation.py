@@ -103,11 +103,24 @@ async def generate_image_kie_from_telegram(
     tg_id: int,
     prompt: str,
     telegram_photo_file_ids: Sequence[str],
+    aspect_ratio: str | None = None,
+    resolution: str | None = None,
+    output_format: str | None = None,
 ) -> list[tuple[str, bytes]]:
     """
     Returns list of (filename, bytes) of generated images.
     """
     settings = await get_user_photo_settings(session, tg_id)
+    if aspect_ratio or resolution or output_format:
+        settings = PhotoSettingsDTO(
+            aspect_ratio=_normalize_aspect_ratio(
+                aspect_ratio or settings.aspect_ratio
+            ),
+            resolution=_normalize_resolution(resolution or settings.resolution),
+            output_format=_normalize_output_format(
+                output_format or settings.output_format
+            ),
+        )
 
     kie = KieAIClient(api_key=get_kie_api_key_from_env())
 

@@ -34,6 +34,15 @@ async def _get_active_us_id(session: AsyncSession, user_id: int) -> int | None:
     return int(us_id) if us_id is not None else None
 
 
+async def _has_any_subscription(session: AsyncSession, user_id: int) -> bool:
+    any_id = await session.scalar(
+        select(UserSubscription.id)
+        .where(UserSubscription.user_id == user_id)
+        .limit(1)
+    )
+    return any_id is not None
+
+
 async def ensure_default_subscription(session: AsyncSession, tg_id: int) -> None:
     user_id = await _get_user_db_id(session, tg_id)
 
@@ -50,8 +59,10 @@ async def ensure_default_subscription(session: AsyncSession, tg_id: int) -> None
     if active_id:
         return
 
+    has_any = await _has_any_subscription(session, user_id)
+    target_name = "Launch" if not has_any else "Base"
     sub = await session.scalar(
-        select(Subscription).where(Subscription.name == "Base").limit(1)
+        select(Subscription).where(Subscription.name == target_name).limit(1)
     )
     if not sub:
         sub = await session.scalar(
