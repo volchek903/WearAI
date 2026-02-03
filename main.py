@@ -33,6 +33,7 @@ from app.services.subscription_seed import seed_subscriptions
 from app.services.subscription_expirer import run_subscription_expirer
 from app.services.payment_poller import run_payment_poller  # NEW
 from app.utils.tg_logging import install_tg_error_logging
+from app.services.admin_seed import ensure_root_admin
 
 
 def setup_logging() -> None:
@@ -95,6 +96,7 @@ async def main() -> None:
     await init_db()
     async with session_factory() as session:
         await seed_subscriptions(session)
+        await ensure_root_admin(session)
 
     # NEW: запускаем polling платежей (без вебхуков)
     poller_task = asyncio.create_task(
