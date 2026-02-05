@@ -172,6 +172,33 @@ async def fb_ok(cb: CallbackQuery, state: FSMContext) -> None:
     await cb.answer()
 
 
+@router.callback_query(F.data == FeedbackCallbacks.OK)
+async def fb_ok_fallback(cb: CallbackQuery, state: FSMContext) -> None:
+    if cb.message is None:
+        await cb.answer()
+        return
+
+    cur_state = await state.get_state()
+    data = await state.get_data()
+    fp = data.get("feedback_payload") or {}
+    scenario = str(fp.get("scenario") or "")
+
+    logger.info("Feedback OK fallback: state=%s scenario=%s", cur_state, scenario)
+
+    if scenario not in {"model", "tryon"}:
+        await edit_text_safe(cb, "Главное меню 👇", reply_markup=main_menu_kb())
+        await state.clear()
+        await cb.answer()
+        return
+
+    text = (
+        "✅ <b>Отлично!</b>\n\nХочешь сгенерировать <b>видео на основе этого фото</b>?"
+    )
+    await edit_text_safe(cb, text, reply_markup=feedback_offer_video_kb())
+    await state.set_state(FeedbackFlow.offer_video)
+    await cb.answer()
+
+
 @router.callback_query(F.data == FeedbackCallbacks.MENU)
 async def fb_menu(cb: CallbackQuery, state: FSMContext) -> None:
     if cb.message is None:

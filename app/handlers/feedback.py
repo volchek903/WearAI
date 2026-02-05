@@ -156,6 +156,24 @@ async def feedback_bug(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
 
 
+@router.callback_query(F.data == FeedbackCallbacks.BUG)
+async def feedback_bug_fallback(call: CallbackQuery, state: FSMContext) -> None:
+    if call.message is None:
+        await call.answer()
+        return
+
+    cur_state = await state.get_state()
+    logger.info("Feedback BUG fallback: state=%s data=%s", cur_state, call.data)
+
+    await state.set_state(FeedbackFlow.text)
+    await call.message.answer(
+        "Опиши, пожалуйста, что именно не так (1–3 предложения) ✍️\n"
+        "Например: «не тот товар», «исказился цвет», «лицо поменялось», «плохие руки» и т.д.",
+        reply_markup=back_to_menu_kb(),
+    )
+    await call.answer()
+
+
 @router.message(FeedbackFlow.text, F.text)
 async def feedback_text_in(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
