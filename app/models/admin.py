@@ -20,3 +20,5 @@ class Admin(Base):
 
     # опционально (не обязательно, но удобно)
     user = relationship("User", back_populates="admin")
+
+    pass
