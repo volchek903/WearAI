@@ -9,7 +9,7 @@ from app.models.subscription import Subscription
 PLANS = [
     # name, days, video, photo, price
     ("Base", 0, 0, 0, 0),
-    ("Launch", 2, 2, 4, 0),
+    ("Launch", 2, 1, 1, 0),
     ("Orbit", 30, 20, 28, 750),
     ("Nova", 30, 100, 84, 3650),
     ("Cosmic", 30, 200, 334, 9850),

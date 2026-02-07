@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import sys
 
@@ -14,6 +15,16 @@ from app.repository.admin import is_admin, get_last_users, get_users_stats
 from app.utils.tg_edit import edit_text_safe
 
 router = Router()
+logger = logging.getLogger(__name__)
+
+
+async def _ensure_admin(call: CallbackQuery, session: AsyncSession, action: str) -> bool:
+    tg_id = call.from_user.id
+    if await is_admin(session, tg_id):
+        return True
+    logger.warning("ADMIN_DENY action=%s tg_id=%s data=%s", action, tg_id, call.data)
+    await call.answer("Недостаточно прав", show_alert=True)
+    return False
 
 
 async def _restart_process(message: Message) -> None:
@@ -39,6 +50,8 @@ async def admin_restart(message: Message, session: AsyncSession) -> None:
 
 @router.callback_query(F.data == AdminCallbacks.STATS)
 async def admin_stats(call: CallbackQuery, session: AsyncSession) -> None:
+    if not await _ensure_admin(call, session, "admin_panel.stats"):
+        return
     total_users, active_subs = await get_users_stats(session)
 
     text = (
@@ -53,6 +66,8 @@ async def admin_stats(call: CallbackQuery, session: AsyncSession) -> None:
 
 @router.callback_query(F.data == AdminCallbacks.USERS)
 async def admin_users(call: CallbackQuery, session: AsyncSession) -> None:
+    if not await _ensure_admin(call, session, "admin_panel.users"):
+        return
     rows = await get_last_users(session, limit=10)
 
     if not rows:
@@ -69,6 +84,8 @@ async def admin_users(call: CallbackQuery, session: AsyncSession) -> None:
 
 
 @router.callback_query(F.data == AdminCallbacks.BACK)
-async def admin_back(call: CallbackQuery) -> None:
+async def admin_back(call: CallbackQuery, session: AsyncSession) -> None:
+    if not await _ensure_admin(call, session, "admin_panel.back"):
+        return
     await edit_text_safe(call, "⚙️ Админка", reply_markup=admin_menu_kb())
     await call.answer()

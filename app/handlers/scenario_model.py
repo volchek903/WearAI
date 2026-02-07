@@ -292,6 +292,7 @@ async def review_confirmed(
         "Фотореализм, корректные пропорции, естественный свет, высокое качество."
     )
 
+    sent_any = False
     try:
         results = await generate_image_kie_from_telegram(
             bot=call.bot,
@@ -322,6 +323,7 @@ async def review_confirmed(
             sent = await send_image_smart(
                 call.message, img_bytes=img_bytes, filename=filename
             )
+            sent_any = True
 
             if getattr(sent, "photo", None):
                 output_files.append(
@@ -368,7 +370,8 @@ async def review_confirmed(
 
     except KieAIError as e:
         logger.warning("KIE rejected/failed: %s", e)
-        await refund_photo_generation(session, tg_id)
+        if not sent_any:
+            await refund_photo_generation(session, tg_id)
         await edit_text_safe(
             call, kie_error_to_user_text(e), reply_markup=review_edit_kb()
         )
@@ -377,7 +380,8 @@ async def review_confirmed(
 
     except Exception as e:
         logger.exception("MODEL generation failed: %s", e)
-        await refund_photo_generation(session, tg_id)
+        if not sent_any:
+            await refund_photo_generation(session, tg_id)
         await edit_text_safe(
             call,
             "Не получилось сгенерировать 😅\n"

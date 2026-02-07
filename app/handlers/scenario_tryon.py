@@ -198,6 +198,7 @@ async def tryon_desc_in(
         f"\nUser instruction (RU): {style_prompt}\n"
     )
 
+    sent_any = False
     try:
         results = await generate_image_kie_from_telegram(
             bot=message.bot,
@@ -228,6 +229,7 @@ async def tryon_desc_in(
             sent = await send_image_smart(
                 message, img_bytes=img_bytes, filename=filename
             )
+            sent_any = True
 
             if getattr(sent, "photo", None):
                 output_files.append(
@@ -276,13 +278,15 @@ async def tryon_desc_in(
 
     except KieAIError as e:
         logger.warning("TRYON KIE failed: %s", e)
-        await refund_photo_generation(session, tg_id)  # ✅ tg_id
+        if not sent_any:
+            await refund_photo_generation(session, tg_id)  # ✅ tg_id
         await message.answer(kie_error_to_user_text(e))
         return
 
     except Exception as e:
         logger.exception("TRYON generation failed: %s", e)
-        await refund_photo_generation(session, tg_id)  # ✅ tg_id
+        if not sent_any:
+            await refund_photo_generation(session, tg_id)  # ✅ tg_id
         await message.answer(
             "Не получилось сделать примерку 😅\n"
             "Попробуй изменить описание и отправь ещё раз."

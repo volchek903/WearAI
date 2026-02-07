@@ -123,6 +123,7 @@ async def love_is_text_in(
 
     await message.answer("Генерирую Love is… ⏳")
 
+    sent_any = False
     try:
         prompt = (
             "Сделай вертикальное фото в формате 3:4. Романтическая иллюстрация "
@@ -169,6 +170,7 @@ async def love_is_text_in(
             if not first_path:
                 first_path = local_path
             await send_image_smart(message, img_bytes=img_bytes, filename=filename)
+            sent_any = True
 
         if first_path:
             await state.update_data(love_is_image_path=first_path)
@@ -180,7 +182,8 @@ async def love_is_text_in(
 
     except Exception as e:
         logger.exception("LOVE_IS generation failed: %s", e)
-        await refund_photo_generation(session, tg_id)
+        if not sent_any:
+            await refund_photo_generation(session, tg_id)
         await message.answer(
             "Не получилось сгенерировать 😅 Попробуй ещё раз чуть позже."
         )

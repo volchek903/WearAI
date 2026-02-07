@@ -18,6 +18,7 @@ from app.repository.access import (
     remove_admin,
     give_subscription_plan,  # ✅ NEW
 )
+from app.repository.admin import is_admin
 from app.repository.extra import get_all_plans  # ✅ NEW: планы из таблицы subscription
 from app.states.admin_access import AdminAccessFSM
 from app.utils.tg_edit import edit_text_safe
@@ -39,8 +40,27 @@ def _plans_kb(plans) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
+async def _ensure_admin(call_or_message, session: AsyncSession, action: str) -> bool:
+    tg_id = getattr(call_or_message.from_user, "id", None)
+    if tg_id is None:
+        return False
+    if await is_admin(session, tg_id):
+        return True
+    logger.warning(
+        "ADMIN_DENY action=%s tg_id=%s data=%s",
+        action,
+        tg_id,
+        getattr(call_or_message, "data", None),
+    )
+    if hasattr(call_or_message, "answer"):
+        await call_or_message.answer("Недостаточно прав", show_alert=True)
+    return False
+
+
 @router.callback_query(F.data == AdminCallbacks.ACCESS)
-async def access_menu(call: CallbackQuery) -> None:
+async def access_menu(call: CallbackQuery, session: AsyncSession) -> None:
+    if not await _ensure_admin(call, session, "admin_access.menu"):
+        return
     await edit_text_safe(
         call, "🔐 <b>Права доступа</b>", reply_markup=admin_access_kb()
     )
@@ -48,7 +68,11 @@ async def access_menu(call: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == AdminCallbacks.ADD_ADMIN)
-async def add_admin_start(call: CallbackQuery, state: FSMContext) -> None:
+async def add_admin_start(
+    call: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    if not await _ensure_admin(call, session, "admin_access.add_admin"):
+        return
     await state.clear()
     await state.set_state(AdminAccessFSM.waiting_user_id)
     await state.update_data(action="add_admin")
@@ -62,7 +86,11 @@ async def add_admin_start(call: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data == AdminCallbacks.REMOVE_ADMIN)
-async def remove_admin_start(call: CallbackQuery, state: FSMContext) -> None:
+async def remove_admin_start(
+    call: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    if not await _ensure_admin(call, session, "admin_access.remove_admin"):
+        return
     await state.clear()
     await state.set_state(AdminAccessFSM.waiting_user_id)
     await state.update_data(action="remove_admin")
@@ -76,7 +104,11 @@ async def remove_admin_start(call: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data == AdminCallbacks.GIVE_SUB)
-async def give_sub_start(call: CallbackQuery, state: FSMContext) -> None:
+async def give_sub_start(
+    call: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    if not await _ensure_admin(call, session, "admin_access.give_sub"):
+        return
     await state.clear()
     await state.set_state(AdminAccessFSM.waiting_user_id)
     await state.update_data(action="give_sub")
@@ -93,6 +125,8 @@ async def give_sub_start(call: CallbackQuery, state: FSMContext) -> None:
 async def process_user_id(
     message: Message, state: FSMContext, session: AsyncSession
 ) -> None:
+    if not await _ensure_admin(message, session, "admin_access.process_user_id"):
+        return
     tg_id: int | None = None
 
     if message.forward_from:
@@ -141,7 +175,11 @@ async def process_user_id(
 @router.callback_query(
     StateFilter(AdminAccessFSM.waiting_sub_plan), F.data.startswith(SUB_PICK_PREFIX)
 )
-async def pick_subscription_plan(call: CallbackQuery, state: FSMContext) -> None:
+async def pick_subscription_plan(
+    call: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    if not await _ensure_admin(call, session, "admin_access.pick_plan"):
+        return
     plan_id_str = (call.data or "").replace(SUB_PICK_PREFIX, "", 1)
     if not plan_id_str.isdigit():
         await call.answer("Некорректный план 😕", show_alert=True)
@@ -166,6 +204,8 @@ async def pick_subscription_plan(call: CallbackQuery, state: FSMContext) -> None
 async def confirm_yes(
     call: CallbackQuery, session: AsyncSession, state: FSMContext
 ) -> None:
+    if not await _ensure_admin(call, session, "admin_access.confirm_yes"):
+        return
     data = await state.get_data()
     action = data.get("action")
 
@@ -222,14 +262,22 @@ async def confirm_yes(
     F.data == ConfirmCallbacks.NO,
     StateFilter(AdminAccessFSM.waiting_user_id, AdminAccessFSM.waiting_sub_plan),
 )
-async def confirm_no(call: CallbackQuery, state: FSMContext) -> None:
+async def confirm_no(
+    call: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    if not await _ensure_admin(call, session, "admin_access.confirm_no"):
+        return
     await state.clear()
     await edit_text_safe(call, "❌ Отменено", reply_markup=admin_menu_kb())
     await call.answer()
 
 
 @router.callback_query(F.data == AdminCallbacks.BACK)
-async def access_back(call: CallbackQuery, state: FSMContext) -> None:
+async def access_back(
+    call: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    if not await _ensure_admin(call, session, "admin_access.back"):
+        return
     await state.clear()
     await edit_text_safe(call, "⚙️ Админка", reply_markup=admin_menu_kb())
     await call.answer()
