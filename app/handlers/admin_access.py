@@ -52,8 +52,10 @@ async def _ensure_admin(call_or_message, session: AsyncSession, action: str) -> 
         tg_id,
         getattr(call_or_message, "data", None),
     )
-    if hasattr(call_or_message, "answer"):
+    if isinstance(call_or_message, CallbackQuery):
         await call_or_message.answer("Недостаточно прав", show_alert=True)
+    elif isinstance(call_or_message, Message):
+        await call_or_message.answer("Недостаточно прав")
     return False
 
 

@@ -26,6 +26,7 @@ from app.handlers.love_is import router as love_is_router
 from app.handlers.radar import router as radar_router
 from app.handlers.feedback_offer_video import router as feedback_offer_video_router
 from app.handlers.admin_panel import router as admin_panel_router
+from app.handlers.admin_broadcast import router as admin_broadcast_router
 from app.handlers.extra import router as extra_router
 from app.handlers.admin_access import router as admin_access_router
 from app.handlers.referrals import router as referrals_router
@@ -67,6 +68,7 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(faq_router)
     dp.include_router(feedback_offer_video_router)
     dp.include_router(admin_panel_router)
+    dp.include_router(admin_broadcast_router)
     dp.include_router(extra_router)
     dp.include_router(admin_access_router)
     dp.include_router(referrals_router)

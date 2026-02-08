@@ -30,6 +30,13 @@ async def get_users_stats(session: AsyncSession) -> tuple[int, int]:
     return int(total_users or 0), int(active_subs or 0)
 
 
+async def get_all_user_tg_ids(session: AsyncSession) -> list[int]:
+    res = await session.execute(
+        select(User.tg_id).where(User.tg_id.is_not(None))
+    )
+    return [int(tg_id) for tg_id in res.scalars().all() if tg_id]
+
+
 async def get_last_users(
     session: AsyncSession,
     limit: int = 10,
