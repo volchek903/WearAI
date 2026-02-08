@@ -3,6 +3,7 @@ from .users import (
     user_exists,
     upsert_user,
     increment_generated_photos,
+    increment_generated_videos,
 )
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "user_exists",
     "upsert_user",
     "increment_generated_photos",
+    "increment_generated_videos",
 ]

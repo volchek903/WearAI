@@ -1,6 +1,7 @@
 # app/handlers/scenario_model.py
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from aiogram import Router, F
@@ -9,7 +10,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
-from app.keyboards.menu import MenuCallbacks
+from app.keyboards.menu import MenuCallbacks, photo_menu_kb
 from app.keyboards.confirm import yes_no_kb, review_edit_kb, ConfirmCallbacks
 from app.keyboards.help import help_button_kb
 from app.keyboards.feedback import feedback_kb
@@ -31,6 +32,12 @@ from app.utils.tg_edit import edit_text_safe
 from app.utils.tg_send import send_image_smart
 from app.utils.kie_errors import kie_error_to_user_text
 from app.utils.generated_files import save_generated_image_bytes
+from app.utils.progress_bar import (
+    progress_initial_text,
+    progress_loop,
+    stop_progress,
+)
+from app.utils.content_media import send_content_photo
 
 
 router = Router()
@@ -58,15 +65,19 @@ PRODUCT_ACTION_EXAMPLE = (
 async def start_model_flow(
     call: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
+    await call.answer()
     await upsert_user(session, call.from_user.id, call.from_user.username)
 
     await state.clear()
     await state.set_state(ModelFlow.model_desc)
 
-    await edit_text_safe(
-        call, MODEL_DESC_EXAMPLE, reply_markup=help_button_kb("model_desc")
-    )
-    await call.answer()
+    if call.message:
+        await send_content_photo(
+            call.message,
+            filename="model_photo.jpeg",
+            caption=MODEL_DESC_EXAMPLE,
+            reply_markup=help_button_kb("model_desc"),
+        )
 
 
 @router.message(ModelFlow.model_desc)
@@ -260,8 +271,20 @@ async def review_confirmed(
         await state.clear()
         return
 
-    await edit_text_safe(call, "Генерирую изображение… ⏳")
     await call.answer()
+    if call.message is None:
+        return
+
+    progress_msg = await call.message.answer(progress_initial_text())
+    stop = asyncio.Event()
+
+    async def _update(text: str) -> None:
+        try:
+            await progress_msg.edit_text(text)
+        except Exception:
+            return
+
+    progress_task = asyncio.create_task(progress_loop(_update, stop))
 
     # гарантируем пользователя
     user = await upsert_user(session, call.from_user.id, call.from_user.username)
@@ -277,12 +300,12 @@ async def review_confirmed(
     try:
         await charge_photo_generation(session, tg_id)
     except NoGenerationsLeft:
+        await stop_progress(stop, progress_task)
         await edit_text_safe(
-            call,
+            progress_msg,
             "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
             reply_markup=review_edit_kb(),
         )
-        await call.answer()
         return
 
     prompt = (
@@ -304,6 +327,9 @@ async def review_confirmed(
 
         if not results:
             raise RuntimeError("KIE returned empty result")
+
+        await stop_progress(stop, progress_task)
+        await edit_text_safe(progress_msg, "✅ Готово! Отправляю результат…")
 
         output_files: list[dict[str, str]] = []
         local_output_paths: list[str] = []
@@ -366,27 +392,31 @@ async def review_confirmed(
             "Всё получилось как ты хотел(а) или есть ошибка? 😊",
             reply_markup=feedback_kb(),
         )
+        await call.message.answer(
+            "Хотите ли что-то ещё сгенерировать?",
+            reply_markup=photo_menu_kb(),
+        )
         return
 
     except KieAIError as e:
         logger.warning("KIE rejected/failed: %s", e)
         if not sent_any:
             await refund_photo_generation(session, tg_id)
+        await stop_progress(stop, progress_task)
         await edit_text_safe(
-            call, kie_error_to_user_text(e), reply_markup=review_edit_kb()
+            progress_msg, kie_error_to_user_text(e), reply_markup=review_edit_kb()
         )
-        await call.answer()
         return
 
     except Exception as e:
         logger.exception("MODEL generation failed: %s", e)
         if not sent_any:
             await refund_photo_generation(session, tg_id)
+        await stop_progress(stop, progress_task)
         await edit_text_safe(
-            call,
+            progress_msg,
             "Не получилось сгенерировать 😅\n"
             "Попробуй нажать «✅ Всё верно» ещё раз или внеси правки.",
             reply_markup=review_edit_kb(),
         )
-        await call.answer()
         return

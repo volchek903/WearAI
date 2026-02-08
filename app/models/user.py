@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -25,6 +25,16 @@ class User(Base):
     username: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     generated_photos: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    generated_videos: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    free_channel_bonus_used: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    free_channel_bonus_pending: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    free_channel_reminder_sent: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
 
     referred_by_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=True

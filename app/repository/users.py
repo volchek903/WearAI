@@ -25,7 +25,13 @@ async def upsert_user(
 
     if user is None:
         stmt = sqlite_insert(User).values(
-            tg_id=tg_id, username=username, generated_photos=0
+            tg_id=tg_id,
+            username=username,
+            generated_photos=0,
+            generated_videos=0,
+            free_channel_bonus_used=False,
+            free_channel_bonus_pending=False,
+            free_channel_reminder_sent=False,
         )
         stmt = stmt.on_conflict_do_nothing(index_elements=["tg_id"])
         await session.execute(stmt)
@@ -50,7 +56,13 @@ async def get_or_create_user(
     created = False
     if user is None:
         stmt = sqlite_insert(User).values(
-            tg_id=tg_id, username=username, generated_photos=0
+            tg_id=tg_id,
+            username=username,
+            generated_photos=0,
+            generated_videos=0,
+            free_channel_bonus_used=False,
+            free_channel_bonus_pending=False,
+            free_channel_reminder_sent=False,
         )
         stmt = stmt.on_conflict_do_nothing(index_elements=["tg_id"])
         result = await session.execute(stmt)
@@ -74,5 +86,16 @@ async def increment_generated_photos(
         update(User)
         .where(User.tg_id == tg_id)
         .values(generated_photos=User.generated_photos + delta)
+    )
+    await session.commit()
+
+
+async def increment_generated_videos(
+    session: AsyncSession, tg_id: int, delta: int = 1
+) -> None:
+    await session.execute(
+        update(User)
+        .where(User.tg_id == tg_id)
+        .values(generated_videos=User.generated_videos + delta)
     )
     await session.commit()

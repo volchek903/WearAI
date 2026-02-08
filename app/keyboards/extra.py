@@ -26,9 +26,17 @@ class ExtraCallbacks:
     BACK = "extra:back"
     TO_MENU = "extra:to_menu"
 
+    # free generation for channel subscribe
+    FREE = "extra:free"
+    FREE_CHECK = "extra:free:check"
+    FREE_INFO = "extra:free:info"
+    FREE_PROMO = "extra:free:promo"
+
 
 def extra_menu_kb(current_plan_name: str | None) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
+
+    kb.button(text="Как получить бесплатную генерацию", callback_data=ExtraCallbacks.FREE_INFO)
 
     if current_plan_name != "Orbit":
         kb.button(text="✨ Хочу Orbit", callback_data=ExtraCallbacks.WANT_ORBIT)

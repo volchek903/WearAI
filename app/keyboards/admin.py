@@ -7,14 +7,27 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 class AdminCallbacks:
     STATS = "admin:stats"
     USERS = "admin:users"
+    USERS_PAGE = "admin:users:page"
     ACCESS = "admin:access"
     BROADCAST = "admin:broadcast"
 
     ADD_ADMIN = "admin:add_admin"
     REMOVE_ADMIN = "admin:remove_admin"
     GIVE_SUB = "admin:give_sub"
+    PROMO = "admin:promo"
+    CREATE_PROMO = "admin:promo:create"
+    LIST_PROMO = "admin:promo:list"
+    PROMO_TYPE = "admin:promo:type"
 
     BACK = "admin:back"
+
+    @staticmethod
+    def users_page(page: int) -> str:
+        return f"{AdminCallbacks.USERS_PAGE}:{page}"
+
+    @staticmethod
+    def promo_type(kind: str) -> str:
+        return f"{AdminCallbacks.PROMO_TYPE}:{kind}"
 
 
 class AdminBroadcastCallbacks:
@@ -32,10 +45,20 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
 
     kb.button(text="📊 Статистика", callback_data=AdminCallbacks.STATS)
     kb.button(text="👥 Пользователи", callback_data=AdminCallbacks.USERS)
+    kb.button(text="🎟 Промокоды", callback_data=AdminCallbacks.PROMO)
     kb.button(text="📣 Рассылка", callback_data=AdminCallbacks.BROADCAST)
     kb.button(text="🔐 Доступы", callback_data=AdminCallbacks.ACCESS)
     kb.button(text="⬅️ Назад", callback_data=AdminCallbacks.BACK)
 
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def admin_promo_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="➕ Создать промокод", callback_data=AdminCallbacks.CREATE_PROMO)
+    kb.button(text="📋 Просмотреть промокоды", callback_data=AdminCallbacks.LIST_PROMO)
+    kb.button(text="⬅️ Назад", callback_data=AdminCallbacks.BACK)
     kb.adjust(1)
     return kb.as_markup()
 
@@ -64,4 +87,20 @@ def admin_access_kb() -> InlineKeyboardMarkup:
     kb.button(text="⬅️ Назад", callback_data=AdminCallbacks.BACK)
 
     kb.adjust(1)
+    return kb.as_markup()
+
+
+def admin_users_nav_kb(
+    *, page: int, has_prev: bool, has_next: bool
+) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    if has_prev:
+        kb.button(text="⬅️ Назад", callback_data=AdminCallbacks.users_page(page - 1))
+    if has_next:
+        kb.button(text="➡️ Вперёд", callback_data=AdminCallbacks.users_page(page + 1))
+    kb.button(text="⬅️ В админку", callback_data=AdminCallbacks.BACK)
+    if has_prev and has_next:
+        kb.adjust(2, 1)
+    else:
+        kb.adjust(1)
     return kb.as_markup()

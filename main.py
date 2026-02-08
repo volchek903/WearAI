@@ -17,6 +17,7 @@ from app.handlers.faq import router as faq_router
 from app.handlers.feedback import router as feedback_router
 from app.handlers.start import router as start_router
 from app.handlers.scenario_model import router as model_router
+from app.handlers.nano_banana import router as nano_banana_router
 from app.handlers.scenario_tryon import router as tryon_router
 from app.handlers.help import router as help_router
 from app.handlers.settings import router as settings_router
@@ -30,10 +31,12 @@ from app.handlers.admin_broadcast import router as admin_broadcast_router
 from app.handlers.extra import router as extra_router
 from app.handlers.admin_access import router as admin_access_router
 from app.handlers.referrals import router as referrals_router
+from app.handlers.errors import router as errors_router
 
 from app.services.subscription_seed import seed_subscriptions
 from app.services.subscription_expirer import run_subscription_expirer
 from app.services.payment_poller import run_payment_poller  # NEW
+from app.services.admin_log_cleanup import run_admin_log_cleanup
 from app.utils.tg_logging import install_tg_error_logging
 from app.services.admin_seed import ensure_root_admin
 
@@ -61,6 +64,7 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(start_router)
     dp.include_router(menu_router)
     dp.include_router(model_router)
+    dp.include_router(nano_banana_router)
     dp.include_router(tryon_router)
     dp.include_router(love_is_router)
     dp.include_router(radar_router)
@@ -75,6 +79,7 @@ def setup_routers(dp: Dispatcher) -> None:
     # Роутеры с более “общими” хендлерами — ниже
     dp.include_router(help_router)
     dp.include_router(settings_router)
+    dp.include_router(errors_router)
 
 
 def setup_middlewares(dp: Dispatcher) -> None:
@@ -115,6 +120,7 @@ async def main() -> None:
     expirer_task = asyncio.create_task(
         run_subscription_expirer(sessionmaker=session_factory)
     )
+    admin_log_cleanup_task = asyncio.create_task(run_admin_log_cleanup())
 
     try:
         log.info("Bot started. Polling...")
@@ -122,9 +128,11 @@ async def main() -> None:
     finally:
         poller_task.cancel()
         expirer_task.cancel()
+        admin_log_cleanup_task.cancel()
         try:
             await poller_task
             await expirer_task
+            await admin_log_cleanup_task
         except asyncio.CancelledError:
             pass
 

@@ -1,6 +1,7 @@
 # app/handlers/scenario_tryon.py
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from aiogram import Router, F
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.keyboards.menu import MenuCallbacks
 from app.keyboards.confirm import yes_no_tryon_kb_with_help, ConfirmCallbacks
 from app.keyboards.help import help_button_kb
+from app.keyboards.menu import photo_menu_kb
 from app.keyboards.feedback import feedback_kb
 from app.repository.users import increment_generated_photos, upsert_user
 from app.repository.generations import (
@@ -27,6 +29,12 @@ from app.utils.kie_errors import kie_error_to_user_text
 from app.utils.tg_edit import edit_text_safe
 from app.utils.tg_send import send_image_smart
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
+from app.utils.progress_bar import (
+    progress_initial_text,
+    progress_loop,
+    stop_progress,
+)
+from app.utils.content_media import send_content_album
 from app.utils.generated_files import save_generated_image_bytes
 
 
@@ -47,17 +55,19 @@ TRYON_DESC_EXAMPLE = (
 async def start_tryon_flow(
     call: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
+    await call.answer()
     await upsert_user(session, call.from_user.id, call.from_user.username)
 
     await state.clear()
     await state.set_state(TryOnFlow.user_photo)
 
-    await edit_text_safe(
-        call,
-        "Поехали! 👕✨\n\nПришли свою фотографию (1 фото) 🤳📸",
-        reply_markup=help_button_kb("user_photo", text="🤳 Как лучше сделать фото?"),
-    )
-    await call.answer()
+    text = "Поехали! 👕✨\n\nПришли свою фотографию (1 фото) 🤳📸"
+    if call.message:
+        await send_content_album(
+            call.message,
+            filenames=["scenario_photo1.jpeg", "scenario_photo2.jpeg"],
+            caption=text,
+        )
 
 
 @router.message(TryOnFlow.user_photo)
@@ -170,7 +180,16 @@ async def tryon_desc_in(
         await message.answer("Ой, сессия сбилась 😅 Нажми /start и начни заново 🙌")
         return
 
-    await message.answer("Делаю примерку… ⏳")
+    progress_msg = await message.answer(progress_initial_text())
+    stop = asyncio.Event()
+
+    async def _update(text: str) -> None:
+        try:
+            await progress_msg.edit_text(text)
+        except Exception:
+            return
+
+    progress_task = asyncio.create_task(progress_loop(_update, stop))
 
     # гарантируем пользователя
     await upsert_user(session, message.from_user.id, message.from_user.username)
@@ -184,6 +203,7 @@ async def tryon_desc_in(
         # ✅ списание по tg_id (как в generations.py версии A)
         await charge_photo_generation(session, tg_id)
     except NoGenerationsLeft:
+        await stop_progress(stop, progress_task)
         await message.answer(
             "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳"
         )
@@ -210,6 +230,9 @@ async def tryon_desc_in(
 
         if not results:
             raise RuntimeError("KIE returned empty result")
+
+        await stop_progress(stop, progress_task)
+        await edit_text_safe(progress_msg, "✅ Готово! Отправляю результат…")
 
         output_files: list[dict[str, str]] = []
         local_output_paths: list[str] = []
@@ -274,12 +297,17 @@ async def tryon_desc_in(
             "Всё получилось как ты хотел(а) или есть ошибка? 😊",
             reply_markup=feedback_kb(),
         )
+        await message.answer(
+            "Хотите ли что-то ещё сгенерировать?",
+            reply_markup=photo_menu_kb(),
+        )
         return
 
     except KieAIError as e:
         logger.warning("TRYON KIE failed: %s", e)
         if not sent_any:
             await refund_photo_generation(session, tg_id)  # ✅ tg_id
+        await stop_progress(stop, progress_task)
         await message.answer(kie_error_to_user_text(e))
         return
 
@@ -287,6 +315,7 @@ async def tryon_desc_in(
         logger.exception("TRYON generation failed: %s", e)
         if not sent_any:
             await refund_photo_generation(session, tg_id)  # ✅ tg_id
+        await stop_progress(stop, progress_task)
         await message.answer(
             "Не получилось сделать примерку 😅\n"
             "Попробуй изменить описание и отправь ещё раз."

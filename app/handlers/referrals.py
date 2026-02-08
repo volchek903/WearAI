@@ -72,7 +72,7 @@ async def referral_share(call: CallbackQuery, session: AsyncSession) -> None:
     ref_link = await _get_ref_link(call.bot, user.tg_id)
 
     text = f"{INVITE_BAIT_TEXT}\n{ref_link}"
-    await call.message.answer(text, disable_web_page_preview=False)
+    await edit_text_safe(call, text)
     await call.answer()
 
 

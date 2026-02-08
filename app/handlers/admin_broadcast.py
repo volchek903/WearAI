@@ -16,6 +16,7 @@ from app.keyboards.admin import (
 )
 from app.keyboards.confirm import ConfirmCallbacks, yes_no_kb
 from app.repository.admin import get_all_user_tg_ids, is_admin
+from app.repository.admin_actions import log_admin_action
 from app.states.admin_broadcast import AdminBroadcastFSM
 from app.utils.tg_edit import edit_text_safe
 
@@ -28,6 +29,8 @@ async def _ensure_admin(call_or_message, session: AsyncSession, action: str) -> 
     if tg_id is None:
         return False
     if await is_admin(session, tg_id):
+        data = getattr(call_or_message, "data", None) or getattr(call_or_message, "text", None) or ""
+        await log_admin_action(session, tg_id=tg_id, action=action, data=str(data))
         return True
     logger.warning(
         "ADMIN_DENY action=%s tg_id=%s data=%s",

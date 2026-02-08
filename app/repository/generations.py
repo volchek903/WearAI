@@ -250,3 +250,37 @@ async def refund_video_generation(session: AsyncSession, tg_id: int) -> None:
     )
     await session.commit()
     print("[DEBUG refund_video] COMMIT OK +1")
+
+
+async def grant_photo_generation(session: AsyncSession, tg_id: int, delta: int = 1) -> None:
+    user_id = await _get_user_db_id(session, tg_id)
+    if not user_id:
+        return
+
+    us_id = await _get_active_us_id(session, user_id)
+    if not us_id:
+        return
+
+    await session.execute(
+        update(UserSubscription)
+        .where(UserSubscription.id == us_id, UserSubscription.status == 1)
+        .values(remaining_photo=UserSubscription.remaining_photo + int(delta))
+    )
+    await session.commit()
+
+
+async def grant_video_generation(session: AsyncSession, tg_id: int, delta: int = 1) -> None:
+    user_id = await _get_user_db_id(session, tg_id)
+    if not user_id:
+        return
+
+    us_id = await _get_active_us_id(session, user_id)
+    if not us_id:
+        return
+
+    await session.execute(
+        update(UserSubscription)
+        .where(UserSubscription.id == us_id, UserSubscription.status == 1)
+        .values(remaining_video=UserSubscription.remaining_video + int(delta))
+    )
+    await session.commit()

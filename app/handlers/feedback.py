@@ -10,6 +10,7 @@ from aiogram.types import CallbackQuery, Message
 from app.keyboards.feedback import back_to_menu_kb, FeedbackCallbacks
 from app.keyboards.menu import main_menu_kb
 from app.states.feedback_flow import FeedbackFlow
+from app.utils.tg_edit import edit_text_safe
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -134,11 +135,11 @@ async def feedback_back_to_menu(call: CallbackQuery, state: FSMContext) -> None:
         await call.answer()
         return
 
-    await state.clear()
-    await call.message.answer(
-        "Хорошо! Возвращаю в меню 👇", reply_markup=main_menu_kb()
-    )
     await call.answer()
+    await state.clear()
+    await edit_text_safe(
+        call, "Хорошо! Возвращаю в меню 👇", reply_markup=main_menu_kb()
+    )
 
 
 @router.callback_query(FeedbackFlow.choice, F.data == FeedbackCallbacks.BUG)
@@ -147,13 +148,14 @@ async def feedback_bug(call: CallbackQuery, state: FSMContext) -> None:
         await call.answer()
         return
 
+    await call.answer()
     await state.set_state(FeedbackFlow.text)
-    await call.message.answer(
+    await edit_text_safe(
+        call,
         "Опиши, пожалуйста, что именно не так (1–3 предложения) ✍️\n"
         "Например: «не тот товар», «исказился цвет», «лицо поменялось», «плохие руки» и т.д.",
         reply_markup=back_to_menu_kb(),
     )
-    await call.answer()
 
 
 @router.callback_query(F.data == FeedbackCallbacks.BUG)
@@ -165,13 +167,14 @@ async def feedback_bug_fallback(call: CallbackQuery, state: FSMContext) -> None:
     cur_state = await state.get_state()
     logger.info("Feedback BUG fallback: state=%s data=%s", cur_state, call.data)
 
+    await call.answer()
     await state.set_state(FeedbackFlow.text)
-    await call.message.answer(
+    await edit_text_safe(
+        call,
         "Опиши, пожалуйста, что именно не так (1–3 предложения) ✍️\n"
         "Например: «не тот товар», «исказился цвет», «лицо поменялось», «плохие руки» и т.д.",
         reply_markup=back_to_menu_kb(),
     )
-    await call.answer()
 
 
 @router.message(FeedbackFlow.text, F.text)

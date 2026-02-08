@@ -105,6 +105,8 @@ async def change_format(call: CallbackQuery, session: AsyncSession) -> None:
     await call.answer("✅ Формат изменён")
 
 
+
+
 @router.callback_query(F.data == SettingsCallbacks.RESET)
 async def reset(call: CallbackQuery, session: AsyncSession) -> None:
     user_id = await _get_user_db_id(session, call.from_user.id)

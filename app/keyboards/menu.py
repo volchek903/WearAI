@@ -14,6 +14,7 @@ class MenuCallbacks:
     VIDEO = "menu:video"
     LOVE_IS = "menu:love_is"
     RADAR = "menu:radar"
+    NANO_BANANA = "menu:nano_banana"
     HELP = "menu:help"
     FAQ = "menu:faq"
     SETTINGS = "menu:settings"
@@ -25,6 +26,7 @@ class SettingsCallbacks:
     ASPECT = "settings:aspect"
     RESOLUTION = "settings:resolution"
     FORMAT = "settings:format"
+    NANO_BANANA = "settings:nano_banana"
     RESET = "settings:reset"
     BACK = "settings:back"
 
@@ -45,6 +47,7 @@ def main_menu_kb() -> InlineKeyboardMarkup:
 
 def photo_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
+    kb.button(text="🍌 nano-banano", callback_data=MenuCallbacks.NANO_BANANA)
     kb.button(text="🛍️ Модель с товаром", callback_data=MenuCallbacks.MODEL)
     kb.button(text="🧥 Примерить одежду", callback_data=MenuCallbacks.TRYON)
     kb.button(text="❤️ ИИ Love is", callback_data=MenuCallbacks.LOVE_IS)
@@ -77,6 +80,7 @@ def photo_settings_kb(s: UserPhotoSettings) -> InlineKeyboardMarkup:
         text=f"🗂 Формат: {s.output_format}",
         callback_data=SettingsCallbacks.FORMAT,
     )
+    kb.button(text="🍌 nano-banano", callback_data=SettingsCallbacks.NANO_BANANA)
     kb.button(text="🔄 Сбросить по умолчанию", callback_data=SettingsCallbacks.RESET)
     kb.button(text="⬅️ Назад", callback_data=SettingsCallbacks.BACK)
 

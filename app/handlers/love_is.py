@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from io import BytesIO
 import time
@@ -25,13 +26,23 @@ from app.repository.generations import (
     refund_photo_generation,
     refund_video_generation,
 )
-from app.repository.users import upsert_user
+from app.repository.users import (
+    increment_generated_photos,
+    increment_generated_videos,
+    upsert_user,
+)
 from app.services.album_collector import AlbumCollector
 from app.services.generation import generate_image_kie_from_telegram
 from app.states.love_is_flow import LoveIsFlow
 from app.utils.tg_edit import edit_text_safe
 from app.utils.tg_send import send_image_smart
+from app.utils.progress_bar import (
+    progress_initial_text,
+    progress_loop,
+    stop_progress,
+)
 from app.utils.generated_files import save_generated_image_bytes
+from app.utils.content_media import send_content_photo
 from app.utils.kie_kling_client import KieKlingClient
 from app.db.config import settings
 
@@ -44,15 +55,21 @@ _MAX_BYTES = 10 * 1024 * 1024
 
 @router.callback_query(F.data == MenuCallbacks.LOVE_IS)
 async def love_is_start(call: CallbackQuery, state: FSMContext) -> None:
+    await call.answer()
     await state.clear()
     await state.set_state(LoveIsFlow.photos)
-    await edit_text_safe(
-        call,
+    text = (
         "❤️ <b>ИИ Love is</b>\n\n"
-        "Пришли 1–2 фото (лучше: мужчина и женщина) одним сообщением или альбомом 📸",
-        reply_markup=_back_only_kb(),
+        "Пришли 1–2 фото (лучше: мужчина и женщина) одним сообщением или альбомом 📸"
     )
-    await call.answer()
+    if call.message:
+        await send_content_photo(
+            call.message,
+            filename="love_is.jpeg",
+            caption=text,
+            parse_mode="HTML",
+            reply_markup=_back_only_kb(),
+        )
 
 
 def _back_only_kb():
@@ -121,7 +138,16 @@ async def love_is_text_in(
         await state.clear()
         return
 
-    await message.answer("Генерирую Love is… ⏳")
+    progress_msg = await message.answer(progress_initial_text())
+    stop = asyncio.Event()
+
+    async def _update(text: str) -> None:
+        try:
+            await progress_msg.edit_text(text)
+        except Exception:
+            return
+
+    progress_task = asyncio.create_task(progress_loop(_update, stop))
 
     sent_any = False
     try:
@@ -159,6 +185,9 @@ async def love_is_text_in(
         if not results:
             raise RuntimeError("KIE returned empty result")
 
+        await stop_progress(stop, progress_task)
+        await edit_text_safe(progress_msg, "✅ Готово! Отправляю результат…")
+
         first_path = ""
         for filename, img_bytes in results:
             local_path = save_generated_image_bytes(
@@ -172,6 +201,8 @@ async def love_is_text_in(
             await send_image_smart(message, img_bytes=img_bytes, filename=filename)
             sent_any = True
 
+        await increment_generated_photos(session=session, tg_id=tg_id, delta=1)
+
         if first_path:
             await state.update_data(love_is_image_path=first_path)
             await state.set_state(LoveIsFlow.ready)
@@ -179,11 +210,16 @@ async def love_is_text_in(
                 "Готово! Хочешь оживить открытку? 🎬",
                 reply_markup=love_is_post_kb(),
             )
+            await message.answer(
+                "Хотите ли что-то ещё сгенерировать?",
+                reply_markup=photo_menu_kb(),
+            )
 
     except Exception as e:
         logger.exception("LOVE_IS generation failed: %s", e)
         if not sent_any:
             await refund_photo_generation(session, tg_id)
+        await stop_progress(stop, progress_task)
         await message.answer(
             "Не получилось сгенерировать 😅 Попробуй ещё раз чуть позже."
         )
@@ -268,7 +304,19 @@ async def love_is_animate(
         return
 
     client = KieKlingClient(settings.kie_api_key)
+    progress_msg = await call.message.answer(progress_initial_text())
+    stop = asyncio.Event()
+
+    async def _update(text: str) -> None:
+        try:
+            await progress_msg.edit_text(text)
+        except Exception:
+            return
+
+    progress_task = asyncio.create_task(progress_loop(_update, stop))
+
     try:
+
         tag = f"{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}"
         image_url = await client.upload_image_bytes(
             image_bytes=img_bytes,
@@ -284,7 +332,6 @@ async def love_is_animate(
             cfg_scale=1.0,
         )
 
-        await call.message.answer("⏳ Генерирую видео…")
         res = await client.wait_for_success(
             task_id, poll_interval_s=10, max_wait_s=12 * 60
         )
@@ -299,14 +346,23 @@ async def love_is_animate(
         video_bytes = await _download_bytes(direct_url)
         video_file = BufferedInputFile(video_bytes, filename="love_is.mp4")
 
+        await stop_progress(stop, progress_task)
+        await edit_text_safe(progress_msg, "✅ Готово! Отправляю видео…")
+
         await call.message.answer_video(
             video=video_file,
             caption="Готово! 💞",
             supports_streaming=True,
         )
+        await increment_generated_videos(session=session, tg_id=tg_id, delta=1)
+        await call.message.answer(
+            "Хотите ли что-то ещё сгенерировать?",
+            reply_markup=photo_menu_kb(),
+        )
     except Exception as e:
         logger.exception("LOVE_IS animate failed: %s", e)
         await refund_video_generation(session, tg_id)
+        await stop_progress(stop, progress_task)
         await call.message.answer("Не получилось оживить открытку 😅 Попробуй позже.")
     finally:
         await state.clear()

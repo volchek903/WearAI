@@ -106,6 +106,7 @@ async def generate_image_kie_from_telegram(
     aspect_ratio: str | None = None,
     resolution: str | None = None,
     output_format: str | None = None,
+    max_images: int = 5,
 ) -> list[tuple[str, bytes]]:
     """
     Returns list of (filename, bytes) of generated images.
@@ -124,8 +125,9 @@ async def generate_image_kie_from_telegram(
 
     kie = KieAIClient(api_key=get_kie_api_key_from_env())
 
-    # 1) TG -> bytes (до 5)
-    file_ids = list(telegram_photo_file_ids)[:5]
+    # 1) TG -> bytes (до max_images)
+    safe_max = max(1, min(int(max_images or 0), 8))
+    file_ids = list(telegram_photo_file_ids)[:safe_max]
     images_bytes: list[bytes] = []
     for fid in file_ids:
         # tg_file_id_to_bytes требует keyword-only аргумент tg_id

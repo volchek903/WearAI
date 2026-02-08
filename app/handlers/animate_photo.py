@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.config import settings
 from app.keyboards.menu import MenuCallbacks
+from app.keyboards.menu import video_menu_kb
 from app.models.subscription import Subscription
 from app.models.user import User
 from app.models.user_subscription import UserSubscription
@@ -22,9 +23,11 @@ from app.repository.generations import (
     refund_video_generation,
     NoGenerationsLeft,
 )
+from app.repository.users import increment_generated_videos
 from app.states.animate_photo import AnimatePhotoStates
 from app.utils.kie_kling_client import KieKlingClient
 from app.utils.tg_edit import edit_text_safe
+from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -50,29 +53,6 @@ async def _download_bytes(url: str, timeout_s: int = 180) -> bytes:
         async with session.get(url) as resp:
             resp.raise_for_status()
             return await resp.read()
-
-
-async def _status_spinner(
-    bot, chat_id: int, message_id: int, stop: asyncio.Event
-) -> None:
-    frames = [
-        "⏳ Генерирую видео",
-        "⏳ Генерирую видео.",
-        "⏳ Генерирую видео..",
-        "⏳ Генерирую видео...",
-    ]
-    i = 0
-    while not stop.is_set():
-        try:
-            await bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text=frames[i % len(frames)],
-            )
-        except Exception:
-            pass
-        i += 1
-        await asyncio.sleep(2)
 
 
 async def _chat_action_loop(bot, chat_id: int, stop: asyncio.Event) -> None:
@@ -167,8 +147,15 @@ async def _run_video_job(
     session: AsyncSession,
 ) -> None:
     stop = asyncio.Event()
-    spinner_task = asyncio.create_task(
-        _status_spinner(bot, chat_id, status_message_id, stop)
+    progress_task = asyncio.create_task(
+        progress_loop(
+            lambda t: bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=status_message_id,
+                text=t,
+            ),
+            stop,
+        )
     )
     action_task = asyncio.create_task(_chat_action_loop(bot, chat_id, stop))
 
@@ -181,6 +168,7 @@ async def _run_video_job(
 
         if res.state == "timeout":
             await refund_video_generation(session, tg_id)
+            await stop_progress(stop, progress_task)
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
@@ -190,6 +178,7 @@ async def _run_video_job(
 
         if res.fail_msg:
             await refund_video_generation(session, tg_id)
+            await stop_progress(stop, progress_task)
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
@@ -199,6 +188,7 @@ async def _run_video_job(
 
         if not res.result_url:
             await refund_video_generation(session, tg_id)
+            await stop_progress(stop, progress_task)
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
@@ -210,6 +200,7 @@ async def _run_video_job(
         video_bytes = await _download_bytes(direct_url, timeout_s=240)
         video_file = BufferedInputFile(video_bytes, filename="animation.mp4")
 
+        await stop_progress(stop, progress_task)
         await bot.edit_message_text(
             chat_id=chat_id,
             message_id=status_message_id,
@@ -221,10 +212,17 @@ async def _run_video_job(
             caption="Готово! Если нужно — дай следующий промпт ✍️",
             supports_streaming=True,
         )
+        await increment_generated_videos(session=session, tg_id=tg_id, delta=1)
+        await bot.send_message(
+            chat_id=chat_id,
+            text="Хотите ли что-то ещё сгенерировать?",
+            reply_markup=video_menu_kb(),
+        )
 
     except Exception as e:
         logger.exception("User %s error in job: task_id=%s", tg_id, task_id)
         await refund_video_generation(session, tg_id)
+        await stop_progress(stop, progress_task)
         try:
             await bot.edit_message_text(
                 chat_id=chat_id,
@@ -235,7 +233,7 @@ async def _run_video_job(
             await bot.send_message(chat_id, f"Ошибка при ожидании/отправке видео: {e}")
     finally:
         stop.set()
-        for t in (spinner_task, action_task):
+        for t in (progress_task, action_task):
             t.cancel()
         _active_jobs.pop(tg_id, None)
 
@@ -330,7 +328,7 @@ async def animate_got_prompt(
         await state.clear()
         return
 
-    status_msg = await message.answer("⏳ Генерирую видео…")
+    status_msg = await message.answer(progress_initial_text())
     await state.clear()
 
     job = asyncio.create_task(

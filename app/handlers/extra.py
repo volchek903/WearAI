@@ -8,7 +8,10 @@ from dataclasses import dataclass
 
 import httpx
 from aiogram import Router, F
-from aiogram.types import CallbackQuery
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.menu import MenuCallbacks, main_menu_kb
@@ -18,6 +21,15 @@ from app.keyboards.extra import (
     extra_buy_kb,
     extra_pay_poll_kb,
 )
+from app.services.free_channel_bonus import (
+    CHANNEL_URL,
+    free_channel_kb,
+    is_user_in_channel,
+    bonus_already_used,
+    start_bonus_pending,
+    schedule_bonus_grant,
+)
+from app.repository.promo import redeem_promo_code, PromoError
 from app.models.payment import PaymentStatus
 from app.models.subscription import Subscription
 from app.repository.extra import (
@@ -33,11 +45,16 @@ from app.repository.payments import (
     mark_payment_status,
     apply_plan_to_user,
 )
+from app.utils.tg_edit import edit_text_safe
 
 router = Router()
 logger = logging.getLogger(__name__)
 
 ORDER = ["Launch", "Orbit", "Nova", "Cosmic"]
+
+
+class FreePromoFlow(StatesGroup):
+    code = State()
 
 
 def _payment_tg_id(payment) -> int | None:
@@ -226,6 +243,135 @@ async def extra_to_menu(call: CallbackQuery) -> None:
     if call.message:
         await call.message.edit_text("Главное меню 👇", reply_markup=main_menu_kb())
     await call.answer()
+
+
+@router.callback_query(F.data == ExtraCallbacks.FREE)
+async def extra_free_generation(call: CallbackQuery, session: AsyncSession) -> None:
+    if call.message is None:
+        await call.answer()
+        return
+
+    if await bonus_already_used(session, call.from_user.id):
+        await edit_text_safe(
+            call, "Ты уже получал(а) бесплатную генерацию за подписку ✅"
+        )
+        await call.answer()
+        return
+
+    await edit_text_safe(
+        call,
+        "Подпишись на канал и нажми кнопку «✅ Я подписался» ниже 👇",
+        reply_markup=free_channel_kb(),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == ExtraCallbacks.FREE_INFO)
+async def extra_free_info(call: CallbackQuery, state: FSMContext) -> None:
+    if call.message is None:
+        await call.answer()
+        return
+
+    kb = InlineKeyboardBuilder()
+    kb.button(text="Бесплатная генерация", callback_data=ExtraCallbacks.FREE)
+    kb.button(text="Ввести промокод", callback_data=ExtraCallbacks.FREE_PROMO)
+    kb.adjust(1)
+
+    await edit_text_safe(
+        call,
+        "🎁 <b>Бесплатная генерация</b>\n\n"
+        "Получить бонус просто:\n"
+        "1) Подпишись на наш канал.\n"
+        "2) Нажми кнопку ниже — мы проверим подписку и начислим <b>+1 фото‑генерацию</b> в течение минуты.\n\n"
+        "Промокоды мы публикуем в рассылке внутри бота и в нашем Telegram‑канале:\n"
+        f"{CHANNEL_URL}\n\n"
+        "Бонус за подписку можно получить только <b>1 раз</b> на пользователя.",
+        reply_markup=kb.as_markup(),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == ExtraCallbacks.FREE_PROMO)
+async def extra_free_promo_start(call: CallbackQuery, state: FSMContext) -> None:
+    if call.message is None:
+        await call.answer()
+        return
+    await state.set_state(FreePromoFlow.code)
+    await edit_text_safe(call, "Введите промокод ✍️")
+    await call.answer()
+
+
+@router.message(FreePromoFlow.code)
+async def extra_free_promo_code(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
+    code = (message.text or "").strip()
+    if not code:
+        await message.answer("Промокод пустой. Попробуйте ещё раз ✍️")
+        return
+    await state.clear()
+    await message.answer("Промокод принят. Проверяю…")
+
+    try:
+        promo = await redeem_promo_code(
+            session=session, tg_id=message.from_user.id, code=code
+        )
+    except PromoError as e:
+        if "исчерпан" in str(e):
+            await message.answer(
+                "К сожалению, вы не успели активировать промокод — его уже активировал кто-то другой."
+            )
+        else:
+            await message.answer(str(e))
+        return
+    except Exception:
+        logger.exception("promo redeem failed")
+        await message.answer("Не удалось активировать промокод 😕 Попробуй позже.")
+        return
+
+    await message.answer(
+        f"✅ Промокод активирован!\n"
+        f"Бонус: 🖼️ {promo.bonus_photo} фото • 🎬 {promo.bonus_video} видео"
+    )
+
+@router.callback_query(F.data == ExtraCallbacks.FREE_CHECK)
+async def extra_free_check(call: CallbackQuery, session: AsyncSession) -> None:
+    if call.message is None:
+        await call.answer()
+        return
+
+    tg_id = call.from_user.id
+    if await bonus_already_used(session, tg_id):
+        await edit_text_safe(
+            call, "Ты уже получал(а) бесплатную генерацию за подписку ✅"
+        )
+        await call.answer()
+        return
+
+    in_channel = await is_user_in_channel(call.bot, tg_id)
+    if not in_channel:
+        await edit_text_safe(
+            call,
+            "Похоже, ты ещё не подписался(ась). "
+            "Подпишись на канал и нажми «✅ Я подписался» ещё раз.",
+            reply_markup=free_channel_kb(),
+        )
+        await call.answer()
+        return
+
+    started = await start_bonus_pending(session, tg_id)
+    if not started:
+        await edit_text_safe(call, "Проверка уже запущена или бонус уже выдан ✅")
+        await call.answer()
+        return
+
+    await edit_text_safe(
+        call,
+        "Подписка подтверждена ✅\n"
+        "В течение минуты придёт бесплатная генерация.",
+    )
+    await call.answer()
+    await schedule_bonus_grant(call.bot, tg_id, delay_s=60)
 
 
 @router.callback_query(F.data == MenuCallbacks.EXTRA)

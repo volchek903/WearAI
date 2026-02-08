@@ -153,6 +153,7 @@ async def fb_ok(cb: CallbackQuery, state: FSMContext) -> None:
     if cb.message is None:
         await cb.answer()
         return
+    await cb.answer()
 
     data = await state.get_data()
     fp = data.get("feedback_payload") or {}
@@ -169,7 +170,6 @@ async def fb_ok(cb: CallbackQuery, state: FSMContext) -> None:
     )
     await edit_text_safe(cb, text, reply_markup=feedback_offer_video_kb())
     await state.set_state(FeedbackFlow.offer_video)
-    await cb.answer()
 
 
 @router.callback_query(F.data == FeedbackCallbacks.OK)
@@ -177,6 +177,7 @@ async def fb_ok_fallback(cb: CallbackQuery, state: FSMContext) -> None:
     if cb.message is None:
         await cb.answer()
         return
+    await cb.answer()
 
     cur_state = await state.get_state()
     data = await state.get_data()
@@ -196,7 +197,6 @@ async def fb_ok_fallback(cb: CallbackQuery, state: FSMContext) -> None:
     )
     await edit_text_safe(cb, text, reply_markup=feedback_offer_video_kb())
     await state.set_state(FeedbackFlow.offer_video)
-    await cb.answer()
 
 
 @router.callback_query(F.data == FeedbackCallbacks.MENU)

@@ -17,6 +17,7 @@ from app.repository.users import get_or_create_user
 from app.repository.referrals import parse_referrer_tg_id, process_referral_for_new_user
 from app.repository.photo_settings import ensure_photo_settings
 from app.repository.generations import ensure_default_subscription
+from app.services.free_channel_bonus import schedule_free_bonus_reminder
 from app.repository.extra import get_plan
 from app.repository.payments import (
     get_latest_pending_payment,
@@ -117,6 +118,8 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) 
         await process_referral_for_new_user(
             session, new_user=user, referrer_tg_id=ref_tg_id
         )
+    if created:
+        await schedule_free_bonus_reminder(message.bot, message.from_user.id, delay_s=600)
 
     # --- если вернулись из оплаты: проверяем PENDING и пытаемся подтвердить ---
     if start_payload in {"pay_ok", "pay_fail"}:
