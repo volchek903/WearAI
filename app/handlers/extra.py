@@ -376,25 +376,29 @@ async def extra_free_check(call: CallbackQuery, session: AsyncSession) -> None:
 
 @router.callback_query(F.data == MenuCallbacks.EXTRA)
 async def extra_open(call: CallbackQuery, session: AsyncSession) -> None:
-    user = await get_user(session, call.from_user.id)
+    try:
+        user = await get_user(session, call.from_user.id)
 
-    if not user:
-        current_name = "Launch"
-        remaining_video, remaining_photo = 2, 3
-    else:
-        current_name = await get_active_plan_name(session, user.id)
-        remaining_video, remaining_photo = await get_active_remaining(session, user.id)
+        if not user:
+            current_name = "Launch"
+            remaining_video, remaining_photo = 2, 3
+        else:
+            current_name = await get_active_plan_name(session, user.id)
+            remaining_video, remaining_photo = await get_active_remaining(session, user.id)
 
-    plans = await get_all_plans(session)
-    table_html = _table(plans)
+        plans = await get_all_plans(session)
+        table_html = _table(plans)
 
-    if call.message:
-        await call.message.edit_text(
-            _extra_text(current_name, remaining_video, remaining_photo, table_html),
-            reply_markup=extra_menu_kb(current_name),
-            parse_mode="HTML",
-        )
-    await call.answer()
+        if call.message:
+            await call.message.edit_text(
+                _extra_text(current_name, remaining_video, remaining_photo, table_html),
+                reply_markup=extra_menu_kb(current_name),
+                parse_mode="HTML",
+            )
+        await call.answer()
+    except Exception:
+        logger.exception("extra_open failed")
+        raise
 
 
 @router.callback_query(
