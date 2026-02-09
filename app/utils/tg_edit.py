@@ -10,6 +10,7 @@ async def edit_text_safe(
     target: Union[CallbackQuery, Message],
     text: str,
     reply_markup: Optional[InlineKeyboardMarkup] = None,
+    parse_mode: Optional[str] = None,
 ) -> None:
     """
     Telegram часто кидает исключения:
@@ -24,8 +25,15 @@ async def edit_text_safe(
         return
 
     try:
-        await msg.edit_text(text, reply_markup=reply_markup)
+        if msg.photo or msg.document or msg.video or msg.animation:
+            await msg.edit_caption(
+                caption=text, reply_markup=reply_markup, parse_mode=parse_mode
+            )
+        else:
+            await msg.edit_text(
+                text, reply_markup=reply_markup, parse_mode=parse_mode
+            )
     except TelegramBadRequest as e:
         if "message is not modified" in str(e):
             return
-        await msg.answer(text, reply_markup=reply_markup)
+        await msg.answer(text, reply_markup=reply_markup, parse_mode=parse_mode)
