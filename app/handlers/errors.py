@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 @router.error()
-async def global_error_handler(event, exception: Exception):
+async def global_error_handler(event, exception: Exception | None = None, **kwargs):
     try:
         update = getattr(event, "update", None)
         if update and getattr(update, "callback_query", None):
