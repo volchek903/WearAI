@@ -241,7 +241,7 @@ def _pitch(plan_name: str, plan: Subscription) -> str:
 @router.callback_query(F.data == ExtraCallbacks.TO_MENU)
 async def extra_to_menu(call: CallbackQuery) -> None:
     if call.message:
-        await call.message.edit_text("Главное меню 👇", reply_markup=main_menu_kb())
+        await edit_text_safe(call, "Главное меню 👇", reply_markup=main_menu_kb())
     await call.answer()
 
 
@@ -390,7 +390,8 @@ async def extra_open(call: CallbackQuery, session: AsyncSession) -> None:
         table_html = _table(plans)
 
         if call.message:
-            await call.message.edit_text(
+            await edit_text_safe(
+                call,
                 _extra_text(current_name, remaining_video, remaining_photo, table_html),
                 reply_markup=extra_menu_kb(current_name),
                 parse_mode="HTML",
@@ -423,7 +424,8 @@ async def extra_want(call: CallbackQuery, session: AsyncSession) -> None:
         return
 
     if call.message:
-        await call.message.edit_text(
+        await edit_text_safe(
+            call,
             _pitch(plan_name, plan),
             reply_markup=extra_buy_kb(plan_name),
             parse_mode="HTML",
@@ -481,9 +483,7 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
     pay_method = 13 if call.data.endswith(":crypto") else 2
 
     if call.message:
-        await call.message.edit_text(
-            "🔥 Супер! Сейчас подготовлю оплату…", parse_mode="HTML"
-        )
+        await edit_text_safe(call, "🔥 Супер! Сейчас подготовлю оплату…", parse_mode="HTML")
 
     try:
         data = await client.create_payment_link(
@@ -500,7 +500,8 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
             call.from_user.id,
         )
         if call.message:
-            await call.message.edit_text(
+            await edit_text_safe(
+                call,
                 "Не удалось создать оплату 😕\n\nПопробуй ещё раз чуть позже.",
                 reply_markup=extra_buy_kb(plan_name),
                 parse_mode="HTML",
@@ -518,7 +519,8 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
             data,
         )
         if call.message:
-            await call.message.edit_text(
+            await edit_text_safe(
+                call,
                 "Платёжный сервис вернул некорректный ответ 😕",
                 reply_markup=extra_buy_kb(plan_name),
                 parse_mode="HTML",
@@ -536,7 +538,8 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
     )
 
     if call.message:
-        await call.message.edit_text(
+        await edit_text_safe(
+            call,
             "✅ Готово!\n\n"
             "1) Нажми <b>Оплатить</b>\n"
             "2) Потом жми <b>Проверить оплату</b> (если не активировалось сразу)\n\n"
@@ -600,7 +603,8 @@ async def extra_check_payment(call: CallbackQuery, session: AsyncSession) -> Non
         await mark_payment_status(session, payment, PaymentStatus.CONFIRMED)
 
         if call.message:
-            await call.message.edit_text(
+            await edit_text_safe(
+                call,
                 "✅ Оплата подтверждена! Пакет активирован 🎉",
                 reply_markup=main_menu_kb(),
                 parse_mode="HTML",
