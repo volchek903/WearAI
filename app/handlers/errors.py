@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from aiogram import Router
-from aiogram.types import CallbackQuery, Message, Update
+from aiogram.types import CallbackQuery, Message
 
 from app.keyboards.menu import main_menu_kb
 from app.utils.tg_edit import edit_text_safe
@@ -13,9 +13,10 @@ logger = logging.getLogger(__name__)
 
 
 @router.error()
-async def global_error_handler(update: Update, exception: Exception):
+async def global_error_handler(event, exception: Exception):
     try:
-        if update.callback_query:
+        update = getattr(event, "update", None)
+        if update and getattr(update, "callback_query", None):
             call: CallbackQuery = update.callback_query
             await edit_text_safe(
                 call,
@@ -26,7 +27,7 @@ async def global_error_handler(update: Update, exception: Exception):
             )
             await call.answer()
             return True
-        if update.message:
+        if update and getattr(update, "message", None):
             msg: Message = update.message
             await msg.answer(
                 "Что‑то пошло не так 😔\n"
