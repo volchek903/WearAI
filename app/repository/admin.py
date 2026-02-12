@@ -23,7 +23,7 @@ async def get_users_stats(session: AsyncSession) -> tuple[int, int, int, int]:
 
     active_subs = await session.scalar(
         select(func.count(func.distinct(UserSubscription.user_id))).where(
-            UserSubscription.status == "active"
+            UserSubscription.status == 1
         )
     )
 

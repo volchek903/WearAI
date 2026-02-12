@@ -7,6 +7,24 @@ from dataclasses import dataclass
 
 import httpx
 
+PAID_STATUSES = {
+    "CONFIRMED",
+    "PAID",
+    "SUCCESS",
+    "SUCCEEDED",
+    "COMPLETED",
+    "APPROVED",
+}
+CANCELED_STATUSES = {
+    "CANCELED",
+    "CANCELLED",
+    "FAILED",
+    "DECLINED",
+    "EXPIRED",
+    "REJECTED",
+}
+CHARGEBACK_STATUSES = {"CHARGEBACK", "REFUNDED", "REFUND"}
+
 
 @dataclass
 class PlategaConfig:
@@ -64,7 +82,29 @@ class PlategaClient:
             )
         if r.status_code != 200:
             return None
-        return (r.json() or {}).get("status")
+        data = r.json() or {}
+        status = data.get("status")
+        if not status and isinstance(data.get("transaction"), dict):
+            status = data["transaction"].get("status")
+        if not status and isinstance(data.get("data"), dict):
+            data_obj = data["data"]
+            status = data_obj.get("status")
+            if not status and isinstance(data_obj.get("transaction"), dict):
+                status = data_obj["transaction"].get("status")
+        return str(status) if status else None
+
+
+def normalize_payment_status(raw_status: str | None) -> str | None:
+    if not raw_status:
+        return None
+    s = str(raw_status).strip().upper()
+    if s in PAID_STATUSES:
+        return "CONFIRMED"
+    if s in CHARGEBACK_STATUSES:
+        return "CHARGEBACK"
+    if s in CANCELED_STATUSES:
+        return "CANCELED"
+    return s
 
 
 def build_platega_client() -> PlategaClient:
