@@ -23,7 +23,8 @@ async def get_users_stats(session: AsyncSession) -> tuple[int, int, int, int]:
 
     active_subs = await session.scalar(
         select(func.count(func.distinct(UserSubscription.user_id))).where(
-            UserSubscription.status == "active"
+            UserSubscription.status == 1,
+            UserSubscription.expires_at > func.now(),
         )
     )
 
@@ -36,6 +37,22 @@ async def get_users_stats(session: AsyncSession) -> tuple[int, int, int, int]:
         int(total_photos or 0),
         int(total_videos or 0),
     )
+
+
+async def get_top_referrers(
+    session: AsyncSession,
+    limit: int = 10,
+) -> list[tuple[int, int, str | None, int]]:
+    result = await session.execute(
+        select(User.id, User.tg_id, User.username, User.referrals_count)
+        .where(User.referrals_count > 0)
+        .order_by(User.referrals_count.desc(), User.id.asc())
+        .limit(limit)
+    )
+    return [
+        (int(uid), int(tg_id), username, int(ref_count or 0))
+        for uid, tg_id, username, ref_count in result.all()
+    ]
 
 
 async def get_all_user_tg_ids(session: AsyncSession) -> list[int]:

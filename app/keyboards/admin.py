@@ -6,6 +6,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 class AdminCallbacks:
     STATS = "admin:stats"
+    REFERRALS = "admin:referrals"
     USERS = "admin:users"
     USERS_PAGE = "admin:users:page"
     ACCESS = "admin:access"
@@ -44,6 +45,7 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
 
     kb.button(text="📊 Статистика", callback_data=AdminCallbacks.STATS)
+    kb.button(text="🤝 Рефералы", callback_data=AdminCallbacks.REFERRALS)
     kb.button(text="👥 Пользователи", callback_data=AdminCallbacks.USERS)
     kb.button(text="🎟 Промокоды", callback_data=AdminCallbacks.PROMO)
     kb.button(text="📣 Рассылка", callback_data=AdminCallbacks.BROADCAST)
