@@ -31,20 +31,21 @@ async def send_content_photo(
     reply_markup: InlineKeyboardMarkup | None = None,
     parse_mode: str | None = None,
 ) -> None:
+    kwargs = {"reply_markup": reply_markup}
+    if parse_mode is not None:
+        kwargs["parse_mode"] = parse_mode
+
     try:
         path = _content_dir() / filename
         data = path.read_bytes()
         file = BufferedInputFile(data, filename=filename)
         if len(data) > TG_MAX_PHOTO_BYTES:
-            await message.answer_document(
-                file, caption=caption, reply_markup=reply_markup, parse_mode=parse_mode
-            )
+            await message.answer_document(file, caption=caption, **kwargs)
             return
         await message.answer_photo(
             file,
             caption=caption,
-            reply_markup=reply_markup,
-            parse_mode=parse_mode,
+            **kwargs,
         )
     except Exception as e:
         logger.warning("send_content_photo failed: %s", e)
@@ -69,7 +70,10 @@ async def send_content_album(
         for i, f in enumerate(files):
             cap = caption if i == 0 else None
             try:
-                await message.answer_document(f, caption=cap, parse_mode=parse_mode)
+                doc_kwargs = {}
+                if parse_mode is not None:
+                    doc_kwargs["parse_mode"] = parse_mode
+                await message.answer_document(f, caption=cap, **doc_kwargs)
             except Exception as e:
                 logger.warning("send_content_album document failed: %s", e)
         return
@@ -81,7 +85,7 @@ async def send_content_album(
                 InputMediaPhoto(
                     media=f,
                     caption=caption,
-                    parse_mode=parse_mode,
+                    **({"parse_mode": parse_mode} if parse_mode is not None else {}),
                 )
             )
         else:

@@ -25,6 +25,7 @@ from app.repository.payments import (
     apply_plan_to_user,
 )
 from app.models.payment import PaymentStatus
+from app.services.platega import normalize_payment_status
 from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_photo
 
@@ -84,8 +85,23 @@ async def _platega_get_status(tx_id: str) -> str | None:
         return None
 
     status = data.get("status")
-    logger.info("start._platega_get_status: tx_id=%s status=%s", tx_id, status)
-    return status
+    if not status and isinstance(data.get("transaction"), dict):
+        status = data["transaction"].get("status")
+    if not status and isinstance(data.get("data"), dict):
+        data_obj = data["data"]
+        status = data_obj.get("status")
+        if not status and isinstance(data_obj.get("transaction"), dict):
+            status = data_obj["transaction"].get("status")
+
+    raw_status = str(status) if status else None
+    normalized = normalize_payment_status(raw_status)
+    logger.info(
+        "start._platega_get_status: tx_id=%s raw_status=%s normalized=%s",
+        tx_id,
+        raw_status,
+        normalized,
+    )
+    return normalized
 
 
 @router.message(CommandStart())

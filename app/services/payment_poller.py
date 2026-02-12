@@ -14,7 +14,7 @@ from app.repository.payments import (
     mark_payment_status,
     apply_plan_to_user,
 )
-from app.services.platega import build_platega_client
+from app.services.platega import build_platega_client, normalize_payment_status
 
 logger = logging.getLogger(__name__)
 
@@ -85,15 +85,17 @@ async def run_payment_poller(
                             )
                             continue
 
-                        status = await client.get_transaction_status(
+                        raw_status = await client.get_transaction_status(
                             p.platega_transaction_id
                         )
+                        status = normalize_payment_status(raw_status)
 
                         logger.info(
-                            "payment_poller: check payment_id=%s tx_id=%s tg_id=%s status=%s",
+                            "payment_poller: check payment_id=%s tx_id=%s tg_id=%s raw_status=%s normalized=%s",
                             p.id,
                             p.platega_transaction_id,
                             tg_id,
+                            raw_status,
                             status,
                         )
 

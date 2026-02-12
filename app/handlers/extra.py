@@ -46,6 +46,7 @@ from app.repository.payments import (
     apply_plan_to_user,
 )
 from app.utils.tg_edit import edit_text_safe
+from app.services.platega import normalize_payment_status
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -135,7 +136,16 @@ class PlategaClient:
             )
             return None
 
-        return data.get("status")
+        status = data.get("status")
+        if not status and isinstance(data.get("transaction"), dict):
+            status = data["transaction"].get("status")
+        if not status and isinstance(data.get("data"), dict):
+            data_obj = data["data"]
+            status = data_obj.get("status")
+            if not status and isinstance(data_obj.get("transaction"), dict):
+                status = data_obj["transaction"].get("status")
+
+        return str(status) if status else None
 
 
 def build_platega_client() -> PlategaClient:
@@ -444,6 +454,9 @@ async def extra_back(call: CallbackQuery, session: AsyncSession) -> None:
             ExtraCallbacks.BUY_ORBIT,
             ExtraCallbacks.BUY_NOVA,
             ExtraCallbacks.BUY_COSMIC,
+            ExtraCallbacks.BUY_ORBIT_CARD,
+            ExtraCallbacks.BUY_NOVA_CARD,
+            ExtraCallbacks.BUY_COSMIC_CARD,
             ExtraCallbacks.BUY_ORBIT_CRYPTO,
             ExtraCallbacks.BUY_NOVA_CRYPTO,
             ExtraCallbacks.BUY_COSMIC_CRYPTO,
@@ -453,11 +466,13 @@ async def extra_back(call: CallbackQuery, session: AsyncSession) -> None:
 async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
     if call.data in {
         ExtraCallbacks.BUY_ORBIT,
+        ExtraCallbacks.BUY_ORBIT_CARD,
         ExtraCallbacks.BUY_ORBIT_CRYPTO,
     }:
         plan_name = "Orbit"
     elif call.data in {
         ExtraCallbacks.BUY_NOVA,
+        ExtraCallbacks.BUY_NOVA_CARD,
         ExtraCallbacks.BUY_NOVA_CRYPTO,
     }:
         plan_name = "Nova"
@@ -480,7 +495,12 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
         return
     payload = {"tgUserId": call.from_user.id, "planName": plan.name}
 
-    pay_method = 13 if call.data.endswith(":crypto") else 2
+    if call.data.endswith(":crypto"):
+        pay_method = 13
+    elif call.data.endswith(":card"):
+        pay_method = 11
+    else:
+        pay_method = 2
 
     if call.message:
         await edit_text_safe(call, "🔥 Супер! Сейчас подготовлю оплату…", parse_mode="HTML")
@@ -586,13 +606,15 @@ async def extra_check_payment(call: CallbackQuery, session: AsyncSession) -> Non
         logger.exception("extra_check_payment: platega client init failed")
         await call.answer("Платёжный сервис не настроен", show_alert=True)
         return
-    status = await client.get_transaction_status(payment.platega_transaction_id)
+    raw_status = await client.get_transaction_status(payment.platega_transaction_id)
+    status = normalize_payment_status(raw_status)
 
     logger.info(
-        "extra_check_payment: payment_id=%s tx_id=%s tg_id=%s status=%s",
+        "extra_check_payment: payment_id=%s tx_id=%s tg_id=%s raw_status=%s normalized=%s",
         payment.id,
         payment.platega_transaction_id,
         payment_tg_id,
+        raw_status,
         status,
     )
 
