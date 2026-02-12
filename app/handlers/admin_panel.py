@@ -19,7 +19,12 @@ from app.keyboards.admin import (
     admin_promo_kb,
 )
 from app.keyboards.confirm import yes_no_kb, ConfirmCallbacks
-from app.repository.admin import is_admin, get_users_page, get_users_stats
+from app.repository.admin import (
+    is_admin,
+    get_users_page,
+    get_users_stats,
+    get_top_referrers,
+)
 from app.repository.admin_actions import log_admin_action
 from app.repository.promo import create_promo_code, get_last_promo_codes, PromoError
 from app.states.admin import AdminPromoFSM
@@ -77,6 +82,27 @@ async def admin_stats(call: CallbackQuery, session: AsyncSession) -> None:
         f"🖼️ Сгенерировано фото: <code>{total_photos}</code>\n"
         f"🎬 Сгенерировано видео: <code>{total_videos}</code>"
     )
+
+    await edit_text_safe(call, text, reply_markup=admin_menu_kb())
+    await call.answer()
+
+
+@router.callback_query(F.data == AdminCallbacks.REFERRALS)
+async def admin_referrals(call: CallbackQuery, session: AsyncSession) -> None:
+    if not await _ensure_admin(call, session, "admin_panel.referrals"):
+        return
+
+    rows = await get_top_referrers(session, limit=10)
+    if not rows:
+        text = "🤝 <b>Рефералы</b>\n\nПока нет пользователей с приглашениями."
+    else:
+        lines: list[str] = []
+        for idx, (uid, tg_id, username, ref_count) in enumerate(rows, start=1):
+            uname = f"@{username}" if username else "-"
+            lines.append(
+                f"{idx}. id={uid} tg={tg_id} {uname} — приглашено: <code>{ref_count}</code>"
+            )
+        text = "🤝 <b>Топ-10 по рефералам</b>\n\n" + "\n".join(lines)
 
     await edit_text_safe(call, text, reply_markup=admin_menu_kb())
     await call.answer()

@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 from aiogram import Router, F
+from aiogram.exceptions import TelegramForbiddenError
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -238,23 +239,33 @@ async def broadcast_confirm(
 
     users = await get_all_user_tg_ids(session)
     sent = 0
+    blocked = 0
     failed = 0
 
     for tg_id in users:
         try:
             await _send_payload(call.bot, tg_id, payload)
             sent += 1
+        except TelegramForbiddenError:
+            blocked += 1
+            logger.info("BROADCAST_BLOCKED tg_id=%s", tg_id)
         except Exception as e:
             failed += 1
             logger.warning("BROADCAST_FAIL tg_id=%s err=%s", tg_id, e)
         await asyncio.sleep(0.03)
 
     await state.clear()
+    report_text = (
+        "✅ Рассылка завершена.\n\n"
+        f"Отправлено: {sent}\n"
+        f"Заблокировали бота: {blocked}\n"
+        f"Ошибок: {failed}"
+    )
+
     await edit_text_safe(
         call,
-        f"✅ Рассылка завершена.\n\n"
-        f"Отправлено: {sent}\n"
-        f"Ошибок: {failed}",
+        report_text,
         reply_markup=admin_menu_kb(),
     )
+    await call.bot.send_message(call.from_user.id, report_text)
     await call.answer()
