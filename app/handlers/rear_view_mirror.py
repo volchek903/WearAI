@@ -8,7 +8,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.keyboards.menu import MenuCallbacks, SettingsCallbacks, photo_menu_kb
+from app.keyboards.confirm import ConfirmCallbacks, yes_no_kb
+from app.keyboards.menu import MenuCallbacks, photo_menu_kb
 from app.repository.generations import (
     NoGenerationsLeft,
     charge_photo_generation,
@@ -16,23 +17,31 @@ from app.repository.generations import (
     refund_photo_generation,
 )
 from app.repository.users import increment_generated_photos, upsert_user
-from app.services.album_collector import AlbumCollector
 from app.services.generation import generate_image_kie_from_telegram
 from app.services.kie_ai import KieAIError
-from app.states.nano_banana_flow import NanoBananaFlow
+from app.states.rear_view_mirror_flow import RearViewMirrorFlow
 from app.utils.kie_errors import kie_error_to_user_text
-from app.utils.progress_bar import (
-    progress_initial_text,
-    progress_loop,
-    stop_progress,
-)
+from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.tg_edit import edit_text_safe
 from app.utils.tg_send import send_image_smart
-from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 
 router = Router()
 logger = logging.getLogger(__name__)
-_album = AlbumCollector(debounce_seconds=0.8)
+
+_PROMPT = (
+    "Create a vertical 9:16 iPhone wallpaper image. "
+    "Use the exact car from the reference — do not change model, shape, proportions, "
+    "wheels, or identity. "
+    "Foreground: realistic side rear-view mirror, slightly angled. "
+    "In the mirror: the same car drifting toward camera, front-facing, centered. "
+    "Background: dark, blurred winter night road with minimal distractions. "
+    "Snowy asphalt, ice, light cinematic snowfall. "
+    "The car is drifting with turned front wheels, rear sliding, snow spray from tires, "
+    "sharp focus. Headlights on, bright, cold blue-gray tones with warm light contrast. "
+    "Photorealistic automotive style, ultra-detailed, high contrast, 4K, clean wallpaper "
+    "composition with empty upper space."
+)
+
 
 async def _update_progress_message(msg: Message, text: str) -> None:
     try:
@@ -41,93 +50,81 @@ async def _update_progress_message(msg: Message, text: str) -> None:
         return
 
 
-@router.callback_query(
-    F.data.in_({MenuCallbacks.NANO_BANANA, SettingsCallbacks.NANO_BANANA})
-)
-async def start_nano_banana(
+@router.callback_query(F.data == MenuCallbacks.REAR_VIEW_MIRROR)
+async def start_rear_view_mirror(
     call: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
     await call.answer()
     await upsert_user(session, call.from_user.id, call.from_user.username)
-
     await state.clear()
-    await state.set_state(NanoBananaFlow.photos)
+    await state.set_state(RearViewMirrorFlow.photo)
 
     if call.message:
         await edit_text_safe(
             call,
-            "🍌 nano-banano\n\n"
-            "Пришли от 1 до 8 фото одним сообщением (альбомом) 📸",
+            "🪞 <b>Зеркало заднего вида</b>\n\nПришли одно фото машины 📸",
             reply_markup=None,
+            parse_mode="HTML",
         )
 
 
-@router.message(NanoBananaFlow.photos)
-async def nano_banana_photos_in(message: Message, state: FSMContext) -> None:
-    if not message.photo:
-        await message.answer(
-            "Нужно отправить <b>от 1 до 8 фото</b> одним сообщением (альбомом) 📸"
-        )
-        return
-
-    if not message.media_group_id:
-        file_id = message.photo[-1].file_id
-        await state.update_data(photos=[file_id])
-        await state.set_state(NanoBananaFlow.prompt)
-        await message.answer("Отлично! Теперь пришли промпт ✍️")
-        return
-
-    await _album.push(
-        message.chat.id, message.media_group_id, message.photo[-1].file_id
-    )
-    result = await _album.collect(message.chat.id, message.media_group_id)
-    if not result.file_ids:
-        return
-
-    if not (1 <= len(result.file_ids) <= 8):
-        await message.answer(
-            "Ой, тут должно быть <b>от 1 до 8 фото</b> одним сообщением. Попробуй ещё раз 📸"
-        )
-        return
-
-    await state.update_data(photos=result.file_ids)
-    await state.set_state(NanoBananaFlow.prompt)
-    await message.answer("Отлично! Теперь пришли промпт ✍️")
-
-
-@router.message(NanoBananaFlow.prompt)
-async def nano_banana_prompt_in(
-    message: Message, state: FSMContext, session: AsyncSession
+@router.message(RearViewMirrorFlow.photo)
+async def rear_view_mirror_photo_in(
+    message: Message, state: FSMContext
 ) -> None:
-    if not message.text or not message.text.strip():
-        await message.answer("Нужен текст промпта ✍️ Отправь, пожалуйста, сообщение.")
+    if not message.photo:
+        await message.answer("Нужно одно фото машины 📸 Отправь, пожалуйста, изображение.")
         return
 
-    prompt = message.text.strip()
-    if is_text_too_long(prompt):
-        await message.answer(
-            f"Ой, текст слишком длинный 😅\n"
-            f"Максимум {MAX_TEXT_LEN} символов, а у тебя {len(prompt)}.\n"
-            "Сократи, пожалуйста, и отправь ещё раз 🙌"
+    file_id = message.photo[-1].file_id
+    await state.update_data(photo_id=file_id)
+    await state.set_state(RearViewMirrorFlow.confirm)
+
+    await message.answer_photo(
+        file_id,
+        caption="Генерировать с этой машиной?",
+        reply_markup=yes_no_kb(
+            yes_text="✅ Да, всё верно",
+            no_text="❌ Нет",
+            no_style="danger",
+        ),
+    )
+
+
+@router.callback_query(RearViewMirrorFlow.confirm, F.data == ConfirmCallbacks.NO)
+async def rear_view_mirror_cancel(call: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    if call.message:
+        await edit_text_safe(
+            call,
+            "Хорошо, вернул в меню фото 👇",
+            reply_markup=photo_menu_kb(),
         )
-        return
+    await call.answer()
 
+
+@router.callback_query(RearViewMirrorFlow.confirm, F.data == ConfirmCallbacks.YES)
+async def rear_view_mirror_confirm(
+    call: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
     data = await state.get_data()
-    photos: list[str] = data.get("photos", []) or []
-    if not photos:
-        await message.answer(
-            "Не вижу фото для генерации 😅 Давай начнём заново: /start"
-        )
+    file_id = data.get("photo_id")
+    if not file_id:
         await state.clear()
+        await call.answer("Фото не найдено 😕", show_alert=True)
         return
 
-    progress_msg = await message.answer(progress_initial_text())
+    if call.message is None:
+        await call.answer()
+        return
+
+    progress_msg = await call.message.answer(progress_initial_text())
     stop = asyncio.Event()
     progress_task = asyncio.create_task(
         progress_loop(lambda t: _update_progress_message(progress_msg, t), stop)
     )
 
-    user = await upsert_user(session, message.from_user.id, message.from_user.username)
+    user = await upsert_user(session, call.from_user.id, call.from_user.username)
     tg_id = user.tg_id
 
     await ensure_default_subscription(session, tg_id)
@@ -147,12 +144,13 @@ async def nano_banana_prompt_in(
     sent_any = False
     try:
         results = await generate_image_kie_from_telegram(
-            bot=message.bot,
+            bot=call.bot,
             session=session,
             tg_id=tg_id,
-            prompt=prompt,
-            telegram_photo_file_ids=photos,
-            max_images=8,
+            prompt=_PROMPT,
+            telegram_photo_file_ids=[file_id],
+            aspect_ratio="9:16",
+            max_images=1,
         )
 
         if not results:
@@ -162,30 +160,30 @@ async def nano_banana_prompt_in(
         await edit_text_safe(progress_msg, "✅ Готово! Отправляю результат…")
 
         for filename, img_bytes in results:
-            await send_image_smart(
-                message, img_bytes=img_bytes, filename=filename
-            )
+            await send_image_smart(call.message, img_bytes=img_bytes, filename=filename)
             sent_any = True
 
         await increment_generated_photos(session=session, tg_id=tg_id, delta=1)
         await state.clear()
-        await message.answer(
+        await call.message.answer(
             "Хотите ли что-то ещё сгенерировать?",
             reply_markup=photo_menu_kb(),
         )
+        await call.answer()
         return
 
     except KieAIError as e:
-        logger.warning("KIE rejected/failed: %s", e)
+        logger.warning("REAR_VIEW_MIRROR generation failed: %s", e)
         if not sent_any:
             await refund_photo_generation(session, tg_id)
         await stop_progress(stop, progress_task)
         await edit_text_safe(progress_msg, kie_error_to_user_text(e))
         await state.clear()
+        await call.answer()
         return
 
     except Exception as e:
-        logger.exception("NANO_BANANA generation failed: %s", e)
+        logger.exception("REAR_VIEW_MIRROR generation failed: %s", e)
         if not sent_any:
             await refund_photo_generation(session, tg_id)
         await stop_progress(stop, progress_task)
@@ -196,4 +194,5 @@ async def nano_banana_prompt_in(
             reply_markup=photo_menu_kb(),
         )
         await state.clear()
+        await call.answer()
         return

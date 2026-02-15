@@ -12,7 +12,6 @@ from aiogram.types import Message, CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.menu import main_menu_kb, MenuCallbacks
-from app.keyboards.help import help_choose_kb
 from app.repository.users import get_or_create_user
 from app.repository.referrals import parse_referrer_tg_id, process_referral_for_new_user
 from app.repository.photo_settings import ensure_photo_settings
@@ -209,22 +208,17 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) 
             "— <b>Примерить одежду</b>: пришли своё фото 🤳, выбери часть тела 🎯, пришли фото вещи 📦 и подтверди.\n\n"
             "🎬 <b>Работа с видео</b>\n"
             "— <b>Оживить видео</b>: загрузи фото и напиши, что должно происходить в видео.\n\n"
-            "🪄 <b>Помочь с описанием</b> — подскажу, как лучше написать промпт.\n"
+            "🧩 <b>Шаблоны</b>\n"
+            "— <b>Шаблоны с машинами</b>\n"
+            "— <b>Шаблоны для двоих</b>\n"
+            "— <b>Шаблоны для одного</b>\n\n"
             "✨ <b>Доп. возможности</b> — пакеты генераций и оплата.\n"
             "❓ <b>FAQ</b> — ответы, инструкции и реферальная система.\n"
             "⚙️ <b>Настройки</b> — параметры генерации фото.\n\n"
+            "<b>Приглашай друзей и получай подписки бесплатно!</b>\n"
+            "Промокоды на генерации — в официальном канале бота или в рассылке внутри бота.\n\n"
             "Выбирай режим ниже 👇✨"
         ),
         reply_markup=main_menu_kb(),
         parse_mode="HTML",
     )
-
-
-@router.callback_query(F.data == MenuCallbacks.HELP)
-async def menu_help(call: CallbackQuery) -> None:
-    await edit_text_safe(
-        call,
-        "Конечно! 😊\n\nЧто будем генерировать? 👇",
-        reply_markup=help_choose_kb(),
-    )
-    await call.answer()

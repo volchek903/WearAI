@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.menu import MenuCallbacks
 from app.keyboards.confirm import yes_no_tryon_kb_with_help, ConfirmCallbacks
-from app.keyboards.help import help_button_kb
 from app.keyboards.menu import photo_menu_kb
 from app.keyboards.feedback import feedback_kb
 from app.repository.users import increment_generated_photos, upsert_user
@@ -34,7 +33,6 @@ from app.utils.progress_bar import (
     progress_loop,
     stop_progress,
 )
-from app.utils.content_media import send_content_album
 from app.utils.generated_files import save_generated_image_bytes
 
 
@@ -63,11 +61,7 @@ async def start_tryon_flow(
 
     text = "Поехали! 👕✨\n\nПришли свою фотографию (1 фото) 🤳📸"
     if call.message:
-        await send_content_album(
-            call.message,
-            filenames=["scenario_photo1.jpeg", "scenario_photo2.jpeg"],
-            caption=text,
-        )
+        await edit_text_safe(call, text, reply_markup=None)
 
 
 @router.message(TryOnFlow.user_photo)
@@ -87,7 +81,7 @@ async def user_photo_in(message: Message, state: FSMContext) -> None:
 
     await message.answer(
         "Фото получил ✅😊\n\nТеперь пришли фото вещи (1 фото) 📦📸",
-        reply_markup=help_button_kb("item_photo", text="📦 Как лучше сфоткать вещь?"),
+        reply_markup=None,
     )
 
 
@@ -148,7 +142,7 @@ async def tryon_confirmed_go_prompt(call: CallbackQuery, state: FSMContext) -> N
     await edit_text_safe(
         call,
         TRYON_DESC_EXAMPLE,
-        reply_markup=help_button_kb("tryon_desc", text="🪄 Как лучше написать промпт?"),
+        reply_markup=None,
     )
     await call.answer()
 

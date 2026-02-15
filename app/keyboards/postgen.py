@@ -3,6 +3,8 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from app.keyboards.utils import add_button
+
 
 class PostGenCallbacks:
     PREFIX = "postgen"
@@ -26,15 +28,21 @@ class PostGenCallbacks:
 
 def postgen_feedback_kb(ctx: str = "model") -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="🛠 Сообщить об ошибке", callback_data=PostGenCallbacks.report(ctx))
-    kb.button(text="✅ Всё отлично", callback_data=PostGenCallbacks.ok(ctx))
+    add_button(
+        kb,
+        text="🛠 Сообщить об ошибке",
+        callback_data=PostGenCallbacks.report(ctx),
+    )
+    add_button(kb, text="✅ Всё отлично", callback_data=PostGenCallbacks.ok(ctx))
     kb.adjust(1)
     return kb.as_markup()
 
 
 def postgen_offer_video_kb(ctx: str = "model") -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="⬅️ В меню", callback_data=PostGenCallbacks.menu(ctx))
-    kb.button(text="🎬 Оживить фото", callback_data=PostGenCallbacks.animate(ctx))
+    add_button(
+        kb, text="⬅️ В меню", callback_data=PostGenCallbacks.menu(ctx), style="danger"
+    )
+    add_button(kb, text="🎬 Оживить фото", callback_data=PostGenCallbacks.animate(ctx))
     kb.adjust(1)
     return kb.as_markup()

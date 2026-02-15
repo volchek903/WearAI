@@ -12,3 +12,8 @@ class AdminPromoFSM(StatesGroup):
     video_count = State()
     max_uses = State()
     confirm = State()
+
+
+class AdminPackagesFSM(StatesGroup):
+    waiting_value = State()
+    confirm = State()

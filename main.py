@@ -18,8 +18,9 @@ from app.handlers.feedback import router as feedback_router
 from app.handlers.start import router as start_router
 from app.handlers.scenario_model import router as model_router
 from app.handlers.nano_banana import router as nano_banana_router
+from app.handlers.drift_heart import router as drift_heart_router
+from app.handlers.rear_view_mirror import router as rear_view_mirror_router
 from app.handlers.scenario_tryon import router as tryon_router
-from app.handlers.help import router as help_router
 from app.handlers.settings import router as settings_router
 from app.handlers.animate_photo import router as animate_router
 from app.handlers.menu import router as menu_router
@@ -37,6 +38,7 @@ from app.services.subscription_seed import seed_subscriptions
 from app.services.subscription_expirer import run_subscription_expirer
 from app.services.payment_poller import run_payment_poller  # NEW
 from app.services.admin_log_cleanup import run_admin_log_cleanup
+from app.services.platega_callback import run_platega_callback_server
 from app.utils.tg_logging import install_tg_error_logging
 from app.services.admin_seed import ensure_root_admin
 
@@ -65,6 +67,8 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(menu_router)
     dp.include_router(model_router)
     dp.include_router(nano_banana_router)
+    dp.include_router(drift_heart_router)
+    dp.include_router(rear_view_mirror_router)
     dp.include_router(tryon_router)
     dp.include_router(love_is_router)
     dp.include_router(radar_router)
@@ -77,7 +81,6 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(admin_access_router)
     dp.include_router(referrals_router)
     # Роутеры с более “общими” хендлерами — ниже
-    dp.include_router(help_router)
     dp.include_router(settings_router)
     dp.include_router(errors_router)
 
@@ -121,6 +124,12 @@ async def main() -> None:
         run_subscription_expirer(sessionmaker=session_factory)
     )
     admin_log_cleanup_task = asyncio.create_task(run_admin_log_cleanup())
+    platega_callback_task = asyncio.create_task(
+        run_platega_callback_server(
+            bot=bot,
+            sessionmaker=session_factory,
+        )
+    )
 
     try:
         log.info("Bot started. Polling...")
@@ -129,10 +138,12 @@ async def main() -> None:
         poller_task.cancel()
         expirer_task.cancel()
         admin_log_cleanup_task.cancel()
+        platega_callback_task.cancel()
         try:
             await poller_task
             await expirer_task
             await admin_log_cleanup_task
+            await platega_callback_task
         except asyncio.CancelledError:
             pass
 

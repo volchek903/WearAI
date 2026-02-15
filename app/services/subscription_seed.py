@@ -7,19 +7,19 @@ from app.models.subscription import Subscription
 
 
 PLANS = [
-    # name, days, video, photo, price
-    ("Base", 0, 0, 0, 0),
-    ("Launch", 2, 1, 1, 0),
-    ("Orbit", 30, 20, 28, 2),
-    ("Nova", 30, 100, 84, 3650),
-    ("Cosmic", 30, 200, 334, 9850),
+    # name, days, video, photo, price_rub, price_stars
+    ("Base", 0, 0, 0, 0, 0),
+    ("Launch", 2, 1, 1, 0, 0),
+    ("Orbit", 30, 20, 28, 750, 500),
+    ("Nova", 30, 100, 84, 3650, 3500),
+    ("Cosmic", 30, 200, 334, 9850, 9500),
 ]
 
 
 async def seed_subscriptions(session: AsyncSession) -> None:
     existing = set((await session.execute(select(Subscription.name))).scalars().all())
 
-    for name, days, video, photo, price in PLANS:
+    for name, days, video, photo, price, stars_price in PLANS:
         if name in existing:
             continue
 
@@ -30,6 +30,7 @@ async def seed_subscriptions(session: AsyncSession) -> None:
                 video_generations=video,
                 photo_generations=photo,
                 price=price,
+                stars_price=stars_price,
             )
         )
 

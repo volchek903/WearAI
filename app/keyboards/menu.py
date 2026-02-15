@@ -4,6 +4,7 @@ from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.models.user_photo_settings import UserPhotoSettings
+from app.keyboards.utils import add_button
 
 
 class MenuCallbacks:
@@ -11,11 +12,15 @@ class MenuCallbacks:
     TRYON = "menu:tryon"
     ANIMATE = "menu:animate"
     PHOTO = "menu:photo"
+    PHOTO_CARS = "menu:photo:cars"
+    PHOTO_TWO = "menu:photo:two"
+    PHOTO_ONE = "menu:photo:one"
     VIDEO = "menu:video"
     LOVE_IS = "menu:love_is"
     RADAR = "menu:radar"
     NANO_BANANA = "menu:nano_banana"
-    HELP = "menu:help"
+    DRIFT_HEART = "menu:drift_heart"
+    REAR_VIEW_MIRROR = "menu:rear_view_mirror"
     FAQ = "menu:faq"
     SETTINGS = "menu:settings"
     EXTRA = "menu:extra"
@@ -34,12 +39,11 @@ class SettingsCallbacks:
 def main_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
 
-    kb.button(text="🖼 Работа с фото", callback_data=MenuCallbacks.PHOTO)
-    kb.button(text="🎬 Работа с видео", callback_data=MenuCallbacks.VIDEO)
-    kb.button(text="🪄 Помощь в генерации", callback_data=MenuCallbacks.HELP)
-    kb.button(text="✨ Доп. возможности", callback_data=MenuCallbacks.EXTRA)
-    kb.button(text="❓ Вопросы (FAQ)", callback_data=MenuCallbacks.FAQ)
-    kb.button(text="⚙️ Настройки", callback_data=MenuCallbacks.SETTINGS)
+    add_button(kb, text="🖼 Работа с фото", callback_data=MenuCallbacks.PHOTO)
+    add_button(kb, text="🎬 Работа с видео", callback_data=MenuCallbacks.VIDEO)
+    add_button(kb, text="✨ Доп. возможности", callback_data=MenuCallbacks.EXTRA)
+    add_button(kb, text="❓ Вопросы (FAQ)", callback_data=MenuCallbacks.FAQ)
+    add_button(kb, text="⚙️ Настройки", callback_data=MenuCallbacks.SETTINGS)
 
     kb.adjust(1)
     return kb.as_markup()
@@ -47,20 +51,51 @@ def main_menu_kb() -> InlineKeyboardMarkup:
 
 def photo_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="🍌 nano-banano", callback_data=MenuCallbacks.NANO_BANANA)
-    kb.button(text="🛍️ Модель с товаром", callback_data=MenuCallbacks.MODEL)
-    kb.button(text="🧥 Примерить одежду", callback_data=MenuCallbacks.TRYON)
-    kb.button(text="❤️ ИИ Love is", callback_data=MenuCallbacks.LOVE_IS)
-    kb.button(text="🛰 ИИ Радар", callback_data=MenuCallbacks.RADAR)
-    kb.button(text="⬅️ В меню", callback_data=MenuCallbacks.BACK)
+    add_button(kb, text="🍌 Nano Banano Pro", callback_data=MenuCallbacks.NANO_BANANA)
+    add_button(kb, text="🚗 Шаблоны с машинами", callback_data=MenuCallbacks.PHOTO_CARS)
+    add_button(kb, text="👫 Шаблоны для двоих", callback_data=MenuCallbacks.PHOTO_TWO)
+    add_button(kb, text="🧍‍♂️ Шаблоны для одного", callback_data=MenuCallbacks.PHOTO_ONE)
+    add_button(kb, text="⬅️ В меню", callback_data=MenuCallbacks.BACK, style="danger")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def photo_cars_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    add_button(kb, text="💘 Дрифт сердце", callback_data=MenuCallbacks.DRIFT_HEART)
+    add_button(
+        kb,
+        text="🪞 Зеркало заднего вида",
+        callback_data=MenuCallbacks.REAR_VIEW_MIRROR,
+    )
+    add_button(kb, text="🛰 ИИ Радар", callback_data=MenuCallbacks.RADAR)
+    add_button(kb, text="⬅️ Назад", callback_data=MenuCallbacks.PHOTO, style="danger")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def photo_two_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    add_button(kb, text="❤️ ИИ Love is", callback_data=MenuCallbacks.LOVE_IS)
+    add_button(kb, text="🛰 ИИ Радар", callback_data=MenuCallbacks.RADAR)
+    add_button(kb, text="⬅️ Назад", callback_data=MenuCallbacks.PHOTO, style="danger")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def photo_one_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    add_button(kb, text="🛍️ Модель с товаром", callback_data=MenuCallbacks.MODEL)
+    add_button(kb, text="🧥 Примерить одежду", callback_data=MenuCallbacks.TRYON)
+    add_button(kb, text="⬅️ Назад", callback_data=MenuCallbacks.PHOTO, style="danger")
     kb.adjust(1)
     return kb.as_markup()
 
 
 def video_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="🎬 Оживить видео", callback_data=MenuCallbacks.ANIMATE)
-    kb.button(text="⬅️ В меню", callback_data=MenuCallbacks.BACK)
+    add_button(kb, text="🎬 Оживить видео", callback_data=MenuCallbacks.ANIMATE)
+    add_button(kb, text="⬅️ В меню", callback_data=MenuCallbacks.BACK, style="danger")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -68,21 +103,23 @@ def video_menu_kb() -> InlineKeyboardMarkup:
 def photo_settings_kb(s: UserPhotoSettings) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
 
-    kb.button(
+    add_button(
+        kb,
         text=f"📐 Соотношение: {s.aspect_ratio}",
         callback_data=SettingsCallbacks.ASPECT,
     )
-    kb.button(
+    add_button(
+        kb,
         text=f"🖼 Разрешение: {s.resolution}",
         callback_data=SettingsCallbacks.RESOLUTION,
     )
-    kb.button(
+    add_button(
+        kb,
         text=f"🗂 Формат: {s.output_format}",
         callback_data=SettingsCallbacks.FORMAT,
     )
-    kb.button(text="🍌 nano-banano", callback_data=SettingsCallbacks.NANO_BANANA)
-    kb.button(text="🔄 Сбросить по умолчанию", callback_data=SettingsCallbacks.RESET)
-    kb.button(text="⬅️ Назад", callback_data=SettingsCallbacks.BACK)
+    add_button(kb, text="🔄 Сбросить по умолчанию", callback_data=SettingsCallbacks.RESET)
+    add_button(kb, text="⬅️ Назад", callback_data=SettingsCallbacks.BACK, style="danger")
 
     kb.adjust(1)
     return kb.as_markup()

@@ -113,11 +113,12 @@ async def schedule_free_bonus_reminder(bot: Bot, tg_id: int, delay_s: int = 600)
 
 
 def free_channel_kb():
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    from aiogram.types import InlineKeyboardMarkup
+    from app.keyboards.utils import make_button
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Перейти в канал", url=CHANNEL_URL)],
-            [InlineKeyboardButton(text="✅ Я подписался", callback_data="extra:free:check")],
+            [make_button(text="Перейти в канал", url=CHANNEL_URL)],
+            [make_button(text="✅ Я подписался", callback_data="extra:free:check")],
         ]
     )

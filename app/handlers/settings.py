@@ -21,7 +21,7 @@ from app.repository.photo_settings import (
     update_photo_settings,
     reset_photo_settings,
 )
-from app.repository.users import get_user_by_tg_id
+from app.repository.users import upsert_user
 from app.utils.tg_edit import edit_text_safe
 
 router = Router()
@@ -37,16 +37,18 @@ def render_settings_text(aspect_ratio: str, resolution: str, output_format: str)
     )
 
 
-async def _get_user_db_id(session: AsyncSession, tg_id: int) -> int:
-    user = await get_user_by_tg_id(session, tg_id)
-    if user is None:
-        raise RuntimeError("User not found in DB. Use /start first.")
+async def _get_user_db_id(
+    session: AsyncSession, tg_id: int, username: str | None
+) -> int:
+    user = await upsert_user(session, tg_id, username)
     return user.id
 
 
 @router.callback_query(F.data == MenuCallbacks.SETTINGS)
 async def open_settings(call: CallbackQuery, session: AsyncSession) -> None:
-    user_id = await _get_user_db_id(session, call.from_user.id)
+    user_id = await _get_user_db_id(
+        session, call.from_user.id, call.from_user.username
+    )
     s = await ensure_photo_settings(session, user_id)
 
     await edit_text_safe(
@@ -59,7 +61,9 @@ async def open_settings(call: CallbackQuery, session: AsyncSession) -> None:
 
 @router.callback_query(F.data == SettingsCallbacks.ASPECT)
 async def change_aspect(call: CallbackQuery, session: AsyncSession) -> None:
-    user_id = await _get_user_db_id(session, call.from_user.id)
+    user_id = await _get_user_db_id(
+        session, call.from_user.id, call.from_user.username
+    )
     s = await ensure_photo_settings(session, user_id)
 
     new_value = next_in_cycle(s.aspect_ratio, ASPECT_RATIOS)
@@ -75,7 +79,9 @@ async def change_aspect(call: CallbackQuery, session: AsyncSession) -> None:
 
 @router.callback_query(F.data == SettingsCallbacks.RESOLUTION)
 async def change_resolution(call: CallbackQuery, session: AsyncSession) -> None:
-    user_id = await _get_user_db_id(session, call.from_user.id)
+    user_id = await _get_user_db_id(
+        session, call.from_user.id, call.from_user.username
+    )
     s = await ensure_photo_settings(session, user_id)
 
     new_value = next_in_cycle(s.resolution, RESOLUTIONS)
@@ -91,7 +97,9 @@ async def change_resolution(call: CallbackQuery, session: AsyncSession) -> None:
 
 @router.callback_query(F.data == SettingsCallbacks.FORMAT)
 async def change_format(call: CallbackQuery, session: AsyncSession) -> None:
-    user_id = await _get_user_db_id(session, call.from_user.id)
+    user_id = await _get_user_db_id(
+        session, call.from_user.id, call.from_user.username
+    )
     s = await ensure_photo_settings(session, user_id)
 
     new_value = next_in_cycle(s.output_format, OUTPUT_FORMATS)
@@ -109,7 +117,9 @@ async def change_format(call: CallbackQuery, session: AsyncSession) -> None:
 
 @router.callback_query(F.data == SettingsCallbacks.RESET)
 async def reset(call: CallbackQuery, session: AsyncSession) -> None:
-    user_id = await _get_user_db_id(session, call.from_user.id)
+    user_id = await _get_user_db_id(
+        session, call.from_user.id, call.from_user.username
+    )
     s = await reset_photo_settings(session, user_id)
 
     await edit_text_safe(

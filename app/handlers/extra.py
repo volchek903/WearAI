@@ -10,7 +10,7 @@ import httpx
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, LabeledPrice, PreCheckoutQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +21,7 @@ from app.keyboards.extra import (
     extra_buy_kb,
     extra_pay_poll_kb,
 )
+from app.keyboards.utils import add_button
 from app.services.free_channel_bonus import (
     CHANNEL_URL,
     free_channel_kb,
@@ -176,8 +177,8 @@ def _table(plans: list[Subscription]) -> str:
     by_name = {p.name: p for p in plans}
 
     lines = [
-        "Пакет      Цена (₽)                 Дней   Видео   Фото",
-        "--------------------------------------------------------",
+        "Пакет",
+        "-------------------------------------------------------",
     ]
 
     for name in ORDER:
@@ -185,16 +186,33 @@ def _table(plans: list[Subscription]) -> str:
         if not p:
             continue
 
-        if float(p.price) == 0:
-            price = "Бесплатно"
+        rub_price = int(float(p.price)) if float(p.price) > 0 else 0
+        stars_price = int(getattr(p, "stars_price", 0) or 0)
+
+        if rub_price <= 0 and stars_price <= 0:
+            rub_part = "Бесплатно"
+            stars_part = "Бесплатно"
         else:
-            current_price = int(float(p.price))
-            old_price = int(round(current_price * 1.1))
-            price = f"{current_price} ₽ {_strike(f'{old_price} ₽')}"
+            rub_old = int(round(rub_price * 1.1)) if rub_price > 0 else 0
+            stars_old = int(round(stars_price * 1.1)) if stars_price > 0 else 0
+
+            rub_part = (
+                f"{rub_price} ₽ {_strike(f'{rub_old} ₽')}"
+                if rub_price > 0
+                else "—"
+            )
+            stars_part = (
+                f"{stars_price} ⭐ {_strike(f'{stars_old} ⭐')}"
+                if stars_price > 0
+                else "—"
+            )
         days = "-" if p.duration_days == 0 else str(p.duration_days)
 
+        lines.append(f"{p.name}")
+        lines.append(f"  ₽: {rub_part}")
+        lines.append(f"  ⭐: {stars_part}")
         lines.append(
-            f"{p.name:<10} {price:<24} {days:<5} {p.video_generations:<6} {p.photo_generations:<6}"
+            f"  Дней: {days}  Видео: {p.video_generations}  Фото: {p.photo_generations}"
         )
 
     joined = "\n".join(lines)
@@ -226,11 +244,25 @@ def _pitch(plan_name: str, plan: Subscription) -> str:
         intro = "Воу… <b>Cosmic</b> — уровень «я пришёл забирать рынок» 🤯🌌"
         vibe = "Максимальная свобода: много генераций, можно закрывать линейки товаров без стресса."
 
-    price = (
-        "Бесплатно"
-        if float(plan.price) == 0
-        else f"<b>{int(float(plan.price))} ₽</b>"
-    )
+    rub_price = int(float(plan.price)) if float(plan.price) > 0 else 0
+    stars_price = int(getattr(plan, "stars_price", 0) or 0)
+    if rub_price <= 0 and stars_price <= 0:
+        price = "Бесплатно"
+    else:
+        rub_old = int(round(rub_price * 1.1)) if rub_price > 0 else 0
+        stars_old = int(round(stars_price * 1.1)) if stars_price > 0 else 0
+
+        rub_part = (
+            f"<b>{rub_price} ₽</b> (скидка, было <s>{rub_old} ₽</s>)"
+            if rub_price > 0
+            else "—"
+        )
+        stars_part = (
+            f"<b>{stars_price} ⭐</b> (скидка, было <s>{stars_old} ⭐</s>)"
+            if stars_price > 0
+            else "—"
+        )
+        price = f"{rub_part} / {stars_part}"
     days = (
         "без срока"
         if plan.duration_days == 0
@@ -283,8 +315,8 @@ async def extra_free_info(call: CallbackQuery, state: FSMContext) -> None:
         return
 
     kb = InlineKeyboardBuilder()
-    kb.button(text="Бесплатная генерация", callback_data=ExtraCallbacks.FREE)
-    kb.button(text="Ввести промокод", callback_data=ExtraCallbacks.FREE_PROMO)
+    add_button(kb, text="Бесплатная генерация", callback_data=ExtraCallbacks.FREE)
+    add_button(kb, text="Ввести промокод", callback_data=ExtraCallbacks.FREE_PROMO)
     kb.adjust(1)
 
     await edit_text_safe(
@@ -460,10 +492,21 @@ async def extra_back(call: CallbackQuery, session: AsyncSession) -> None:
             ExtraCallbacks.BUY_ORBIT_CRYPTO,
             ExtraCallbacks.BUY_NOVA_CRYPTO,
             ExtraCallbacks.BUY_COSMIC_CRYPTO,
+            ExtraCallbacks.BUY_ORBIT_STARS,
+            ExtraCallbacks.BUY_NOVA_STARS,
+            ExtraCallbacks.BUY_COSMIC_STARS,
         }
     )
 )
 async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
+    if call.data in {
+        ExtraCallbacks.BUY_ORBIT_STARS,
+        ExtraCallbacks.BUY_NOVA_STARS,
+        ExtraCallbacks.BUY_COSMIC_STARS,
+    }:
+        await extra_buy_stars(call, session)
+        return
+
     if call.data in {
         ExtraCallbacks.BUY_ORBIT,
         ExtraCallbacks.BUY_ORBIT_CARD,
@@ -569,6 +612,87 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
         )
 
     await call.answer()
+
+
+async def extra_buy_stars(call: CallbackQuery, session: AsyncSession) -> None:
+    if call.data == ExtraCallbacks.BUY_ORBIT_STARS:
+        plan_name = "Orbit"
+    elif call.data == ExtraCallbacks.BUY_NOVA_STARS:
+        plan_name = "Nova"
+    else:
+        plan_name = "Cosmic"
+
+    plan = await get_plan(session, plan_name)
+    if not plan:
+        await call.answer("Пакет не найден в базе 😕", show_alert=True)
+        return
+
+    stars_price = int(getattr(plan, "stars_price", 0) or 0)
+    if stars_price <= 0:
+        await call.answer("Оплата Stars недоступна для этого пакета", show_alert=True)
+        return
+
+    payload = f"stars:{plan_name}:{call.from_user.id}"
+    title = f"Пакет {plan.name}"
+    description = (
+        f"{plan.video_generations} видео • {plan.photo_generations} фото"
+    )
+
+    if call.message:
+        await call.message.answer_invoice(
+            title=title,
+            description=description,
+            payload=payload,
+            provider_token="",
+            currency="XTR",
+            prices=[LabeledPrice(label=plan.name, amount=stars_price)],
+        )
+    await call.answer()
+
+
+@router.pre_checkout_query()
+async def stars_pre_checkout(pre_checkout: PreCheckoutQuery) -> None:
+    payload = pre_checkout.invoice_payload or ""
+    if not payload.startswith("stars:"):
+        await pre_checkout.answer(ok=False, error_message="Неверные параметры оплаты.")
+        return
+    await pre_checkout.answer(ok=True)
+
+
+@router.message(F.successful_payment)
+async def stars_success(message: Message, session: AsyncSession) -> None:
+    sp = message.successful_payment
+    if not sp:
+        return
+
+    if (sp.currency or "").upper() != "XTR":
+        return
+
+    payload = sp.invoice_payload or ""
+    if not payload.startswith("stars:"):
+        return
+
+    parts = payload.split(":")
+    if len(parts) < 3:
+        return
+
+    plan_name = parts[1]
+    payload_tg_id = parts[2]
+    tg_id = message.from_user.id
+
+    if payload_tg_id.isdigit() and int(payload_tg_id) != tg_id:
+        return
+
+    plan = await get_plan(session, plan_name)
+    if not plan:
+        await message.answer("Пакет не найден 😕")
+        return
+
+    await apply_plan_to_user(session, tg_id, plan)
+    await message.answer(
+        "✅ Оплата Stars подтверждена! Пакет активирован 🎉",
+        reply_markup=main_menu_kb(),
+    )
 
 
 @router.callback_query(F.data.startswith(ExtraCallbacks.CHECK_PREFIX))

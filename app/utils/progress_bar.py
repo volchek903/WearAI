@@ -34,7 +34,7 @@ async def _safe_update(update: ProgressUpdate, text: str) -> None:
 
 
 async def progress_loop(
-    update: ProgressUpdate, stop: asyncio.Event, interval_s: float = 4.0
+    update: ProgressUpdate, stop: asyncio.Event, interval_s: float = 5.0
 ) -> None:
     for frame in PROGRESS_TO_90:
         if stop.is_set():

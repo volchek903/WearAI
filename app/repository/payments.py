@@ -95,6 +95,13 @@ async def get_payment_by_id(session: AsyncSession, payment_id: int) -> Payment |
     return q.scalar_one_or_none()
 
 
+async def get_payment_by_tx_id(session: AsyncSession, tx_id: str) -> Payment | None:
+    q = await session.execute(
+        select(Payment).where(Payment.platega_transaction_id == tx_id).limit(1)
+    )
+    return q.scalar_one_or_none()
+
+
 async def mark_payment_status(
     session: AsyncSession, payment: Payment, status: PaymentStatus
 ) -> None:

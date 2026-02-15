@@ -3,6 +3,8 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from app.keyboards.utils import add_button
+
 FAQ_BACK_CB = "faq:back"
 FAQ_REFERRAL_CB = "faq:referral"
 
@@ -17,14 +19,14 @@ ARTICLE_DONATION_URL = "https://telegra.ph/Wear-AI-popolnenie-i-podpiska-kak-dob
 def faq_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
 
-    kb.button(text="📘 Как избежать ошибок генерации", url=ARTICLE_GUIDE_URL)
-    kb.button(text="💳 Пополнение и подписка", url=ARTICLE_DONATION_URL)
-    kb.button(text="🤝 Реферальная система", callback_data=FAQ_REFERRAL_CB)
+    add_button(kb, text="📘 Как избежать ошибок генерации", url=ARTICLE_GUIDE_URL)
+    add_button(kb, text="💳 Пополнение и подписка", url=ARTICLE_DONATION_URL)
+    add_button(kb, text="🤝 Реферальная система", callback_data=FAQ_REFERRAL_CB)
 
-    kb.button(text="🔒 Политика конфиденциальности", url=PRIVACY_URL)
-    kb.button(text="📄 Пользовательское соглашение", url=TERMS_URL)
-    kb.button(text="💬 Написать менеджеру", url=MANAGER_URL)
-    kb.button(text="⬅️ В меню", callback_data=FAQ_BACK_CB)
+    add_button(kb, text="🔒 Политика конфиденциальности", url=PRIVACY_URL)
+    add_button(kb, text="📄 Пользовательское соглашение", url=TERMS_URL)
+    add_button(kb, text="💬 Написать менеджеру", url=MANAGER_URL)
+    add_button(kb, text="⬅️ В меню", callback_data=FAQ_BACK_CB, style="danger")
 
     kb.adjust(1)
     return kb.as_markup()

@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 from app.keyboards.menu import MenuCallbacks, photo_menu_kb
 from app.keyboards.confirm import yes_no_kb, review_edit_kb, ConfirmCallbacks
-from app.keyboards.help import help_button_kb
 from app.keyboards.feedback import feedback_kb
 from app.repository.users import increment_generated_photos, upsert_user
 
@@ -37,7 +36,6 @@ from app.utils.progress_bar import (
     progress_loop,
     stop_progress,
 )
-from app.utils.content_media import send_content_photo
 
 
 router = Router()
@@ -72,11 +70,11 @@ async def start_model_flow(
     await state.set_state(ModelFlow.model_desc)
 
     if call.message:
-        await send_content_photo(
-            call.message,
-            filename="model_photo.jpeg",
-            caption=MODEL_DESC_EXAMPLE,
-            reply_markup=help_button_kb("model_desc"),
+        await edit_text_safe(
+            call,
+            MODEL_DESC_EXAMPLE,
+            reply_markup=None,
+            parse_mode="HTML",
         )
 
 
@@ -116,7 +114,7 @@ async def model_desc_edit(call: CallbackQuery, state: FSMContext) -> None:
         call,
         "Хорошо 😄 Тогда опиши модель заново 👇\n\n"
         + MODEL_DESC_EXAMPLE.split("\n\n", 1)[1],
-        reply_markup=help_button_kb("model_desc"),
+        reply_markup=None,
     )
     await call.answer()
 
@@ -129,7 +127,7 @@ async def model_desc_confirmed(call: CallbackQuery, state: FSMContext) -> None:
         call,
         "Отлично! Теперь пришли фото товара 📸\n"
         "Можно от 1 до 5 фото за один раз (одним сообщением/альбомом) 🙌",
-        reply_markup=help_button_kb("product_photos", text="📸 Как лучше сфоткать?"),
+        reply_markup=None,
     )
     await call.answer()
 
@@ -150,7 +148,7 @@ async def product_photos_in(message: Message, state: FSMContext) -> None:
         await state.set_state(ModelFlow.presentation_desc)
 
         await message.answer(
-            PRODUCT_ACTION_EXAMPLE, reply_markup=help_button_kb("presentation_desc")
+            PRODUCT_ACTION_EXAMPLE, reply_markup=None
         )
         return
 
@@ -172,7 +170,7 @@ async def product_photos_in(message: Message, state: FSMContext) -> None:
     await state.set_state(ModelFlow.presentation_desc)
 
     await message.answer(
-        PRODUCT_ACTION_EXAMPLE, reply_markup=help_button_kb("presentation_desc")
+        PRODUCT_ACTION_EXAMPLE, reply_markup=None
     )
 
 
@@ -220,7 +218,7 @@ async def review_edit_model(call: CallbackQuery, state: FSMContext) -> None:
         call,
         "Хорошо 😄 Меняем описание модели 👇\n\n"
         + MODEL_DESC_EXAMPLE.split("\n\n", 1)[1],
-        reply_markup=help_button_kb("model_desc"),
+        reply_markup=None,
     )
     await call.answer()
 
@@ -233,7 +231,7 @@ async def review_edit_photos(call: CallbackQuery, state: FSMContext) -> None:
     await edit_text_safe(
         call,
         "Хорошо 😄 Пришли фото товара заново (1–5 фото одним сообщением) 📸",
-        reply_markup=help_button_kb("product_photos", text="📸 Как лучше сфоткать?"),
+        reply_markup=None,
     )
     await call.answer()
 
@@ -247,7 +245,7 @@ async def review_edit_presentation(call: CallbackQuery, state: FSMContext) -> No
         call,
         "Хорошо 😊 Напиши заново, что нужно сделать с товаром 👇\n\n"
         + PRODUCT_ACTION_EXAMPLE,
-        reply_markup=help_button_kb("presentation_desc"),
+        reply_markup=None,
     )
     await call.answer()
 

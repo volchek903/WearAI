@@ -18,6 +18,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.keyboards.menu import MenuCallbacks, photo_menu_kb
 from app.keyboards.love_is import LoveIsCallbacks, love_is_post_kb
+from app.keyboards.utils import add_button
 from app.repository.generations import (
     NoGenerationsLeft,
     charge_photo_generation,
@@ -42,7 +43,6 @@ from app.utils.progress_bar import (
     stop_progress,
 )
 from app.utils.generated_files import save_generated_image_bytes
-from app.utils.content_media import send_content_photo
 from app.utils.kie_kling_client import KieKlingClient
 from app.db.config import settings
 
@@ -63,18 +63,17 @@ async def love_is_start(call: CallbackQuery, state: FSMContext) -> None:
         "Пришли 1–2 фото (лучше: мужчина и женщина) одним сообщением или альбомом 📸"
     )
     if call.message:
-        await send_content_photo(
-            call.message,
-            filename="love_is.jpeg",
-            caption=text,
-            parse_mode="HTML",
+        await edit_text_safe(
+            call,
+            text,
             reply_markup=_back_only_kb(),
+            parse_mode="HTML",
         )
 
 
 def _back_only_kb():
     kb = InlineKeyboardBuilder()
-    kb.button(text="⬅️ В меню", callback_data=MenuCallbacks.BACK)
+    add_button(kb, text="⬅️ В меню", callback_data=MenuCallbacks.BACK, style="danger")
     kb.adjust(1)
     return kb.as_markup()
 

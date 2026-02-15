@@ -26,7 +26,6 @@ from app.utils.progress_bar import progress_initial_text, progress_loop, stop_pr
 from app.utils.tg_edit import edit_text_safe
 from app.utils.tg_send import send_image_smart
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
-from app.utils.content_media import send_content_photo
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -110,8 +109,11 @@ async def radar_entry(
         "Можно 1–8 фото одним сообщением (альбомом) 📸"
     )
     if call.message:
-        await send_content_photo(
-            call.message, filename="radar.png", caption=text, parse_mode="HTML"
+        await edit_text_safe(
+            call,
+            text,
+            reply_markup=None,
+            parse_mode="HTML",
         )
 
 
