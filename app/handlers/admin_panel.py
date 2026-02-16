@@ -30,6 +30,7 @@ from app.repository.admin_actions import log_admin_action
 from app.models.subscription import Subscription
 from app.repository.extra import get_all_plans
 from app.repository.promo import create_promo_code, get_last_promo_codes, PromoError
+from app.repository.referrals import get_top_referrers_last_week
 from app.states.admin import AdminPromoFSM, AdminPackagesFSM
 from app.utils.tg_edit import edit_text_safe
 
@@ -86,6 +87,31 @@ async def admin_stats(call: CallbackQuery, session: AsyncSession) -> None:
         f"🎬 Сгенерировано видео: <code>{total_videos}</code>"
     )
 
+    await edit_text_safe(call, text, reply_markup=admin_menu_kb())
+    await call.answer()
+
+
+@router.callback_query(F.data == AdminCallbacks.TOP_REFERRALS)
+async def admin_top_referrals(call: CallbackQuery, session: AsyncSession) -> None:
+    if not await _ensure_admin(call, session, "admin_panel.top_referrals"):
+        return
+
+    rows = await get_top_referrers_last_week(session, limit=10)
+    if not rows:
+        text = "🏆 <b>Топ рефералов</b>\n\nЗа последние 7 дней нет рефералов."
+        await edit_text_safe(call, text, reply_markup=admin_menu_kb())
+        await call.answer()
+        return
+
+    lines = []
+    for i, r in enumerate(rows, start=1):
+        username = r.get("username")
+        tg_id = r.get("tg_id")
+        count = r.get("count", 0)
+        who = f"@{username}" if username else f"tg_id {tg_id}"
+        lines.append(f"{i}. {who} — {count}")
+
+    text = "🏆 <b>Топ рефералов за 7 дней</b>\n\n" + "\n".join(lines)
     await edit_text_safe(call, text, reply_markup=admin_menu_kb())
     await call.answer()
 
