@@ -12,6 +12,7 @@ class AdminCallbacks:
     USERS_PAGE = "admin:users:page"
     ACCESS = "admin:access"
     BROADCAST = "admin:broadcast"
+    TOP_REFERRALS = "admin:top_referrals"
     PACKAGES = "admin:packages"
     PACKAGE_PICK = "admin:packages:pick"
     PACKAGE_EDIT = "admin:packages:edit"
@@ -63,6 +64,7 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
 
     add_button(kb, text="📊 Статистика", callback_data=AdminCallbacks.STATS)
     add_button(kb, text="👥 Пользователи", callback_data=AdminCallbacks.USERS)
+    add_button(kb, text="🏆 Топ рефералов", callback_data=AdminCallbacks.TOP_REFERRALS)
     add_button(kb, text="📦 Пакеты", callback_data=AdminCallbacks.PACKAGES)
     add_button(kb, text="🎟 Промокоды", callback_data=AdminCallbacks.PROMO)
     add_button(kb, text="📣 Рассылка", callback_data=AdminCallbacks.BROADCAST)
