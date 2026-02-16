@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.keyboards.utils import add_button
@@ -11,14 +11,9 @@ class ReferralCallbacks:
     BACK = "referral:back"
 
 
-def referral_kb() -> InlineKeyboardMarkup:
+def referral_kb(share_text: str) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    add_button(
-        kb,
-        text="📨 Поделиться",
-        callback_data=ReferralCallbacks.SHARE,
-        style="success",
-    )
+    kb.row(InlineKeyboardButton(text="📨 Поделиться", switch_inline_query=share_text))
     add_button(
         kb, text="⬅️ В меню", callback_data=ReferralCallbacks.BACK, style="danger"
     )

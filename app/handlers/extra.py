@@ -1,6 +1,7 @@
 # app/handlers/extra.py
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -10,6 +11,7 @@ import httpx
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message, LabeledPrice, PreCheckoutQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,7 +49,7 @@ from app.repository.payments import (
     apply_plan_to_user,
 )
 from app.utils.tg_edit import edit_text_safe
-from app.services.platega import normalize_payment_status
+from app.services.platega import normalize_payment_status, check_platega_health
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -105,8 +107,11 @@ class PlategaClient:
             "payload": json.dumps(payload, ensure_ascii=False),
         }
 
-        async with httpx.AsyncClient(timeout=20) as client:
-            r = await client.post(url, headers=headers, json=body)
+        async def _do() -> httpx.Response:
+            async with httpx.AsyncClient(timeout=20) as client:
+                return await client.post(url, headers=headers, json=body)
+
+        r = await _with_retries(_do)
 
         r.raise_for_status()
         return r.json()
@@ -115,8 +120,14 @@ class PlategaClient:
         url = f"{self.cfg.base_url.rstrip('/')}/transaction/{tx_id}"
         headers = {"X-MerchantId": self.cfg.merchant_id, "X-Secret": self.cfg.secret}
 
-        async with httpx.AsyncClient(timeout=20) as client:
-            r = await client.get(url, headers=headers)
+        async def _do() -> httpx.Response:
+            async with httpx.AsyncClient(timeout=20) as client:
+                return await client.get(url, headers=headers)
+
+        try:
+            r = await _with_retries(_do)
+        except httpx.HTTPError:
+            return None
 
         if r.status_code != 200:
             logger.warning(
@@ -147,6 +158,26 @@ class PlategaClient:
                 status = data_obj["transaction"].get("status")
 
         return str(status) if status else None
+
+
+async def _with_retries(
+    fn, retries: int = 2, backoff_s: float = 1.5
+) -> httpx.Response:
+    last_exc: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            return await fn()
+        except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError) as e:
+            last_exc = e
+            if attempt >= retries:
+                raise
+            await asyncio.sleep(backoff_s * (attempt + 1))
+        except httpx.HTTPError as e:
+            last_exc = e
+            raise
+    if last_exc:
+        raise last_exc
+    raise RuntimeError("request failed")
 
 
 def build_platega_client() -> PlategaClient:
@@ -295,7 +326,9 @@ async def extra_free_generation(call: CallbackQuery, session: AsyncSession) -> N
 
     if await bonus_already_used(session, call.from_user.id):
         await edit_text_safe(
-            call, "Ты уже получал(а) бесплатную генерацию за подписку ✅"
+            call,
+            "Ты уже получал(а) бесплатную генерацию за подписку ✅",
+            reply_markup=main_menu_kb(),
         )
         await call.answer()
         return
@@ -352,7 +385,6 @@ async def extra_free_promo_code(
         await message.answer("Промокод пустой. Попробуйте ещё раз ✍️")
         return
     await state.clear()
-    await message.answer("Промокод принят. Проверяю…")
 
     try:
         promo = await redeem_promo_code(
@@ -361,10 +393,13 @@ async def extra_free_promo_code(
     except PromoError as e:
         if "исчерпан" in str(e):
             await message.answer(
-                "К сожалению, вы не успели активировать промокод — его уже активировал кто-то другой."
+                "⛔️ Промокод исчерпан — все активации уже использованы."
             )
         else:
-            await message.answer(str(e))
+            await message.answer(
+                "❌ Промокод не найден или уже использован.",
+                reply_markup=main_menu_kb(),
+            )
         return
     except Exception:
         logger.exception("promo redeem failed")
@@ -384,9 +419,21 @@ async def extra_free_check(call: CallbackQuery, session: AsyncSession) -> None:
 
     tg_id = call.from_user.id
     if await bonus_already_used(session, tg_id):
-        await edit_text_safe(
-            call, "Ты уже получал(а) бесплатную генерацию за подписку ✅"
-        )
+        text = "Ты уже получал(а) бесплатную генерацию за подписку ✅"
+        markup = extra_menu_kb(current_plan_name=None)
+        if call.message:
+            try:
+                if call.message.photo or call.message.document or call.message.video or call.message.animation:
+                    await call.message.edit_caption(caption=text, reply_markup=markup)
+                else:
+                    await call.message.edit_text(text, reply_markup=markup)
+            except TelegramBadRequest as e:
+                if "message is not modified" in str(e):
+                    await call.message.edit_reply_markup(reply_markup=markup)
+                else:
+                    await call.message.answer(text, reply_markup=markup)
+        else:
+            await edit_text_safe(call, text, reply_markup=markup)
         await call.answer()
         return
 
@@ -411,6 +458,7 @@ async def extra_free_check(call: CallbackQuery, session: AsyncSession) -> None:
         call,
         "Подписка подтверждена ✅\n"
         "В течение минуты придёт бесплатная генерация.",
+        reply_markup=main_menu_kb(),
     )
     await call.answer()
     await schedule_bonus_grant(call.bot, tg_id, delay_s=60)
@@ -465,11 +513,15 @@ async def extra_want(call: CallbackQuery, session: AsyncSession) -> None:
         await call.answer("Пакет не найден в базе 😕", show_alert=True)
         return
 
+    platega_ok = await check_platega_health()
+    text = _pitch(plan_name, plan)
+    if not platega_ok:
+        text += "\n\n⚠️ Оплата картой/СБП/крипто временно недоступна. Доступна оплата Stars."
     if call.message:
         await edit_text_safe(
             call,
-            _pitch(plan_name, plan),
-            reply_markup=extra_buy_kb(plan_name),
+            text,
+            reply_markup=extra_buy_kb(plan_name, platega_available=platega_ok),
             parse_mode="HTML",
         )
     await call.answer()
@@ -499,6 +551,7 @@ async def extra_back(call: CallbackQuery, session: AsyncSession) -> None:
     )
 )
 async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
+    await call.answer()
     if call.data in {
         ExtraCallbacks.BUY_ORBIT_STARS,
         ExtraCallbacks.BUY_NOVA_STARS,
@@ -529,6 +582,18 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
 
     amount = int(float(plan.price))
     currency = "RUB"
+
+    platega_ok = await check_platega_health()
+    if not platega_ok:
+        if call.message:
+            await edit_text_safe(
+                call,
+                "⚠️ Оплата картой/СБП/крипто временно недоступна.\n"
+                "Попробуй позже или выбери оплату Stars.",
+                reply_markup=extra_buy_kb(plan_name, platega_available=False),
+                parse_mode="HTML",
+            )
+        return
 
     try:
         client = build_platega_client()
@@ -566,7 +631,7 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
             await edit_text_safe(
                 call,
                 "Не удалось создать оплату 😕\n\nПопробуй ещё раз чуть позже.",
-                reply_markup=extra_buy_kb(plan_name),
+                reply_markup=extra_buy_kb(plan_name, platega_available=platega_ok),
                 parse_mode="HTML",
             )
         await call.answer("Ошибка платежного сервиса", show_alert=True)
@@ -585,7 +650,7 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
             await edit_text_safe(
                 call,
                 "Платёжный сервис вернул некорректный ответ 😕",
-                reply_markup=extra_buy_kb(plan_name),
+                reply_markup=extra_buy_kb(plan_name, platega_available=platega_ok),
                 parse_mode="HTML",
             )
         await call.answer("Ошибка ответа Platega", show_alert=True)
@@ -611,7 +676,7 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
             parse_mode="HTML",
         )
 
-    await call.answer()
+    return
 
 
 async def extra_buy_stars(call: CallbackQuery, session: AsyncSession) -> None:

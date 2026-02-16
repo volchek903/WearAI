@@ -9,6 +9,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.menu import MenuCallbacks, SettingsCallbacks, photo_menu_kb
+from app.keyboards.extra import buy_generations_kb
 from app.repository.generations import (
     NoGenerationsLeft,
     charge_photo_generation,
@@ -139,7 +140,7 @@ async def nano_banana_prompt_in(
         await edit_text_safe(
             progress_msg,
             "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
-            reply_markup=photo_menu_kb(),
+            reply_markup=buy_generations_kb(),
         )
         await state.clear()
         return

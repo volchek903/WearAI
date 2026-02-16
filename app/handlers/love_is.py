@@ -17,6 +17,7 @@ from PIL import Image
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.keyboards.menu import MenuCallbacks, photo_menu_kb
+from app.keyboards.extra import buy_generations_kb
 from app.keyboards.love_is import LoveIsCallbacks, love_is_post_kb
 from app.keyboards.utils import add_button
 from app.repository.generations import (
@@ -36,6 +37,7 @@ from app.services.album_collector import AlbumCollector
 from app.services.generation import generate_image_kie_from_telegram
 from app.states.love_is_flow import LoveIsFlow
 from app.utils.tg_edit import edit_text_safe
+from app.utils.content_media import send_content_photo
 from app.utils.tg_send import send_image_smart
 from app.utils.progress_bar import (
     progress_initial_text,
@@ -58,15 +60,18 @@ async def love_is_start(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
     await state.clear()
     await state.set_state(LoveIsFlow.photos)
-    text = (
-        "❤️ <b>ИИ Love is</b>\n\n"
-        "Пришли 1–2 фото (лучше: мужчина и женщина) одним сообщением или альбомом 📸"
-    )
     if call.message:
-        await edit_text_safe(
-            call,
-            text,
-            reply_markup=_back_only_kb(),
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
+        await send_content_photo(
+            call.message,
+            filename="love_is.jpeg",
+            caption=(
+                "❤️ <b>ИИ Love is</b>\n\n"
+                "Пришли 1–2 фото (лучше: мужчина и женщина) одним сообщением или альбомом 📸"
+            ),
             parse_mode="HTML",
         )
 
@@ -132,7 +137,8 @@ async def love_is_text_in(
         await charge_photo_generation(session, tg_id)
     except NoGenerationsLeft:
         await message.answer(
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳"
+            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
+            reply_markup=buy_generations_kb(),
         )
         await state.clear()
         return

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 from app.keyboards.menu import MenuCallbacks, photo_menu_kb
+from app.keyboards.extra import buy_generations_kb
 from app.keyboards.confirm import yes_no_kb, review_edit_kb, ConfirmCallbacks
 from app.keyboards.feedback import feedback_kb
 from app.repository.users import increment_generated_photos, upsert_user
@@ -28,6 +29,7 @@ from app.services.kie_ai import KieAIError
 from app.states.model_flow import ModelFlow
 from app.states.feedback_flow import FeedbackFlow
 from app.utils.tg_edit import edit_text_safe
+from app.utils.content_media import send_content_album
 from app.utils.tg_send import send_image_smart
 from app.utils.kie_errors import kie_error_to_user_text
 from app.utils.generated_files import save_generated_image_bytes
@@ -70,10 +72,15 @@ async def start_model_flow(
     await state.set_state(ModelFlow.model_desc)
 
     if call.message:
-        await edit_text_safe(
-            call,
-            MODEL_DESC_EXAMPLE,
-            reply_markup=None,
+        # Убираем сообщение с welcome.png, чтобы не висело над альбомом
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
+        await send_content_album(
+            call.message,
+            filenames=["model_photo.jpeg", "model_photo1.jpg"],
+            caption=MODEL_DESC_EXAMPLE,
             parse_mode="HTML",
         )
 
@@ -302,7 +309,7 @@ async def review_confirmed(
         await edit_text_safe(
             progress_msg,
             "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
-            reply_markup=review_edit_kb(),
+            reply_markup=buy_generations_kb(),
         )
         return
 

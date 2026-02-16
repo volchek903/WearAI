@@ -14,6 +14,7 @@ from app.repository.payments import (
     mark_payment_status,
     apply_plan_to_user,
 )
+import httpx
 from app.services.platega import build_platega_client, normalize_payment_status
 
 logger = logging.getLogger(__name__)
@@ -133,6 +134,12 @@ async def run_payment_poller(
                             # PENDING / None / неизвестно — ничего не делаем
                             pass
 
+                    except (httpx.TimeoutException, httpx.ConnectError):
+                        logger.warning(
+                            "payment_poller: timeout while processing payment_id=%s tx_id=%s",
+                            getattr(p, "id", None),
+                            getattr(p, "platega_transaction_id", None),
+                        )
                     except Exception:
                         logger.exception(
                             "payment_poller: error while processing payment_id=%s tx_id=%s",

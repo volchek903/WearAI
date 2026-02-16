@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.confirm import ConfirmCallbacks, yes_no_kb
 from app.keyboards.menu import MenuCallbacks, photo_menu_kb
+from app.keyboards.extra import buy_generations_kb
 from app.repository.generations import (
     NoGenerationsLeft,
     charge_photo_generation,
@@ -23,6 +24,7 @@ from app.states.drift_heart_flow import DriftHeartFlow
 from app.utils.kie_errors import kie_error_to_user_text
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.tg_edit import edit_text_safe
+from app.utils.content_media import send_content_photo
 from app.utils.tg_send import send_image_smart
 
 router = Router()
@@ -58,10 +60,14 @@ async def start_drift_heart(
     await state.set_state(DriftHeartFlow.photo)
 
     if call.message:
-        await edit_text_safe(
-            call,
-            "💘 <b>Дрифт сердце</b>\n\nПришли одно фото машины 📸",
-            reply_markup=None,
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
+        await send_content_photo(
+            call.message,
+            filename="love_car.jpeg",
+            caption="💘 <b>Дрифт сердце</b>\n\nПришли одно фото машины 📸",
             parse_mode="HTML",
         )
 
@@ -132,7 +138,7 @@ async def drift_heart_confirm(
         await edit_text_safe(
             progress_msg,
             "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
-            reply_markup=photo_menu_kb(),
+            reply_markup=buy_generations_kb(),
         )
         await state.clear()
         return

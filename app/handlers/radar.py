@@ -9,6 +9,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.menu import MenuCallbacks, photo_menu_kb
+from app.keyboards.extra import buy_generations_kb
 from app.keyboards.confirm import yes_no_kb, ConfirmCallbacks
 from app.repository.generations import (
     NoGenerationsLeft,
@@ -24,6 +25,7 @@ from app.states.radar_flow import RadarFlow
 from app.utils.kie_errors import kie_error_to_user_text
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.tg_edit import edit_text_safe
+from app.utils.content_media import send_content_photo
 from app.utils.tg_send import send_image_smart
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 
@@ -103,16 +105,19 @@ async def radar_entry(
     await state.clear()
     await state.set_state(RadarFlow.photos)
 
-    text = (
-        "🛰 <b>ИИ Радар</b>\n\n"
-        "Пришли фото людей, которые будут в кадре.\n"
-        "Можно 1–8 фото одним сообщением (альбомом) 📸"
-    )
     if call.message:
-        await edit_text_safe(
-            call,
-            text,
-            reply_markup=None,
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
+        await send_content_photo(
+            call.message,
+            filename="radar.jpg",
+            caption=(
+                "🛰 <b>ИИ Радар</b>\n\n"
+                "Пришли фото людей, которые будут в кадре.\n"
+                "Можно 1–8 фото одним сообщением (альбомом) 📸"
+            ),
             parse_mode="HTML",
         )
 
@@ -295,7 +300,7 @@ async def radar_review_confirm(
         await edit_text_safe(
             progress_msg,
             "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
-            reply_markup=photo_menu_kb(),
+            reply_markup=buy_generations_kb(),
         )
         await state.clear()
         return

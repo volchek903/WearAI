@@ -30,9 +30,9 @@ router = Router()
 def render_settings_text(aspect_ratio: str, resolution: str, output_format: str) -> str:
     return (
         "⚙️ Настройки генерации фото\n\n"
-        f"• input.aspect_ratio: <b>{aspect_ratio}</b>\n"
-        f"• resolution: <b>{resolution}</b>\n"
-        f"• output_format: <b>{output_format}</b>\n\n"
+        f"• Соотношение сторон: <b>{aspect_ratio}</b>\n"
+        f"• Разрешение изображения: <b>{resolution}</b>\n"
+        f"• Формат файла: <b>{output_format}</b>\n\n"
         "Нажимай на параметр, чтобы изменить ✨"
     )
 

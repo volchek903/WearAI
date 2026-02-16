@@ -355,7 +355,7 @@ class KieAIClient:
             return payload
 
     async def wait_result_urls(
-        self, task_id: str, *, max_wait_s: int = 600
+        self, task_id: str, *, max_wait_s: int = 180
     ) -> list[str]:
         elapsed = 0
         sleep_s = 2
@@ -392,13 +392,28 @@ class KieAIClient:
         raise KieAIError(f"Task timeout after {max_wait_s}s (taskId={task_id})")
 
     async def download_bytes(self, url: str) -> bytes:
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.get(url)
-            if resp.status_code != 200:
-                raise KieAIError(
-                    f"Download failed [{resp.status_code}]: {resp.text[:2000]}"
-                )
-            return resp.content
+        async def _do() -> httpx.Response:
+            timeout = httpx.Timeout(120.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                return await client.get(url)
+
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                resp = await _do()
+                if resp.status_code != 200:
+                    raise KieAIError(
+                        f"Download failed [{resp.status_code}]: {resp.text[:2000]}"
+                    )
+                return resp.content
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError) as e:
+                last_exc = e
+                await asyncio.sleep(1.5 * (attempt + 1))
+            except httpx.HTTPError as e:
+                last_exc = e
+                break
+
+        raise KieAIError(f"Download failed: {last_exc}")
 
 
 def get_kie_api_key_from_env() -> str:

@@ -17,6 +17,7 @@ KIE_TASK_INFO_URL = "https://api.kie.ai/api/v1/jobs/recordInfo"
 KIE_DOWNLOAD_URL = "https://api.kie.ai/api/v1/common/download-url"
 
 KLING_MODEL = "kling/v2-1-standard"
+KLING_MOTION_CONTROL_MODEL = "kling-2.6/motion-control"
 
 
 @dataclass(slots=True)
@@ -200,6 +201,17 @@ class KieKlingClient:
                 logger.info("KIE upload ok: downloadUrl=%s", download_url)
                 return str(download_url)
 
+    async def upload_video_bytes(
+        self,
+        video_bytes: bytes,
+        filename: str,
+        upload_path: str = "videos/wearai/motion",
+        timeout_s: int = 120,
+    ) -> str:
+        return await self.upload_image_bytes(
+            video_bytes, filename, upload_path=upload_path, timeout_s=timeout_s
+        )
+
     async def create_kling_task(
         self,
         prompt: str,
@@ -253,6 +265,68 @@ class KieKlingClient:
                     raise RuntimeError(f"KIE createTask: no taskId in payload={data}")
 
                 logger.info("KIE createTask ok: taskId=%s", task_id)
+                return str(task_id)
+
+    async def create_motion_control_task(
+        self,
+        *,
+        prompt: str,
+        image_url: str,
+        video_url: str,
+        character_orientation: str = "image",
+        mode: str = "std",
+        timeout_s: int = 60,
+    ) -> str:
+        """
+        Kling 2.6 Motion Control.
+        character_orientation: "image" or "video"
+        mode: "std"(720p) or "pro"(1080p)
+        """
+        payload = {
+            "model": KLING_MOTION_CONTROL_MODEL,
+            "input": {
+                "prompt": prompt,
+                "input_urls": [image_url],
+                "video_urls": [video_url],
+                "character_orientation": character_orientation,
+                "mode": mode,
+            },
+        }
+
+        timeout = aiohttp.ClientTimeout(total=timeout_s)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            logger.info(
+                "KIE motion-control createTask start: model=%s mode=%s prompt_len=%s",
+                KLING_MOTION_CONTROL_MODEL,
+                mode,
+                len(prompt or ""),
+            )
+            async with session.post(
+                KIE_CREATE_TASK_URL,
+                headers=self._headers_json,
+                json=payload,
+            ) as resp:
+                data = await resp.json(content_type=None)
+                if resp.status != 200 or data.get("code") != 200:
+                    logger.error(
+                        "KIE motion-control createTask failed: http=%s payload=%s",
+                        resp.status,
+                        data,
+                    )
+                    raise RuntimeError(
+                        f"KIE motion-control createTask failed: HTTP {resp.status}, payload={data}"
+                    )
+
+                task_id = (data.get("data") or {}).get("taskId")
+                if not task_id:
+                    logger.error(
+                        "KIE motion-control createTask missing taskId: payload=%s", data
+                    )
+                    raise RuntimeError(
+                        f"KIE motion-control createTask: no taskId in payload={data}"
+                    )
+
+                logger.info("KIE motion-control createTask ok: taskId=%s", task_id)
                 return str(task_id)
 
     async def get_task_result(self, task_id: str, timeout_s: int = 30) -> KieTaskResult:

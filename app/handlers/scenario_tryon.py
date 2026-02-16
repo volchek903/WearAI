@@ -10,6 +10,7 @@ from aiogram.types import CallbackQuery, Message, InputMediaPhoto
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.menu import MenuCallbacks
+from app.keyboards.extra import buy_generations_kb
 from app.keyboards.confirm import yes_no_tryon_kb_with_help, ConfirmCallbacks
 from app.keyboards.menu import photo_menu_kb
 from app.keyboards.feedback import feedback_kb
@@ -26,6 +27,7 @@ from app.states.tryon_flow import TryOnFlow
 from app.states.feedback_flow import FeedbackFlow
 from app.utils.kie_errors import kie_error_to_user_text
 from app.utils.tg_edit import edit_text_safe
+from app.utils.content_media import send_content_album
 from app.utils.tg_send import send_image_smart
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 from app.utils.progress_bar import (
@@ -59,9 +61,17 @@ async def start_tryon_flow(
     await state.clear()
     await state.set_state(TryOnFlow.user_photo)
 
-    text = "Поехали! 👕✨\n\nПришли свою фотографию (1 фото) 🤳📸"
     if call.message:
-        await edit_text_safe(call, text, reply_markup=None)
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
+        await send_content_album(
+            call.message,
+            filenames=["scenario_photo1.jpeg", "scenario_photo2.jpeg"],
+            caption="Поехали! 👕✨\n\nПришли свою фотографию (1 фото) 🤳📸",
+            parse_mode="HTML",
+        )
 
 
 @router.message(TryOnFlow.user_photo)
@@ -199,7 +209,8 @@ async def tryon_desc_in(
     except NoGenerationsLeft:
         await stop_progress(stop, progress_task)
         await message.answer(
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳"
+            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
+            reply_markup=buy_generations_kb(),
         )
         return
 

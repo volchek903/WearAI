@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from aiogram import Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message
 
 from app.keyboards.menu import main_menu_kb
@@ -25,7 +26,10 @@ async def global_error_handler(event, exception: Exception | None = None, **kwar
                 "@WearAIManager",
                 reply_markup=main_menu_kb(),
             )
-            await call.answer()
+            try:
+                await call.answer()
+            except TelegramBadRequest:
+                pass
             return True
         if update and getattr(update, "message", None):
             msg: Message = update.message

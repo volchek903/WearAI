@@ -17,8 +17,8 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 INVITE_BAIT_TEXT = (
-    "🔥 Хочешь быстро делать стильные фото товаров и примерки?\n"
-    "WEARAI помогает создавать контент за минуты.\n\n"
+    "🔥 Хочешь делать крутые генерации фото с ИИ?\n"
+    "Заходи и попробуй — есть бесплатные генерации!\n\n"
     "Присоединяйся по моей ссылке 👇"
 )
 
@@ -59,22 +59,9 @@ async def referral_open_from_faq(
     await edit_text_safe(
         call,
         _referral_text(ref_link, count),
-        reply_markup=referral_kb(),
+        reply_markup=referral_kb(f"{INVITE_BAIT_TEXT}\n{ref_link}"),
     )
     await call.answer()
-
-
-@router.callback_query(F.data == ReferralCallbacks.SHARE)
-async def referral_share(call: CallbackQuery, session: AsyncSession) -> None:
-    user, _ = await get_or_create_user(
-        session, call.from_user.id, call.from_user.username
-    )
-    ref_link = await _get_ref_link(call.bot, user.tg_id)
-
-    text = f"{INVITE_BAIT_TEXT}\n{ref_link}"
-    await edit_text_safe(call, text)
-    await call.answer()
-
 
 @router.callback_query(F.data == ReferralCallbacks.BACK)
 async def referral_back(call: CallbackQuery) -> None:

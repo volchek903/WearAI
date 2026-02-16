@@ -20,6 +20,8 @@ from app.handlers.scenario_model import router as model_router
 from app.handlers.nano_banana import router as nano_banana_router
 from app.handlers.drift_heart import router as drift_heart_router
 from app.handlers.rear_view_mirror import router as rear_view_mirror_router
+from app.handlers.motion_control import router as motion_control_router
+from app.handlers.car_in_hand import router as car_in_hand_router
 from app.handlers.scenario_tryon import router as tryon_router
 from app.handlers.settings import router as settings_router
 from app.handlers.animate_photo import router as animate_router
@@ -69,6 +71,8 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(nano_banana_router)
     dp.include_router(drift_heart_router)
     dp.include_router(rear_view_mirror_router)
+    dp.include_router(motion_control_router)
+    dp.include_router(car_in_hand_router)
     dp.include_router(tryon_router)
     dp.include_router(love_is_router)
     dp.include_router(radar_router)

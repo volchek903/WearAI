@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.config import settings
 from app.keyboards.menu import MenuCallbacks
+from app.keyboards.extra import buy_generations_kb
 from app.keyboards.menu import video_menu_kb
 from app.models.subscription import Subscription
 from app.models.user import User
@@ -155,6 +156,7 @@ async def _run_video_job(
                 text=t,
             ),
             stop,
+            interval_s=7.0,
         )
     )
     action_task = asyncio.create_task(_chat_action_loop(bot, chat_id, stop))
@@ -309,7 +311,8 @@ async def animate_got_prompt(
         await charge_video_generation(session, tg_id)
     except NoGenerationsLeft:
         await message.answer(
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳"
+            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
+            reply_markup=buy_generations_kb(),
         )
         return
 

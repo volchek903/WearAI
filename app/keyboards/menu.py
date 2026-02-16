@@ -11,6 +11,7 @@ class MenuCallbacks:
     MODEL = "menu:model"
     TRYON = "menu:tryon"
     ANIMATE = "menu:animate"
+    MOTION_CONTROL = "menu:motion_control"
     PHOTO = "menu:photo"
     PHOTO_CARS = "menu:photo:cars"
     PHOTO_TWO = "menu:photo:two"
@@ -20,6 +21,7 @@ class MenuCallbacks:
     RADAR = "menu:radar"
     NANO_BANANA = "menu:nano_banana"
     DRIFT_HEART = "menu:drift_heart"
+    CAR_IN_HAND = "menu:car_in_hand"
     REAR_VIEW_MIRROR = "menu:rear_view_mirror"
     FAQ = "menu:faq"
     SETTINGS = "menu:settings"
@@ -63,6 +65,7 @@ def photo_menu_kb() -> InlineKeyboardMarkup:
 def photo_cars_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     add_button(kb, text="💘 Дрифт сердце", callback_data=MenuCallbacks.DRIFT_HEART)
+    add_button(kb, text="✋ Ваша машина в руке", callback_data=MenuCallbacks.CAR_IN_HAND)
     add_button(
         kb,
         text="🪞 Зеркало заднего вида",
@@ -95,6 +98,11 @@ def photo_one_kb() -> InlineKeyboardMarkup:
 def video_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     add_button(kb, text="🎬 Оживить видео", callback_data=MenuCallbacks.ANIMATE)
+    add_button(
+        kb,
+        text="🎞 Оживить фото по видео (скоро)",
+        callback_data=MenuCallbacks.MOTION_CONTROL,
+    )
     add_button(kb, text="⬅️ В меню", callback_data=MenuCallbacks.BACK, style="danger")
     kb.adjust(1)
     return kb.as_markup()

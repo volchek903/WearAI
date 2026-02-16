@@ -12,7 +12,6 @@ from app.keyboards.menu import (
     photo_one_kb,
     video_menu_kb,
 )
-from app.utils.content_media import send_content_photo
 from app.utils.tg_edit import edit_text_safe
 
 router = Router()
@@ -70,12 +69,5 @@ async def open_video_menu(call: CallbackQuery) -> None:
 
 @router.callback_query(F.data == MenuCallbacks.BACK)
 async def back_to_main_menu(call: CallbackQuery) -> None:
-    if call.message:
-        await send_content_photo(
-            call.message,
-            filename="welcome.png",
-            caption="Главное меню 👇",
-            reply_markup=main_menu_kb(),
-            parse_mode="HTML",
-        )
+    await edit_text_safe(call, "Главное меню 👇", reply_markup=main_menu_kb())
     await call.answer()
