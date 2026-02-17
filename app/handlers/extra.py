@@ -55,7 +55,6 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 # Показываем только доступные к покупке пакеты (Launch выдаётся один раз)
-ORDER = ["Orbit", "Nova", "Cosmic"]
 
 
 class FreePromoFlow(StatesGroup):
@@ -206,13 +205,18 @@ def _strike(text: str) -> str:
 
 
 def _table(plans: list[Subscription]) -> str:
-    by_name = {p.name: p for p in plans}
-
     lines = ["<b>Пакеты</b>"]
 
-    for name in ORDER:
-        p = by_name.get(name)
-        if not p:
+    def _price_key(p: Subscription) -> tuple:
+        rub_price = int(float(p.price)) if float(p.price) > 0 else 0
+        stars_price = int(getattr(p, "stars_price", 0) or 0)
+        effective = rub_price if rub_price > 0 else stars_price
+        return (effective, rub_price, stars_price, p.name.lower())
+
+    sorted_plans = sorted(plans, key=_price_key)
+
+    for p in sorted_plans:
+        if p.name == "Launch":
             continue
 
         rub_price = int(float(p.price)) if float(p.price) > 0 else 0
