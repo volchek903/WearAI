@@ -204,20 +204,25 @@ def _strike(text: str) -> str:
     return "".join(ch + "\u0336" for ch in text)
 
 
+def _price_key(p: Subscription) -> tuple:
+    rub_price = int(float(p.price)) if float(p.price) > 0 else 0
+    stars_price = int(getattr(p, "stars_price", 0) or 0)
+    effective = rub_price if rub_price > 0 else stars_price
+    return (effective, rub_price, stars_price, p.name.lower())
+
+
+def _purchasable_plans(plans: list[Subscription]) -> list[Subscription]:
+    return [
+        p
+        for p in sorted(plans, key=_price_key)
+        if p.name not in {"Base", "Launch"}
+    ]
+
+
 def _table(plans: list[Subscription]) -> str:
     lines = ["<b>Пакеты</b>"]
 
-    def _price_key(p: Subscription) -> tuple:
-        rub_price = int(float(p.price)) if float(p.price) > 0 else 0
-        stars_price = int(getattr(p, "stars_price", 0) or 0)
-        effective = rub_price if rub_price > 0 else stars_price
-        return (effective, rub_price, stars_price, p.name.lower())
-
-    sorted_plans = sorted(plans, key=_price_key)
-
-    for p in sorted_plans:
-        if p.name == "Launch":
-            continue
+    for p in _purchasable_plans(plans):
 
         rub_price = int(float(p.price)) if float(p.price) > 0 else 0
         stars_price = int(getattr(p, "stars_price", 0) or 0)
@@ -418,7 +423,8 @@ async def extra_free_check(call: CallbackQuery, session: AsyncSession) -> None:
     tg_id = call.from_user.id
     if await bonus_already_used(session, tg_id):
         text = "Ты уже получал(а) бесплатную генерацию за подписку ✅"
-        markup = extra_menu_kb(current_plan_name=None)
+        plans = await get_all_plans(session)
+        markup = extra_menu_kb(_purchasable_plans(plans), current_plan_name=None)
         if call.message:
             try:
                 if call.message.photo or call.message.document or call.message.video or call.message.animation:
@@ -476,12 +482,13 @@ async def extra_open(call: CallbackQuery, session: AsyncSession) -> None:
 
         plans = await get_all_plans(session)
         table_html = _table(plans)
+        menu_plans = _purchasable_plans(plans)
 
         if call.message:
             await edit_text_safe(
                 call,
                 _extra_text(current_name, remaining_video, remaining_photo, table_html),
-                reply_markup=extra_menu_kb(current_name),
+                reply_markup=extra_menu_kb(menu_plans, current_name),
                 parse_mode="HTML",
             )
         await call.answer()
@@ -490,36 +497,27 @@ async def extra_open(call: CallbackQuery, session: AsyncSession) -> None:
         raise
 
 
-@router.callback_query(
-    F.data.in_(
-        {
-            ExtraCallbacks.WANT_ORBIT,
-            ExtraCallbacks.WANT_NOVA,
-            ExtraCallbacks.WANT_COSMIC,
-        }
-    )
-)
+@router.callback_query(F.data.startswith(ExtraCallbacks.WANT_PREFIX))
 async def extra_want(call: CallbackQuery, session: AsyncSession) -> None:
-    plan_name = (
-        "Orbit"
-        if call.data == ExtraCallbacks.WANT_ORBIT
-        else "Nova" if call.data == ExtraCallbacks.WANT_NOVA else "Cosmic"
-    )
-
-    plan = await get_plan(session, plan_name)
+    raw = (call.data or "").replace(ExtraCallbacks.WANT_PREFIX, "", 1)
+    if not raw.isdigit():
+        await call.answer("Некорректный пакет 😕", show_alert=True)
+        return
+    plan_id = int(raw)
+    plan = await session.get(Subscription, plan_id)
     if not plan:
         await call.answer("Пакет не найден в базе 😕", show_alert=True)
         return
 
     platega_ok = await check_platega_health()
-    text = _pitch(plan_name, plan)
+    text = _pitch(plan.name, plan)
     if not platega_ok:
         text += "\n\n⚠️ Оплата картой/СБП/крипто временно недоступна. Доступна оплата Stars."
     if call.message:
         await edit_text_safe(
             call,
             text,
-            reply_markup=extra_buy_kb(plan_name, platega_available=platega_ok),
+            reply_markup=extra_buy_kb(plan, platega_available=platega_ok),
             parse_mode="HTML",
         )
     await call.answer()
@@ -530,52 +528,24 @@ async def extra_back(call: CallbackQuery, session: AsyncSession) -> None:
     await extra_open(call, session)
 
 
-@router.callback_query(
-    F.data.in_(
-        {
-            ExtraCallbacks.BUY_ORBIT,
-            ExtraCallbacks.BUY_NOVA,
-            ExtraCallbacks.BUY_COSMIC,
-            ExtraCallbacks.BUY_ORBIT_CARD,
-            ExtraCallbacks.BUY_NOVA_CARD,
-            ExtraCallbacks.BUY_COSMIC_CARD,
-            ExtraCallbacks.BUY_ORBIT_CRYPTO,
-            ExtraCallbacks.BUY_NOVA_CRYPTO,
-            ExtraCallbacks.BUY_COSMIC_CRYPTO,
-            ExtraCallbacks.BUY_ORBIT_STARS,
-            ExtraCallbacks.BUY_NOVA_STARS,
-            ExtraCallbacks.BUY_COSMIC_STARS,
-        }
-    )
-)
+@router.callback_query(F.data.startswith(ExtraCallbacks.BUY_PREFIX))
 async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
     await call.answer()
-    if call.data in {
-        ExtraCallbacks.BUY_ORBIT_STARS,
-        ExtraCallbacks.BUY_NOVA_STARS,
-        ExtraCallbacks.BUY_COSMIC_STARS,
-    }:
-        await extra_buy_stars(call, session)
+    raw = (call.data or "").replace(ExtraCallbacks.BUY_PREFIX, "", 1)
+    parts = raw.split(":")
+    if len(parts) != 2 or not parts[0].isdigit():
+        await call.answer("Некорректный платёж 😕", show_alert=True)
         return
+    plan_id = int(parts[0])
+    method = parts[1]
 
-    if call.data in {
-        ExtraCallbacks.BUY_ORBIT,
-        ExtraCallbacks.BUY_ORBIT_CARD,
-        ExtraCallbacks.BUY_ORBIT_CRYPTO,
-    }:
-        plan_name = "Orbit"
-    elif call.data in {
-        ExtraCallbacks.BUY_NOVA,
-        ExtraCallbacks.BUY_NOVA_CARD,
-        ExtraCallbacks.BUY_NOVA_CRYPTO,
-    }:
-        plan_name = "Nova"
-    else:
-        plan_name = "Cosmic"
-
-    plan = await get_plan(session, plan_name)
+    plan = await session.get(Subscription, plan_id)
     if not plan:
         await call.answer("Пакет не найден в базе 😕", show_alert=True)
+        return
+
+    if method == "stars":
+        await extra_buy_stars(call, session, plan)
         return
 
     amount = int(float(plan.price))
@@ -588,7 +558,7 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
                 call,
                 "⚠️ Оплата картой/СБП/крипто временно недоступна.\n"
                 "Попробуй позже или выбери оплату Stars.",
-                reply_markup=extra_buy_kb(plan_name, platega_available=False),
+                reply_markup=extra_buy_kb(plan, platega_available=False),
                 parse_mode="HTML",
             )
         return
@@ -601,9 +571,9 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
         return
     payload = {"tgUserId": call.from_user.id, "planName": plan.name}
 
-    if call.data.endswith(":crypto"):
+    if method == "crypto":
         pay_method = 13
-    elif call.data.endswith(":card"):
+    elif method == "card":
         pay_method = 11
     else:
         pay_method = 2
@@ -629,7 +599,7 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
             await edit_text_safe(
                 call,
                 "Не удалось создать оплату 😕\n\nПопробуй ещё раз чуть позже.",
-                reply_markup=extra_buy_kb(plan_name, platega_available=platega_ok),
+                reply_markup=extra_buy_kb(plan, platega_available=platega_ok),
                 parse_mode="HTML",
             )
         await call.answer("Ошибка платежного сервиса", show_alert=True)
@@ -648,7 +618,7 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
             await edit_text_safe(
                 call,
                 "Платёжный сервис вернул некорректный ответ 😕",
-                reply_markup=extra_buy_kb(plan_name, platega_available=platega_ok),
+                reply_markup=extra_buy_kb(plan, platega_available=platega_ok),
                 parse_mode="HTML",
             )
         await call.answer("Ошибка ответа Platega", show_alert=True)
@@ -677,25 +647,16 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
     return
 
 
-async def extra_buy_stars(call: CallbackQuery, session: AsyncSession) -> None:
-    if call.data == ExtraCallbacks.BUY_ORBIT_STARS:
-        plan_name = "Orbit"
-    elif call.data == ExtraCallbacks.BUY_NOVA_STARS:
-        plan_name = "Nova"
-    else:
-        plan_name = "Cosmic"
-
-    plan = await get_plan(session, plan_name)
-    if not plan:
-        await call.answer("Пакет не найден в базе 😕", show_alert=True)
-        return
+async def extra_buy_stars(
+    call: CallbackQuery, session: AsyncSession, plan: Subscription
+) -> None:
 
     stars_price = int(getattr(plan, "stars_price", 0) or 0)
     if stars_price <= 0:
         await call.answer("Оплата Stars недоступна для этого пакета", show_alert=True)
         return
 
-    payload = f"stars:{plan_name}:{call.from_user.id}"
+    payload = f"stars:{plan.name}:{call.from_user.id}"
     title = f"Пакет {plan.name}"
     description = (
         f"{plan.video_generations} видео • {plan.photo_generations} фото"
