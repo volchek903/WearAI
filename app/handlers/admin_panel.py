@@ -31,7 +31,7 @@ from app.models.subscription import Subscription
 from app.repository.extra import get_all_plans
 from app.repository.promo import create_promo_code, get_last_promo_codes, PromoError
 from app.repository.referrals import get_top_referrers_last_week
-from app.states.admin import AdminPromoFSM, AdminPackagesFSM
+from app.states.admin import AdminPromoFSM, AdminPackagesFSM, AdminPackageCreateFSM
 from app.utils.tg_edit import edit_text_safe
 
 router = Router()
@@ -131,6 +131,30 @@ def _plan_info(plan: Subscription) -> str:
     )
 
 
+def _new_plan_preview(data: dict) -> str:
+    name = str(data.get("name", "")).strip()
+    days = int(data.get("duration_days") or 0)
+    photos = int(data.get("photo_generations") or 0)
+    videos = int(data.get("video_generations") or 0)
+    price = data.get("price")
+    stars_price = int(data.get("stars_price") or 0)
+    if price is None or Decimal(price) == 0:
+        price_text = "Бесплатно"
+    else:
+        price_text = f"{int(price)} ₽"
+    stars_text = "Бесплатно" if stars_price == 0 else f"{stars_price} ⭐"
+    return (
+        "📦 <b>Новый пакет</b>\n\n"
+        f"Название: <b>{name}</b>\n"
+        f"Дней действия: <b>{days}</b>\n"
+        f"Фото: <b>{photos}</b>\n"
+        f"Видео: <b>{videos}</b>\n"
+        f"Цена: <b>{price_text}</b>\n"
+        f"Цена в ⭐: <b>{stars_text}</b>\n\n"
+        "Все верно?"
+    )
+
+
 @router.callback_query(F.data == AdminCallbacks.PACKAGES)
 async def admin_packages(call: CallbackQuery, session: AsyncSession) -> None:
     if not await _ensure_admin(call, session, "admin_panel.packages"):
@@ -140,6 +164,174 @@ async def admin_packages(call: CallbackQuery, session: AsyncSession) -> None:
         call,
         "📦 <b>Пакеты</b>\n\nВыбери пакет для просмотра/редактирования 👇",
         reply_markup=admin_packages_kb(plans),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == AdminCallbacks.PACKAGE_CREATE)
+async def admin_package_create_start(
+    call: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    if not await _ensure_admin(call, session, "admin_panel.package_create"):
+        return
+    await state.clear()
+    await state.set_state(AdminPackageCreateFSM.name)
+    await edit_text_safe(call, "Введите название пакета ✍️", reply_markup=None)
+    await call.answer()
+
+
+@router.message(AdminPackageCreateFSM.name)
+async def admin_package_create_name(
+    message: Message, state: FSMContext
+) -> None:
+    name = (message.text or "").strip()
+    if len(name) < 2:
+        await message.answer("Название слишком короткое. Введи ещё раз ✍️")
+        return
+    await state.update_data(name=name)
+    await state.set_state(AdminPackageCreateFSM.duration_days)
+    await message.answer("Сколько дней действует подписка? (целое число) ✍️")
+
+
+@router.message(AdminPackageCreateFSM.duration_days)
+async def admin_package_create_days(
+    message: Message, state: FSMContext
+) -> None:
+    try:
+        days = int((message.text or "").strip())
+    except Exception:
+        await message.answer("Нужно целое число. Введи ещё раз ✍️")
+        return
+    if days < 0:
+        await message.answer("Число должно быть >= 0")
+        return
+    await state.update_data(duration_days=days)
+    await state.set_state(AdminPackageCreateFSM.photo_generations)
+    await message.answer("Сколько фото-генераций выдаёт пакет? ✍️")
+
+
+@router.message(AdminPackageCreateFSM.photo_generations)
+async def admin_package_create_photos(
+    message: Message, state: FSMContext
+) -> None:
+    try:
+        photos = int((message.text or "").strip())
+    except Exception:
+        await message.answer("Нужно целое число. Введи ещё раз ✍️")
+        return
+    if photos < 0:
+        await message.answer("Число должно быть >= 0")
+        return
+    await state.update_data(photo_generations=photos)
+    await state.set_state(AdminPackageCreateFSM.video_generations)
+    await message.answer("Сколько видео-генераций выдаёт пакет? ✍️")
+
+
+@router.message(AdminPackageCreateFSM.video_generations)
+async def admin_package_create_videos(
+    message: Message, state: FSMContext
+) -> None:
+    try:
+        videos = int((message.text or "").strip())
+    except Exception:
+        await message.answer("Нужно целое число. Введи ещё раз ✍️")
+        return
+    if videos < 0:
+        await message.answer("Число должно быть >= 0")
+        return
+    await state.update_data(video_generations=videos)
+    await state.set_state(AdminPackageCreateFSM.price)
+    await message.answer("Введите цену в рублях (например 750) ✍️")
+
+
+@router.message(AdminPackageCreateFSM.price)
+async def admin_package_create_price(
+    message: Message, state: FSMContext
+) -> None:
+    raw = (message.text or "").strip()
+    if not raw:
+        await message.answer("Нужно число. Введи ещё раз ✍️")
+        return
+    cleaned = raw.replace(",", ".")
+    try:
+        price = Decimal(cleaned)
+    except InvalidOperation:
+        await message.answer("Нужно число. Введи ещё раз ✍️")
+        return
+    if price < 0:
+        await message.answer("Цена должна быть >= 0")
+        return
+    await state.update_data(price=price)
+    await state.set_state(AdminPackageCreateFSM.stars_price)
+    await message.answer("Введите цену в звёздах (целое число) ✍️")
+
+
+@router.message(AdminPackageCreateFSM.stars_price)
+async def admin_package_create_stars(
+    message: Message, state: FSMContext
+) -> None:
+    try:
+        stars_price = int((message.text or "").strip())
+    except Exception:
+        await message.answer("Нужно целое число. Введи ещё раз ✍️")
+        return
+    if stars_price < 0:
+        await message.answer("Число должно быть >= 0")
+        return
+    await state.update_data(stars_price=stars_price)
+    await state.set_state(AdminPackageCreateFSM.confirm)
+    data = await state.get_data()
+    await message.answer(
+        _new_plan_preview(data),
+        reply_markup=yes_no_kb(
+            yes_text="✅ Создать", no_text="❌ Отменить", no_style="danger"
+        ),
+    )
+
+
+@router.callback_query(
+    AdminPackageCreateFSM.confirm, F.data.in_({ConfirmCallbacks.YES, ConfirmCallbacks.NO})
+)
+async def admin_package_create_confirm(
+    call: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    if call.data == ConfirmCallbacks.NO:
+        await state.clear()
+        await edit_text_safe(call, "⚙️ Админка", reply_markup=admin_menu_kb())
+        await call.answer()
+        return
+
+    data = await state.get_data()
+    name = str(data.get("name", "")).strip()
+    if not name:
+        await state.clear()
+        await call.answer("Сессия создания потеряна", show_alert=True)
+        return
+
+    exists = await session.scalar(
+        select(Subscription.id).where(Subscription.name == name)
+    )
+    if exists:
+        await call.answer("Пакет с таким названием уже существует", show_alert=True)
+        return
+
+    plan = Subscription(
+        name=name,
+        duration_days=int(data.get("duration_days") or 0),
+        photo_generations=int(data.get("photo_generations") or 0),
+        video_generations=int(data.get("video_generations") or 0),
+        price=Decimal(data.get("price") or 0),
+        stars_price=int(data.get("stars_price") or 0),
+    )
+    session.add(plan)
+    await session.commit()
+    await session.refresh(plan)
+    await state.clear()
+
+    await edit_text_safe(
+        call,
+        _plan_info(plan),
+        reply_markup=admin_package_actions_kb(plan.id),
     )
     await call.answer()
 

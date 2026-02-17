@@ -54,7 +54,8 @@ from app.services.platega import normalize_payment_status, check_platega_health
 router = Router()
 logger = logging.getLogger(__name__)
 
-ORDER = ["Launch", "Orbit", "Nova", "Cosmic"]
+# Показываем только доступные к покупке пакеты (Launch выдаётся один раз)
+ORDER = ["Orbit", "Nova", "Cosmic"]
 
 
 class FreePromoFlow(StatesGroup):
@@ -207,10 +208,7 @@ def _strike(text: str) -> str:
 def _table(plans: list[Subscription]) -> str:
     by_name = {p.name: p for p in plans}
 
-    lines = [
-        "Пакет",
-        "-------------------------------------------------------",
-    ]
+    lines = ["<b>Пакеты</b>"]
 
     for name in ORDER:
         p = by_name.get(name)
@@ -224,30 +222,27 @@ def _table(plans: list[Subscription]) -> str:
             rub_part = "Бесплатно"
             stars_part = "Бесплатно"
         else:
-            rub_old = int(round(rub_price * 1.1)) if rub_price > 0 else 0
-            stars_old = int(round(stars_price * 1.1)) if stars_price > 0 else 0
-
-            rub_part = (
-                f"{rub_price} ₽ {_strike(f'{rub_old} ₽')}"
-                if rub_price > 0
-                else "—"
-            )
-            stars_part = (
-                f"{stars_price} ⭐ {_strike(f'{stars_old} ⭐')}"
-                if stars_price > 0
-                else "—"
-            )
-        days = "-" if p.duration_days == 0 else str(p.duration_days)
-
-        lines.append(f"{p.name}")
-        lines.append(f"  ₽: {rub_part}")
-        lines.append(f"  ⭐: {stars_part}")
+            rub_part = f"{rub_price} ₽" if rub_price > 0 else "—"
+            stars_part = f"{stars_price} ⭐" if stars_price > 0 else "—"
+        days = "без срока" if p.duration_days == 0 else f"{p.duration_days} дн."
         lines.append(
-            f"  Дней: {days}  Видео: {p.video_generations}  Фото: {p.photo_generations}"
+            "\n".join(
+                [
+                    f"<b>{_escape(p.name)}</b>",
+                    f"Фото: <b>{p.photo_generations}</b>",
+                    f"Видео: <b>{p.video_generations}</b>",
+                    f"Срок: <b>{days}</b>",
+                    f"Цена: {rub_part} / {stars_part}",
+                ]
+            )
         )
+        lines.append("────────────")
+
+    if lines and lines[-1] == "────────────":
+        lines.pop()
 
     joined = "\n".join(lines)
-    return f"<pre>{_escape(joined)}</pre>"
+    return joined
 
 
 def _extra_text(
@@ -256,10 +251,9 @@ def _extra_text(
     return (
         "✨ <b>Дополнительные возможности</b>\n\n"
         f"Твоя текущая подписка: <b>{_escape(current_name)}</b>\n"
-        f"Осталось генераций: 🎬 <b>{remaining_video}</b> видео • 🖼️ <b>{remaining_photo}</b> фото\n\n"
-        "За пожертвование ты получаешь доступ к пакетам генераций — "
-        "это помогает развитию сервиса и даёт больше контента под твои товары.\n\n"
-        f"{table_html}\n"
+        f"Осталось генераций: 🎬 <b>{remaining_video}</b> видео • 🖼️ <b>{remaining_photo}</b> фото\n"
+        "\n"
+        f"{table_html}\n\n"
         "Выбирай пакет ниже — и я расскажу, что там самого кайфового 👇"
     )
 
