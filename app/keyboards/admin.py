@@ -17,6 +17,7 @@ class AdminCallbacks:
     PACKAGE_PICK = "admin:packages:pick"
     PACKAGE_EDIT = "admin:packages:edit"
     PACKAGE_FIELD = "admin:packages:field"
+    PACKAGE_CREATE = "admin:packages:create"
 
     ADD_ADMIN = "admin:add_admin"
     REMOVE_ADMIN = "admin:remove_admin"
@@ -124,6 +125,7 @@ def admin_access_kb() -> InlineKeyboardMarkup:
         kb, text="➖ Удалить админа", callback_data=AdminCallbacks.REMOVE_ADMIN
     )
     add_button(kb, text="🎁 Выдать подписку", callback_data=AdminCallbacks.GIVE_SUB)
+    add_button(kb, text="📦 Пакеты", callback_data=AdminCallbacks.PACKAGES)
     add_button(kb, text="⬅️ Назад", callback_data=AdminCallbacks.BACK, style="danger")
 
     kb.adjust(1)
@@ -157,6 +159,7 @@ def admin_packages_kb(plans) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for p in plans:
         add_button(kb, text=f"📦 {p.name}", callback_data=AdminCallbacks.package_pick(p.id))
+    add_button(kb, text="➕ Добавить пакет", callback_data=AdminCallbacks.PACKAGE_CREATE)
     add_button(kb, text="⬅️ Назад", callback_data=AdminCallbacks.BACK, style="danger")
     kb.adjust(1)
     return kb.as_markup()
