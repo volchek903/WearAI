@@ -28,6 +28,9 @@ from app.utils.tg_files import tg_file_id_to_bytes
 router = Router()
 logger = logging.getLogger(__name__)
 
+MAX_INPUT_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB
+MAX_INPUT_VIDEO_DURATION_S = 10 * 60  # 10 minutes
+
 
 async def _update_progress_message(msg: Message, text: str) -> None:
     try:
@@ -57,7 +60,15 @@ async def motion_control_photo(message: Message, state: FSMContext) -> None:
         await message.answer("Нужно одно фото (не альбом) 📸")
         return
 
-    file_id = message.photo[-1].file_id
+    photo = message.photo[-1]
+    if (photo.file_size or 0) > MAX_INPUT_PHOTO_BYTES:
+        await message.answer(
+            "Фото слишком большое 😕\n\n"
+            "Для стабильной обработки отправь фото до 5 МБ."
+        )
+        return
+
+    file_id = photo.file_id
     await state.update_data(photo_id=file_id)
     await state.set_state(MotionControlFlow.video)
     await message.answer("Теперь пришли видео-референс 🎬")
@@ -67,6 +78,12 @@ async def motion_control_photo(message: Message, state: FSMContext) -> None:
 async def motion_control_video(message: Message, state: FSMContext) -> None:
     if not message.video:
         await message.answer("Нужно видео 🎬 Отправь, пожалуйста, видео-файл.")
+        return
+    if int(message.video.duration or 0) > MAX_INPUT_VIDEO_DURATION_S:
+        await message.answer(
+            "Видео слишком длинное 😕\n\n"
+            "Поддерживается видео-референс до 10 минут."
+        )
         return
 
     file_id = message.video.file_id
@@ -162,7 +179,7 @@ async def motion_control_confirm(
             mode="720p",
         )
 
-        res = await client.wait_for_success(task_id, poll_interval_s=10, max_wait_s=12 * 60)
+        res = await client.wait_for_success(task_id, poll_interval_s=10, max_wait_s=20 * 60)
         if res.fail_msg:
             await refund_video_generation(session, call.from_user.id)
             await stop_progress(stop, progress_task)
