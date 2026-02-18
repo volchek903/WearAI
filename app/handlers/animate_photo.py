@@ -33,6 +33,8 @@ from app.utils.progress_bar import progress_initial_text, progress_loop, stop_pr
 router = Router()
 logger = logging.getLogger(__name__)
 
+MAX_INPUT_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB
+
 # key = tg_id (telegram id) — чтобы не путать с users.id
 _active_jobs: dict[int, asyncio.Task] = {}
 
@@ -102,6 +104,13 @@ async def animate_got_photo(message: Message, state: FSMContext) -> None:
         return
 
     photo = message.photo[-1]
+    if (photo.file_size or 0) > MAX_INPUT_PHOTO_BYTES:
+        await message.answer(
+            "Фото слишком большое 😕\n\n"
+            "Пришлите изображение до 5 МБ, чтобы загрузка и генерация проходили стабильно."
+        )
+        return
+
     tg_file = await message.bot.get_file(photo.file_id)
     file_path = tg_file.file_path
     if not file_path:
@@ -164,9 +173,7 @@ async def _run_video_job(
     client = KieKlingClient(settings.kie_api_key)
 
     try:
-        res = await client.wait_for_success(
-            task_id, poll_interval_s=10, max_wait_s=12 * 60
-        )
+        res = await client.wait_for_success(task_id, poll_interval_s=10, max_wait_s=20 * 60)
 
         if res.state == "timeout":
             await refund_video_generation(session, tg_id)

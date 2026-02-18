@@ -160,7 +160,7 @@ class KieKlingClient:
         image_bytes: bytes,
         filename: str,
         upload_path: str = "images/wearai/animate",
-        timeout_s: int = 60,
+        timeout_s: int = 180,
     ) -> str:
         """
         Загружает файл в KIE File Upload API (stream) и возвращает публичный downloadUrl.
@@ -206,7 +206,7 @@ class KieKlingClient:
         video_bytes: bytes,
         filename: str,
         upload_path: str = "videos/wearai/motion",
-        timeout_s: int = 120,
+        timeout_s: int = 300,
     ) -> str:
         return await self.upload_image_bytes(
             video_bytes, filename, upload_path=upload_path, timeout_s=timeout_s
@@ -219,7 +219,7 @@ class KieKlingClient:
         duration: str = "5",
         negative_prompt: str = "blur, distort, low quality",
         cfg_scale: float = 0.5,
-        timeout_s: int = 60,
+        timeout_s: int = 120,
     ) -> str:
         """
         Создаёт задачу Kling v2.1 Standard и возвращает taskId.
@@ -275,7 +275,7 @@ class KieKlingClient:
         video_url: str,
         character_orientation: str = "image",
         mode: str = "std",
-        timeout_s: int = 60,
+        timeout_s: int = 120,
     ) -> str:
         """
         Kling 2.6 Motion Control.
