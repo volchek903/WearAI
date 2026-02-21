@@ -27,6 +27,7 @@ from app.utils.progress_bar import progress_initial_text, progress_loop, stop_pr
 from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_photo
 from app.utils.tg_send import send_image_smart
+from app.utils.support_text import with_support
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 
 router = Router()
@@ -359,7 +360,7 @@ async def radar_review_confirm(
         await stop_progress(stop, progress_task)
         await edit_text_safe(
             progress_msg,
-            "Не получилось сгенерировать 😅\nПопробуй ещё раз чуть позже.",
+            with_support("Не получилось сгенерировать 😅\nПопробуй ещё раз чуть позже."),
         )
         await state.clear()
         return

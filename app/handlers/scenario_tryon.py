@@ -29,6 +29,7 @@ from app.utils.kie_errors import kie_error_to_user_text
 from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_album
 from app.utils.tg_send import send_image_smart
+from app.utils.support_text import with_support
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 from app.utils.progress_bar import (
     progress_initial_text,
@@ -322,7 +323,9 @@ async def tryon_desc_in(
             await refund_photo_generation(session, tg_id)  # ✅ tg_id
         await stop_progress(stop, progress_task)
         await message.answer(
-            "Не получилось сделать примерку 😅\n"
-            "Попробуй изменить описание и отправь ещё раз."
+            with_support(
+                "Не получилось сделать примерку 😅\n"
+                "Попробуй изменить описание и отправь ещё раз."
+            )
         )
         return

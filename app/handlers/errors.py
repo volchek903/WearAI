@@ -8,6 +8,7 @@ from aiogram.types import CallbackQuery, Message
 
 from app.keyboards.menu import main_menu_kb
 from app.utils.tg_edit import edit_text_safe
+from app.utils.support_text import with_support
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -21,9 +22,11 @@ async def global_error_handler(event, exception: Exception | None = None, **kwar
             call: CallbackQuery = update.callback_query
             await edit_text_safe(
                 call,
-                "Что‑то пошло не так 😔\n"
-                "Сообщите о поломке нам и получите подарок за бдительность:\n"
-                "@WearAIManager",
+                with_support(
+                    "Что‑то пошло не так 😔\n"
+                    "Сообщите о поломке нам и получите подарок за бдительность:\n"
+                    "@WearAIManager"
+                ),
                 reply_markup=main_menu_kb(),
             )
             try:
@@ -34,9 +37,11 @@ async def global_error_handler(event, exception: Exception | None = None, **kwar
         if update and getattr(update, "message", None):
             msg: Message = update.message
             await msg.answer(
-                "Что‑то пошло не так 😔\n"
-                "Сообщите о поломке нам и получите подарок за бдительность:\n"
-                "@WearAIManager",
+                with_support(
+                    "Что‑то пошло не так 😔\n"
+                    "Сообщите о поломке нам и получите подарок за бдительность:\n"
+                    "@WearAIManager"
+                ),
                 reply_markup=main_menu_kb(),
             )
             return True

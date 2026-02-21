@@ -17,6 +17,7 @@ from app.states.animate_photo import AnimatePhotoStates
 from app.states.feedback_flow import FeedbackFlow
 from app.utils.kie_kling_client import KieKlingClient
 from app.utils.tg_edit import edit_text_safe
+from app.utils.support_text import with_support
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -254,7 +255,9 @@ async def fb_animate(cb: CallbackQuery, state: FSMContext) -> None:
         image_url = await _get_or_upload_kling_image_url(cb, state)
     except Exception as e:
         logger.warning("Cannot start animate from feedback: %s", e)
-        await edit_text_safe(cb, f"Ошибка: {e}", reply_markup=main_menu_kb())
+        await edit_text_safe(
+            cb, with_support(f"Ошибка: {e}"), reply_markup=main_menu_kb()
+        )
         await state.clear()
         return
 

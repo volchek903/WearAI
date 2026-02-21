@@ -49,6 +49,7 @@ from app.repository.payments import (
     apply_plan_to_user,
 )
 from app.utils.tg_edit import edit_text_safe
+from app.utils.support_text import with_support
 from app.services.platega import normalize_payment_status, check_platega_health
 
 router = Router()
@@ -602,7 +603,9 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
                 reply_markup=extra_buy_kb(plan, platega_available=platega_ok),
                 parse_mode="HTML",
             )
-        await call.answer("Ошибка платежного сервиса", show_alert=True)
+        await call.answer(
+            with_support("Ошибка платежного сервиса"), show_alert=True
+        )
         return
 
     redirect = data.get("redirect")
@@ -621,7 +624,7 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
                 reply_markup=extra_buy_kb(plan, platega_available=platega_ok),
                 parse_mode="HTML",
             )
-        await call.answer("Ошибка ответа Platega", show_alert=True)
+        await call.answer(with_support("Ошибка ответа Platega"), show_alert=True)
         return
 
     payment = await create_pending_payment(

@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from typing import Optional
 
+from app.utils.support_text import with_support
+
 
 def _extract_code(text: str) -> Optional[str]:
     """
@@ -26,7 +28,7 @@ def kie_error_to_user_text(err: Exception) -> str:
 
     # 422 / rejected — чаще всего контент- или input-фильтры
     if code == "422" or "rejected" in raw_l:
-        return (
+        return with_support(
             f"{header}\n\n"
             "Сервис отклонил входные данные (ошибка 422). Обычно это одна из причин:\n"
             "• В тексте/запросе упоминается несовершеннолетний возраст (< 18).\n"
@@ -44,7 +46,7 @@ def kie_error_to_user_text(err: Exception) -> str:
 
     # Ошибка авторизации
     if code == "401":
-        return (
+        return with_support(
             f"{header}\n\n"
             "Похоже, проблема с доступом к API (401).\n"
             "Обычно это означает, что KIE_API_KEY пустой или неверный.\n\n"
@@ -55,7 +57,7 @@ def kie_error_to_user_text(err: Exception) -> str:
 
     # Rate limit
     if code == "429":
-        return (
+        return with_support(
             f"{header}\n\n"
             "Слишком много запросов за короткое время (429).\n"
             "Попробуй повторить через 30–60 секунд."
@@ -63,7 +65,7 @@ def kie_error_to_user_text(err: Exception) -> str:
 
     # Слишком большой payload (иногда возвращают 413)
     if code == "413" or "payload too large" in raw_l or "entity too large" in raw_l:
-        return (
+        return with_support(
             f"{header}\n\n"
             "Входные файлы слишком большие.\n\n"
             "Что попробовать:\n"
@@ -73,7 +75,7 @@ def kie_error_to_user_text(err: Exception) -> str:
 
     # Таймауты задач / сети
     if "timeout" in raw_l or "task timeout" in raw_l:
-        return (
+        return with_support(
             f"{header}\n\n"
             "Сервис не успел обработать запрос вовремя (таймаут).\n\n"
             "Что попробовать:\n"
@@ -85,7 +87,7 @@ def kie_error_to_user_text(err: Exception) -> str:
 
     # Фильтр/политики провайдера (например, Google)
     if "prohibited use" in raw_l or "filtered out" in raw_l or "no images found" in raw_l:
-        return (
+        return with_support(
             f"{header}\n\n"
             "Сервис заблокировал результат из‑за запретной темы в запросе или изображении.\n\n"
             "Что сделать:\n"
@@ -97,7 +99,7 @@ def kie_error_to_user_text(err: Exception) -> str:
 
     # Частая ошибка провайдера: AI Studio 400 (code=502)
     if code == "502" or "ai studio api http error: 400" in raw_l:
-        return (
+        return with_support(
             f"{header}\n\n"
             "Провайдер временно отклонил запрос (ошибка 502).\n"
             "Чаще всего это связано с фильтрацией запретных тем или временным сбоем.\n\n"
@@ -109,13 +111,13 @@ def kie_error_to_user_text(err: Exception) -> str:
 
     # 5xx
     if code and code.startswith("5"):
-        return (
+        return with_support(
             f"{header}\n\n"
             "Сервис временно недоступен (ошибка 5xx). Попробуй повторить позже."
         )
 
     # Fallback
-    return (
+    return with_support(
         f"{header}\n\n"
         "Возможные причины:\n"
         "• Временный сбой сервиса или сети\n"

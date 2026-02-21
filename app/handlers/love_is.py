@@ -39,6 +39,7 @@ from app.states.love_is_flow import LoveIsFlow
 from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_photo
 from app.utils.tg_send import send_image_smart
+from app.utils.support_text import with_support
 from app.utils.progress_bar import (
     progress_initial_text,
     progress_loop,
@@ -226,7 +227,7 @@ async def love_is_text_in(
             await refund_photo_generation(session, tg_id)
         await stop_progress(stop, progress_task)
         await message.answer(
-            "Не получилось сгенерировать 😅 Попробуй ещё раз чуть позже."
+            with_support("Не получилось сгенерировать 😅 Попробуй ещё раз чуть позже.")
         )
     finally:
         if await state.get_state() != LoveIsFlow.ready.state:
@@ -368,7 +369,9 @@ async def love_is_animate(
         logger.exception("LOVE_IS animate failed: %s", e)
         await refund_video_generation(session, tg_id)
         await stop_progress(stop, progress_task)
-        await call.message.answer("Не получилось оживить открытку 😅 Попробуй позже.")
+        await call.message.answer(
+            with_support("Не получилось оживить открытку 😅 Попробуй позже.")
+        )
     finally:
         await state.clear()
 

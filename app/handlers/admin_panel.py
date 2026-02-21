@@ -33,6 +33,7 @@ from app.repository.promo import create_promo_code, get_last_promo_codes, PromoE
 from app.repository.referrals import get_top_referrers_last_week
 from app.states.admin import AdminPromoFSM, AdminPackagesFSM, AdminPackageCreateFSM
 from app.utils.tg_edit import edit_text_safe
+from app.utils.support_text import with_support
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -794,7 +795,9 @@ async def admin_promo_confirm(
             max_uses=max_uses,
         )
     except PromoError as e:
-        await edit_text_safe(call, f"Ошибка: {e}", reply_markup=admin_menu_kb())
+        await edit_text_safe(
+            call, with_support(f"Ошибка: {e}"), reply_markup=admin_menu_kb()
+        )
         await state.clear()
         await call.answer()
         return
