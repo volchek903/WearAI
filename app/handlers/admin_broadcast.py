@@ -256,13 +256,16 @@ async def broadcast_confirm(
 
     await state.clear()
     total = len(users)
-    await edit_text_safe(
-        call,
-        f"✅ Рассылка завершена.\n\n"
+    report = (
+        "✅ Рассылка завершена.\n\n"
         f"Успешно отправлено: {sent}\n"
         f"Заблокировали бота: {blocked}\n"
         f"Ошибок: {failed}\n"
-        f"Всего отправок: {total}",
+        f"Всего отправок: {total}"
+    )
+    await call.bot.send_message(
+        call.message.chat.id,
+        report,
         reply_markup=admin_menu_kb(),
     )
     await call.answer()
