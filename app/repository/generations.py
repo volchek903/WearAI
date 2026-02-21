@@ -34,6 +34,33 @@ async def _get_active_us_id(session: AsyncSession, user_id: int) -> int | None:
     return int(us_id) if us_id is not None else None
 
 
+async def get_active_subscription_name(
+    session: AsyncSession, tg_id: int
+) -> str | None:
+    user_id = await _get_user_db_id(session, tg_id)
+    if not user_id:
+        return None
+
+    us = await session.scalar(
+        select(UserSubscription)
+        .where(UserSubscription.user_id == user_id, UserSubscription.status == 1)
+        .order_by(UserSubscription.activated_at.desc())
+        .limit(1)
+    )
+    if not us:
+        return None
+
+    sub_name = await session.scalar(
+        select(Subscription.name).where(Subscription.id == us.subscription_id).limit(1)
+    )
+    return str(sub_name) if sub_name else None
+
+
+async def is_launch_subscription(session: AsyncSession, tg_id: int) -> bool:
+    name = await get_active_subscription_name(session, tg_id)
+    return (name or "").strip().lower() == "launch"
+
+
 async def _has_any_subscription(session: AsyncSession, user_id: int) -> bool:
     any_id = await session.scalar(
         select(UserSubscription.id)

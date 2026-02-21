@@ -17,6 +17,7 @@ from app.repository.generations import (
     charge_photo_generation,
     ensure_default_subscription,
     refund_photo_generation,
+    is_launch_subscription,
 )
 from app.repository.users import increment_generated_photos, upsert_user
 from app.services.generation import generate_image_kie_from_telegram
@@ -27,7 +28,7 @@ from app.utils.progress_bar import progress_initial_text, progress_loop, stop_pr
 from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_album
 from app.utils.tg_send import send_image_smart
-from app.utils.support_text import with_support
+from app.utils.support_text import with_support, launch_limits_message
 from app.utils.tg_callback import safe_answer
 
 router = Router()
@@ -154,11 +155,16 @@ async def car_in_hand_hand(
     try:
         await charge_photo_generation(session, call.from_user.id)
     except NoGenerationsLeft:
-        await edit_text_safe(
-            call,
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
-            reply_markup=buy_generations_kb(),
-        )
+        if await is_launch_subscription(session, call.from_user.id):
+            await edit_text_safe(
+                call, launch_limits_message(), reply_markup=buy_generations_kb()
+            )
+        else:
+            await edit_text_safe(
+                call,
+                "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
+                reply_markup=buy_generations_kb(),
+            )
         await state.clear()
         await safe_answer(call)
         return

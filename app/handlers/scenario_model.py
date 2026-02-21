@@ -22,6 +22,7 @@ from app.repository.generations import (
     charge_photo_generation,
     refund_photo_generation,
     NoGenerationsLeft,
+    is_launch_subscription,
 )
 from app.services.album_collector import AlbumCollector
 from app.services.generation import generate_image_kie_from_telegram
@@ -31,7 +32,7 @@ from app.states.feedback_flow import FeedbackFlow
 from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_album
 from app.utils.tg_send import send_image_smart
-from app.utils.support_text import with_support
+from app.utils.support_text import with_support, launch_limits_message
 from app.utils.kie_errors import kie_error_to_user_text
 from app.utils.generated_files import save_generated_image_bytes
 from app.utils.progress_bar import (
@@ -307,11 +308,16 @@ async def review_confirmed(
         await charge_photo_generation(session, tg_id)
     except NoGenerationsLeft:
         await stop_progress(stop, progress_task)
-        await edit_text_safe(
-            progress_msg,
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
-            reply_markup=buy_generations_kb(),
-        )
+        if await is_launch_subscription(session, tg_id):
+            await edit_text_safe(
+                progress_msg, launch_limits_message(), reply_markup=buy_generations_kb()
+            )
+        else:
+            await edit_text_safe(
+                progress_msg,
+                "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
+                reply_markup=buy_generations_kb(),
+            )
         return
 
     prompt = (
