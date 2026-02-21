@@ -27,6 +27,7 @@ from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_photo
 from app.utils.tg_send import send_image_smart
 from app.utils.support_text import with_support
+from app.utils.tg_callback import safe_answer
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ async def _update_progress_message(msg: Message, text: str) -> None:
 async def start_drift_heart(
     call: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
-    await call.answer()
+    await safe_answer(call)
     await upsert_user(session, call.from_user.id, call.from_user.username)
     await state.clear()
     await state.set_state(DriftHeartFlow.photo)
@@ -103,7 +104,7 @@ async def drift_heart_cancel(call: CallbackQuery, state: FSMContext) -> None:
             "Хорошо, вернул в меню фото 👇",
             reply_markup=photo_menu_kb(),
         )
-    await call.answer()
+    await safe_answer(call)
 
 
 @router.callback_query(DriftHeartFlow.confirm, F.data == ConfirmCallbacks.YES)
@@ -118,7 +119,7 @@ async def drift_heart_confirm(
         return
 
     if call.message is None:
-        await call.answer()
+        await safe_answer(call)
         return
 
     progress_msg = await call.message.answer(progress_initial_text())
@@ -172,7 +173,7 @@ async def drift_heart_confirm(
             "Хотите ли что-то ещё сгенерировать?",
             reply_markup=photo_menu_kb(),
         )
-        await call.answer()
+        await safe_answer(call)
         return
 
     except KieAIError as e:
@@ -182,7 +183,7 @@ async def drift_heart_confirm(
         await stop_progress(stop, progress_task)
         await edit_text_safe(progress_msg, kie_error_to_user_text(e))
         await state.clear()
-        await call.answer()
+        await safe_answer(call)
         return
 
     except Exception as e:
@@ -199,5 +200,5 @@ async def drift_heart_confirm(
             reply_markup=photo_menu_kb(),
         )
         await state.clear()
-        await call.answer()
+        await safe_answer(call)
         return

@@ -20,6 +20,7 @@ from app.repository.admin import get_all_user_tg_ids, is_admin
 from app.repository.admin_actions import log_admin_action
 from app.states.admin_broadcast import AdminBroadcastFSM
 from app.utils.tg_edit import edit_text_safe
+from app.utils.tg_callback import safe_answer
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -100,7 +101,7 @@ async def broadcast_start(
     await edit_text_safe(
         call, "📣 Выбери формат рассылки:", reply_markup=admin_broadcast_kb()
     )
-    await call.answer()
+    await safe_answer(call)
 
 
 @router.callback_query(
@@ -126,14 +127,14 @@ async def broadcast_pick_type(
     if call.data == AdminBroadcastCallbacks.BACK:
         await state.clear()
         await edit_text_safe(call, "⚙️ Админка", reply_markup=admin_menu_kb())
-        await call.answer()
+        await safe_answer(call)
         return
 
     kind = call.data.replace("admin:broadcast:", "", 1)
     await state.update_data(kind=kind)
     await state.set_state(AdminBroadcastFSM.waiting_content)
     await edit_text_safe(call, _type_prompt(kind), reply_markup=None)
-    await call.answer()
+    await safe_answer(call)
 
 
 @router.message(AdminBroadcastFSM.waiting_content)
@@ -217,7 +218,7 @@ async def broadcast_cancel(
         return
     await state.clear()
     await edit_text_safe(call, "❌ Отменено", reply_markup=admin_menu_kb())
-    await call.answer()
+    await safe_answer(call)
 
 
 @router.callback_query(AdminBroadcastFSM.confirm, F.data == ConfirmCallbacks.YES)
@@ -232,7 +233,7 @@ async def broadcast_confirm(
     if not isinstance(payload, dict):
         await state.clear()
         await edit_text_safe(call, "Нет данных рассылки 😕", reply_markup=admin_menu_kb())
-        await call.answer()
+        await safe_answer(call)
         return
 
     await edit_text_safe(call, "⏳ Начинаю рассылку…", reply_markup=None)
@@ -268,4 +269,4 @@ async def broadcast_confirm(
         report,
         reply_markup=admin_menu_kb(),
     )
-    await call.answer()
+    await safe_answer(call)

@@ -24,6 +24,7 @@ from app.db.config import settings
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.tg_edit import edit_text_safe
 from app.utils.support_text import with_support
+from app.utils.tg_callback import safe_answer
 from app.utils.tg_files import tg_file_id_to_bytes
 
 router = Router()
@@ -42,7 +43,7 @@ async def _update_progress_message(msg: Message, text: str) -> None:
 
 @router.callback_query(F.data == MenuCallbacks.MOTION_CONTROL)
 async def motion_control_soon(call: CallbackQuery) -> None:
-    await call.answer()
+    await safe_answer(call)
     if call.message:
         await edit_text_safe(
             call,
@@ -117,7 +118,7 @@ async def motion_control_cancel(call: CallbackQuery, state: FSMContext) -> None:
             reply_markup=None,
         )
     await state.set_state(MotionControlFlow.photo)
-    await call.answer()
+    await safe_answer(call)
 
 
 @router.callback_query(MotionControlFlow.confirm, F.data == ConfirmCallbacks.YES)
@@ -130,11 +131,11 @@ async def motion_control_confirm(
 
     if not photo_id or not video_id:
         await state.clear()
-        await call.answer("Не вижу фото/видео 😕", show_alert=True)
+        await safe_answer(call, "Не вижу фото/видео 😕", show_alert=True)
         return
 
     if call.message is None:
-        await call.answer()
+        await safe_answer(call)
         return
 
     try:
@@ -147,7 +148,7 @@ async def motion_control_confirm(
             reply_markup=buy_generations_kb(),
         )
         await state.clear()
-        await call.answer()
+        await safe_answer(call)
         return
 
     progress_msg = await call.message.answer(progress_initial_text())
@@ -189,7 +190,7 @@ async def motion_control_confirm(
                 with_support(f"Генерация завершилась ошибкой: {res.fail_msg}"),
             )
             await state.clear()
-            await call.answer()
+            await safe_answer(call)
             return
 
         if not res.result_url:
@@ -200,7 +201,7 @@ async def motion_control_confirm(
                 with_support("Готово, но не удалось найти ссылку 😕"),
             )
             await state.clear()
-            await call.answer()
+            await safe_answer(call)
             return
 
         direct_url = await client.to_direct_download_url(res.result_url)
@@ -222,7 +223,7 @@ async def motion_control_confirm(
             reply_markup=video_menu_kb(),
         )
         await state.clear()
-        await call.answer()
+        await safe_answer(call)
 
     except Exception as e:
         logger.exception("MOTION_CONTROL failed: %s", e)
@@ -233,7 +234,7 @@ async def motion_control_confirm(
             with_support("Не получилось сгенерировать 😅 Попробуй ещё раз чуть позже."),
         )
         await state.clear()
-        await call.answer()
+        await safe_answer(call)
 
 
 async def _download_bytes(url: str, timeout_s: int = 240) -> bytes:

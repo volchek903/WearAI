@@ -28,6 +28,7 @@ from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_album
 from app.utils.tg_send import send_image_smart
 from app.utils.support_text import with_support
+from app.utils.tg_callback import safe_answer
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -146,7 +147,7 @@ async def car_in_hand_hand(
     prompt = _build_prompt(background, hand_desc)
 
     if call.message is None:
-        await call.answer()
+        await safe_answer(call)
         return
 
     await ensure_default_subscription(session, call.from_user.id)
@@ -159,7 +160,7 @@ async def car_in_hand_hand(
             reply_markup=buy_generations_kb(),
         )
         await state.clear()
-        await call.answer()
+        await safe_answer(call)
         return
 
     progress_msg = await call.message.answer(progress_initial_text())
@@ -195,7 +196,7 @@ async def car_in_hand_hand(
             "Хотите ли что-то ещё сгенерировать?",
             reply_markup=photo_menu_kb(),
         )
-        await call.answer()
+        await safe_answer(call)
         return
 
     except KieAIError as e:
@@ -205,7 +206,7 @@ async def car_in_hand_hand(
         await stop_progress(stop, progress_task)
         await edit_text_safe(progress_msg, kie_error_to_user_text(e))
         await state.clear()
-        await call.answer()
+        await safe_answer(call)
         return
 
     except Exception as e:
