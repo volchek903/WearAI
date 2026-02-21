@@ -26,6 +26,7 @@ from app.utils.progress_bar import progress_initial_text, progress_loop, stop_pr
 from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_photo
 from app.utils.tg_send import send_image_smart
+from app.utils.support_text import with_support
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -195,8 +196,10 @@ async def rear_view_mirror_confirm(
         await stop_progress(stop, progress_task)
         await edit_text_safe(
             progress_msg,
-            "Не получилось сгенерировать 😅\n"
-            "Попробуй ещё раз или вернись в меню.",
+            with_support(
+                "Не получилось сгенерировать 😅\n"
+                "Попробуй ещё раз или вернись в меню."
+            ),
             reply_markup=photo_menu_kb(),
         )
         await state.clear()

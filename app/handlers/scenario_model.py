@@ -31,6 +31,7 @@ from app.states.feedback_flow import FeedbackFlow
 from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_album
 from app.utils.tg_send import send_image_smart
+from app.utils.support_text import with_support
 from app.utils.kie_errors import kie_error_to_user_text
 from app.utils.generated_files import save_generated_image_bytes
 from app.utils.progress_bar import (
@@ -420,8 +421,10 @@ async def review_confirmed(
         await stop_progress(stop, progress_task)
         await edit_text_safe(
             progress_msg,
-            "Не получилось сгенерировать 😅\n"
-            "Попробуй нажать «✅ Всё верно» ещё раз или внеси правки.",
+            with_support(
+                "Не получилось сгенерировать 😅\n"
+                "Попробуй нажать «✅ Всё верно» ещё раз или внеси правки."
+            ),
             reply_markup=review_edit_kb(),
         )
         return

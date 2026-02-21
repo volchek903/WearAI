@@ -23,6 +23,7 @@ class MenuCallbacks:
     DRIFT_HEART = "menu:drift_heart"
     CAR_IN_HAND = "menu:car_in_hand"
     REAR_VIEW_MIRROR = "menu:rear_view_mirror"
+    GTA_STYLE = "menu:gta_style"
     FAQ = "menu:faq"
     SETTINGS = "menu:settings"
     EXTRA = "menu:extra"
@@ -90,6 +91,7 @@ def photo_one_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     add_button(kb, text="🛍️ Модель с товаром", callback_data=MenuCallbacks.MODEL)
     add_button(kb, text="🧥 Примерить одежду", callback_data=MenuCallbacks.TRYON)
+    add_button(kb, text="🕶 GTA STYLE", callback_data=MenuCallbacks.GTA_STYLE)
     add_button(kb, text="⬅️ Назад", callback_data=MenuCallbacks.PHOTO, style="danger")
     kb.adjust(1)
     return kb.as_markup()

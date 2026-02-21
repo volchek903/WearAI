@@ -28,6 +28,7 @@ from app.repository.users import increment_generated_videos
 from app.states.animate_photo import AnimatePhotoStates
 from app.utils.kie_kling_client import KieKlingClient
 from app.utils.tg_edit import edit_text_safe
+from app.utils.support_text import with_support
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 
 router = Router()
@@ -128,7 +129,7 @@ async def animate_got_photo(message: Message, state: FSMContext) -> None:
             upload_path=f"images/wearai/animate/{message.from_user.id}",
         )
     except Exception as e:
-        await message.answer(f"Ошибка загрузки фото в KIE 😕: {e}")
+        await message.answer(with_support(f"Ошибка загрузки фото в KIE 😕: {e}"))
         await state.clear()
         logger.exception("KIE upload failed for user %s", message.from_user.id)
         return
@@ -173,7 +174,7 @@ async def _run_video_job(
     client = KieKlingClient(settings.kie_api_key)
 
     try:
-        res = await client.wait_for_success(task_id, poll_interval_s=10, max_wait_s=20 * 60)
+        res = await client.wait_for_success(task_id, poll_interval_s=10, max_wait_s=30 * 60)
 
         if res.state == "timeout":
             await refund_video_generation(session, tg_id)
@@ -181,7 +182,7 @@ async def _run_video_job(
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
-                text="Таймаут ожидания результата ⏳ Попробуйте ещё раз.",
+                text=with_support("Таймаут ожидания результата ⏳ Попробуйте ещё раз."),
             )
             return
 
@@ -191,7 +192,7 @@ async def _run_video_job(
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
-                text=f"Генерация завершилась ошибкой: {res.fail_msg}",
+                text=with_support(f"Генерация завершилась ошибкой: {res.fail_msg}"),
             )
             return
 
@@ -201,7 +202,7 @@ async def _run_video_job(
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
-                text="Готово, но не удалось найти ссылку на результат 😕",
+                text=with_support("Готово, но не удалось найти ссылку на результат 😕"),
             )
             return
 
@@ -236,10 +237,12 @@ async def _run_video_job(
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
-                text=f"Ошибка при ожидании/отправке видео: {e}",
+                text=with_support(f"Ошибка при ожидании/отправке видео: {e}"),
             )
         except Exception:
-            await bot.send_message(chat_id, f"Ошибка при ожидании/отправке видео: {e}")
+            await bot.send_message(
+                chat_id, with_support(f"Ошибка при ожидании/отправке видео: {e}")
+            )
     finally:
         stop.set()
         for t in (progress_task, action_task):

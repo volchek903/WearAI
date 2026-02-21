@@ -23,6 +23,7 @@ from app.utils.kie_kling_client import KieKlingClient
 from app.db.config import settings
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.tg_edit import edit_text_safe
+from app.utils.support_text import with_support
 from app.utils.tg_files import tg_file_id_to_bytes
 
 router = Router()
@@ -179,13 +180,13 @@ async def motion_control_confirm(
             mode="720p",
         )
 
-        res = await client.wait_for_success(task_id, poll_interval_s=10, max_wait_s=20 * 60)
+        res = await client.wait_for_success(task_id, poll_interval_s=10, max_wait_s=30 * 60)
         if res.fail_msg:
             await refund_video_generation(session, call.from_user.id)
             await stop_progress(stop, progress_task)
             await edit_text_safe(
                 progress_msg,
-                f"Генерация завершилась ошибкой: {res.fail_msg}",
+                with_support(f"Генерация завершилась ошибкой: {res.fail_msg}"),
             )
             await state.clear()
             await call.answer()
@@ -194,7 +195,10 @@ async def motion_control_confirm(
         if not res.result_url:
             await refund_video_generation(session, call.from_user.id)
             await stop_progress(stop, progress_task)
-            await edit_text_safe(progress_msg, "Готово, но не удалось найти ссылку 😕")
+            await edit_text_safe(
+                progress_msg,
+                with_support("Готово, но не удалось найти ссылку 😕"),
+            )
             await state.clear()
             await call.answer()
             return
@@ -226,7 +230,7 @@ async def motion_control_confirm(
         await stop_progress(stop, progress_task)
         await edit_text_safe(
             progress_msg,
-            "Не получилось сгенерировать 😅 Попробуй ещё раз чуть позже.",
+            with_support("Не получилось сгенерировать 😅 Попробуй ещё раз чуть позже."),
         )
         await state.clear()
         await call.answer()
