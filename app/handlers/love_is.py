@@ -338,7 +338,7 @@ async def love_is_animate(
         )
 
         res = await client.wait_for_success(
-            task_id, poll_interval_s=10, max_wait_s=12 * 60
+            task_id, poll_interval_s=10, max_wait_s=30 * 60
         )
         if res.state == "timeout":
             raise RuntimeError("timeout")

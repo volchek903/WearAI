@@ -355,7 +355,7 @@ class KieAIClient:
             return payload
 
     async def wait_result_urls(
-        self, task_id: str, *, max_wait_s: int = 180
+        self, task_id: str, *, max_wait_s: int = 30 * 60
     ) -> list[str]:
         elapsed = 0
         sleep_s = 2

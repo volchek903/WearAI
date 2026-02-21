@@ -179,7 +179,7 @@ async def motion_control_confirm(
             mode="720p",
         )
 
-        res = await client.wait_for_success(task_id, poll_interval_s=10, max_wait_s=20 * 60)
+        res = await client.wait_for_success(task_id, poll_interval_s=10, max_wait_s=30 * 60)
         if res.fail_msg:
             await refund_video_generation(session, call.from_user.id)
             await stop_progress(stop, progress_task)

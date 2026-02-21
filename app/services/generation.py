@@ -164,3 +164,80 @@ async def generate_image_kie_from_telegram(
         out.append((f"result_{idx}.{settings.output_format}", img_bytes))
 
     return out
+
+
+async def generate_image_kie_from_telegram_with_extra(
+    *,
+    bot: Bot,
+    session: AsyncSession,
+    tg_id: int,
+    prompt: str,
+    telegram_photo_file_ids: Sequence[str],
+    extra_images: Sequence[tuple[str, bytes]] = (),
+    aspect_ratio: str | None = None,
+    resolution: str | None = None,
+    output_format: str | None = None,
+    max_images: int = 5,
+) -> list[tuple[str, bytes]]:
+    """
+    Like generate_image_kie_from_telegram, but allows extra input images as raw bytes.
+    """
+    settings = await get_user_photo_settings(session, tg_id)
+    if aspect_ratio or resolution or output_format:
+        settings = PhotoSettingsDTO(
+            aspect_ratio=_normalize_aspect_ratio(
+                aspect_ratio or settings.aspect_ratio
+            ),
+            resolution=_normalize_resolution(resolution or settings.resolution),
+            output_format=_normalize_output_format(
+                output_format or settings.output_format
+            ),
+        )
+
+    kie = KieAIClient(api_key=get_kie_api_key_from_env())
+
+    max_total_inputs = 8
+    extra_list = list(extra_images)[:max_total_inputs]
+    available_slots = max(0, max_total_inputs - len(extra_list))
+
+    safe_max = max(0, min(int(max_images or 0), available_slots))
+    file_ids = list(telegram_photo_file_ids)[:safe_max]
+
+    images_bytes: list[bytes] = []
+    for fid in file_ids:
+        b = await tg_file_id_to_bytes(bot, fid, tg_id=tg_id)
+        images_bytes.append(b)
+
+    uploaded_urls: list[str] = []
+    for idx, (name, data) in enumerate(extra_list, start=1):
+        filename = name or f"extra_{idx}.{settings.output_format}"
+        url = await kie.upload_image_bytes(
+            data=data,
+            filename=filename,
+            upload_path=f"wearai/{tg_id}",
+        )
+        uploaded_urls.append(url)
+
+    for i, b in enumerate(images_bytes, start=1):
+        filename = f"{tg_id}_{i}.{settings.output_format}"
+        url = await kie.upload_image_bytes(
+            data=b,
+            filename=filename,
+            upload_path=f"wearai/{tg_id}",
+        )
+        uploaded_urls.append(url)
+
+    task_id = await kie.create_nano_banana_pro_task(
+        prompt=prompt,
+        image_input_urls=uploaded_urls,
+        settings=settings,
+    )
+
+    result_urls = await kie.wait_result_urls(task_id)
+
+    out: list[tuple[str, bytes]] = []
+    for idx, url in enumerate(result_urls, start=1):
+        img_bytes = await kie.download_bytes(url)
+        out.append((f"result_{idx}.{settings.output_format}", img_bytes))
+
+    return out

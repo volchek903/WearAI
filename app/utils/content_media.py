@@ -30,7 +30,7 @@ async def send_content_photo(
     caption: str | None = None,
     reply_markup: InlineKeyboardMarkup | None = None,
     parse_mode: str | None = None,
-) -> None:
+) -> bool:
     kwargs = {"reply_markup": reply_markup}
     if parse_mode is not None:
         kwargs["parse_mode"] = parse_mode
@@ -41,14 +41,16 @@ async def send_content_photo(
         file = BufferedInputFile(data, filename=filename)
         if len(data) > TG_MAX_PHOTO_BYTES:
             await message.answer_document(file, caption=caption, **kwargs)
-            return
+            return True
         await message.answer_photo(
             file,
             caption=caption,
             **kwargs,
         )
+        return True
     except Exception as e:
         logger.warning("send_content_photo failed: %s", e)
+        return False
 
 
 async def send_content_album(

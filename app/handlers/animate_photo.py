@@ -173,7 +173,7 @@ async def _run_video_job(
     client = KieKlingClient(settings.kie_api_key)
 
     try:
-        res = await client.wait_for_success(task_id, poll_interval_s=10, max_wait_s=20 * 60)
+        res = await client.wait_for_success(task_id, poll_interval_s=10, max_wait_s=30 * 60)
 
         if res.state == "timeout":
             await refund_video_generation(session, tg_id)
