@@ -41,6 +41,7 @@ from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_photo
 from app.utils.tg_send import send_image_smart
 from app.utils.support_text import with_support, launch_limits_message
+from app.utils.launch_guard import block_launch_for_call
 from app.utils.progress_bar import (
     progress_initial_text,
     progress_loop,
@@ -58,8 +59,12 @@ _MAX_BYTES = 10 * 1024 * 1024
 
 
 @router.callback_query(F.data == MenuCallbacks.LOVE_IS)
-async def love_is_start(call: CallbackQuery, state: FSMContext) -> None:
+async def love_is_start(
+    call: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
     await call.answer()
+    if await block_launch_for_call(call, session, reply_markup=buy_generations_kb()):
+        return
     await state.clear()
     await state.set_state(LoveIsFlow.photos)
     if call.message:
@@ -277,6 +282,8 @@ async def love_is_animate(
     call: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
     await call.answer()
+    if await block_launch_for_call(call, session, reply_markup=buy_generations_kb()):
+        return
     data = await state.get_data()
     path = data.get("love_is_image_path") or ""
     if not path:

@@ -31,6 +31,7 @@ from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_album
 from app.utils.tg_send import send_image_smart
 from app.utils.support_text import with_support, launch_limits_message
+from app.utils.launch_guard import block_launch_for_call
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 from app.utils.progress_bar import (
     progress_initial_text,
@@ -59,6 +60,8 @@ async def start_tryon_flow(
 ) -> None:
     await call.answer()
     await upsert_user(session, call.from_user.id, call.from_user.username)
+    if await block_launch_for_call(call, session, reply_markup=buy_generations_kb()):
+        return
 
     await state.clear()
     await state.set_state(TryOnFlow.user_photo)

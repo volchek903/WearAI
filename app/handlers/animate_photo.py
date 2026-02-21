@@ -30,6 +30,7 @@ from app.states.animate_photo import AnimatePhotoStates
 from app.utils.kie_kling_client import KieKlingClient
 from app.utils.tg_edit import edit_text_safe
 from app.utils.support_text import with_support, launch_limits_message
+from app.utils.launch_guard import block_launch_for_call
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 
 router = Router()
@@ -70,7 +71,11 @@ async def _chat_action_loop(bot, chat_id: int, stop: asyncio.Event) -> None:
 
 
 @router.callback_query(F.data == MenuCallbacks.ANIMATE)
-async def animate_entry(cb: CallbackQuery, state: FSMContext) -> None:
+async def animate_entry(
+    cb: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    if await block_launch_for_call(cb, session, reply_markup=buy_generations_kb()):
+        return
     await state.clear()
     await state.set_state(AnimatePhotoStates.waiting_photo)
 

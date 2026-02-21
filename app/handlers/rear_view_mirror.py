@@ -29,6 +29,7 @@ from app.utils.content_media import send_content_photo
 from app.utils.tg_send import send_image_smart
 from app.utils.tg_callback import safe_answer
 from app.utils.support_text import with_support, launch_limits_message
+from app.utils.launch_guard import block_launch_for_call
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -61,6 +62,8 @@ async def start_rear_view_mirror(
 ) -> None:
     await safe_answer(call)
     await upsert_user(session, call.from_user.id, call.from_user.username)
+    if await block_launch_for_call(call, session, reply_markup=buy_generations_kb()):
+        return
     await state.clear()
     await state.set_state(RearViewMirrorFlow.photo)
 
