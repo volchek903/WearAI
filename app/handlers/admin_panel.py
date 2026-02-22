@@ -27,11 +27,17 @@ from app.keyboards.confirm import yes_no_kb, ConfirmCallbacks
 from app.keyboards.utils import add_button
 from app.repository.admin import is_admin, get_users_page, get_users_stats
 from app.repository.admin_actions import log_admin_action
+from app.repository.app_settings import get_launch_daily_limit, set_launch_daily_limit
 from app.models.subscription import Subscription
 from app.repository.extra import get_all_plans
 from app.repository.promo import create_promo_code, get_last_promo_codes, PromoError
 from app.repository.referrals import get_top_referrers_last_week
-from app.states.admin import AdminPromoFSM, AdminPackagesFSM, AdminPackageCreateFSM
+from app.states.admin import (
+    AdminPromoFSM,
+    AdminPackagesFSM,
+    AdminPackageCreateFSM,
+    AdminLaunchLimitFSM,
+)
 from app.utils.tg_edit import edit_text_safe
 from app.utils.support_text import with_support
 
@@ -616,6 +622,50 @@ async def admin_promo_menu(call: CallbackQuery, session: AsyncSession) -> None:
         return
     await edit_text_safe(call, "🎟 Промокоды", reply_markup=admin_promo_kb())
     await call.answer()
+
+
+@router.callback_query(F.data == AdminCallbacks.LAUNCH_DAILY_LIMIT)
+async def admin_launch_daily_limit_start(
+    call: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    if not await _ensure_admin(call, session, "admin_panel.launch_daily_limit"):
+        return
+    cur = await get_launch_daily_limit(session)
+    await state.clear()
+    await state.set_state(AdminLaunchLimitFSM.waiting_value)
+    await edit_text_safe(
+        call,
+        f"Текущий лимит бесплатных генераций в день (Launch): {cur}\n\n"
+        "Введи новое число:",
+        reply_markup=admin_menu_kb(),
+    )
+    await call.answer()
+
+
+@router.message(AdminLaunchLimitFSM.waiting_value)
+async def admin_launch_daily_limit_value(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
+    if not await is_admin(session, message.from_user.id):
+        await message.answer("Недостаточно прав")
+        return
+    txt = (message.text or "").strip()
+    if not txt.isdigit():
+        await message.answer(
+            "Нужно целое число. Попробуй ещё раз.",
+            reply_markup=admin_menu_kb(),
+        )
+        return
+    value = int(txt)
+    if value < 0:
+        await message.answer("Число не может быть отрицательным.")
+        return
+    await set_launch_daily_limit(session, value)
+    await state.clear()
+    await message.answer(
+        f"✅ Лимит обновлён: {value}",
+        reply_markup=admin_menu_kb(),
+    )
 
 
 @router.callback_query(F.data == AdminCallbacks.CREATE_PROMO)

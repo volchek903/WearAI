@@ -27,3 +27,7 @@ class AdminPackageCreateFSM(StatesGroup):
     price = State()
     stars_price = State()
     confirm = State()
+
+
+class AdminLaunchLimitFSM(StatesGroup):
+    waiting_value = State()

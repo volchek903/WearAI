@@ -16,9 +16,13 @@ class MenuCallbacks:
     PHOTO_CARS = "menu:photo:cars"
     PHOTO_TWO = "menu:photo:two"
     PHOTO_ONE = "menu:photo:one"
+    PHOTO_OTHER = "menu:photo:other"
     VIDEO = "menu:video"
     LOVE_IS = "menu:love_is"
+    FEB23 = "menu:feb23"
+    MAIN_DEFENDER = "menu:main_defender"
     RADAR = "menu:radar"
+    SECOND_LIFE = "menu:second_life"
     NANO_BANANA = "menu:nano_banana"
     DRIFT_HEART = "menu:drift_heart"
     CAR_IN_HAND = "menu:car_in_hand"
@@ -58,6 +62,7 @@ def photo_menu_kb() -> InlineKeyboardMarkup:
     add_button(kb, text="🚗 Шаблоны с машинами", callback_data=MenuCallbacks.PHOTO_CARS)
     add_button(kb, text="👫 Шаблоны для двоих", callback_data=MenuCallbacks.PHOTO_TWO)
     add_button(kb, text="🧍‍♂️ Шаблоны для одного", callback_data=MenuCallbacks.PHOTO_ONE)
+    add_button(kb, text="🧩 Другое", callback_data=MenuCallbacks.PHOTO_OTHER)
     add_button(kb, text="⬅️ В меню", callback_data=MenuCallbacks.BACK, style="danger")
     kb.adjust(1)
     return kb.as_markup()
@@ -81,7 +86,17 @@ def photo_cars_kb() -> InlineKeyboardMarkup:
 def photo_two_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     add_button(kb, text="❤️ ИИ Love is", callback_data=MenuCallbacks.LOVE_IS)
+    add_button(kb, text="🎖 23 февраля", callback_data=MenuCallbacks.FEB23)
+    add_button(kb, text="🛡 Мой главный защитник", callback_data=MenuCallbacks.MAIN_DEFENDER)
     add_button(kb, text="🛰 ИИ Радар", callback_data=MenuCallbacks.RADAR)
+    add_button(kb, text="⬅️ Назад", callback_data=MenuCallbacks.PHOTO, style="danger")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def photo_other_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    add_button(kb, text="🖼 Вторая жизнь для фото", callback_data=MenuCallbacks.SECOND_LIFE)
     add_button(kb, text="⬅️ Назад", callback_data=MenuCallbacks.PHOTO, style="danger")
     kb.adjust(1)
     return kb.as_markup()

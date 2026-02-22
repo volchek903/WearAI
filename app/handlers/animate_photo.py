@@ -23,14 +23,12 @@ from app.repository.generations import (
     charge_video_generation,
     refund_video_generation,
     NoGenerationsLeft,
-    is_launch_subscription,
 )
 from app.repository.users import increment_generated_videos
 from app.states.animate_photo import AnimatePhotoStates
 from app.utils.kie_kling_client import KieKlingClient
 from app.utils.tg_edit import edit_text_safe
-from app.utils.support_text import with_support, launch_limits_message
-from app.utils.launch_guard import block_launch_for_call
+from app.utils.support_text import with_support
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 
 router = Router()
@@ -71,11 +69,7 @@ async def _chat_action_loop(bot, chat_id: int, stop: asyncio.Event) -> None:
 
 
 @router.callback_query(F.data == MenuCallbacks.ANIMATE)
-async def animate_entry(
-    cb: CallbackQuery, state: FSMContext, session: AsyncSession
-) -> None:
-    if await block_launch_for_call(cb, session, reply_markup=buy_generations_kb()):
-        return
+async def animate_entry(cb: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(AnimatePhotoStates.waiting_photo)
 
@@ -326,15 +320,10 @@ async def animate_got_prompt(
         # ✅ ВАЖНО: generations.py (версия A) ждёт tg_id
         await charge_video_generation(session, tg_id)
     except NoGenerationsLeft:
-        if await is_launch_subscription(session, tg_id):
-            await message.answer(
-                launch_limits_message(), reply_markup=buy_generations_kb()
-            )
-        else:
-            await message.answer(
-                "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
-                reply_markup=buy_generations_kb(),
-            )
+        await message.answer(
+            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
+            reply_markup=buy_generations_kb(),
+        )
         return
 
     client = KieKlingClient(settings.kie_api_key)

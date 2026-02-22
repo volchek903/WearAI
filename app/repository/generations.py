@@ -3,12 +3,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.subscription import Subscription
 from app.models.user import User
 from app.models.user_subscription import UserSubscription
+from app.models.generation_log import GenerationLog
+from app.repository.app_settings import get_launch_daily_limit
 
 
 class NoGenerationsLeft(Exception):
@@ -32,6 +34,32 @@ async def _get_active_us_id(session: AsyncSession, user_id: int) -> int | None:
         .limit(1)
     )
     return int(us_id) if us_id is not None else None
+
+
+def _msk_today_start_utc() -> datetime:
+    msk = timezone(timedelta(hours=3))
+    now_msk = datetime.now(msk)
+    start_msk = datetime(
+        now_msk.year, now_msk.month, now_msk.day, tzinfo=msk
+    )
+    return start_msk.astimezone(timezone.utc)
+
+
+async def get_launch_used_today(session: AsyncSession) -> int:
+    launch_id = await session.scalar(
+        select(Subscription.id).where(Subscription.name == "Launch").limit(1)
+    )
+    if not launch_id:
+        return 0
+
+    start_utc = _msk_today_start_utc()
+    used_today = await session.scalar(
+        select(func.count(GenerationLog.id)).where(
+            GenerationLog.subscription_id == launch_id,
+            GenerationLog.created_at >= start_utc,
+        )
+    )
+    return int(used_today or 0)
 
 
 async def get_active_subscription_name(
@@ -149,8 +177,24 @@ async def charge_photo_generation(session: AsyncSession, tg_id: int) -> None:
 
     sub_name = await get_active_subscription_name(session, tg_id)
     if (sub_name or "").strip().lower() == "launch":
-        print("[DEBUG charge_photo] BLOCKED: launch subscription")
-        raise NoGenerationsLeft()
+        limit = await get_launch_daily_limit(session)
+        if limit <= 0:
+            print("[DEBUG charge_photo] BLOCKED: launch daily limit=0")
+            raise NoGenerationsLeft()
+        start_utc = _msk_today_start_utc()
+        launch_sub_id = await session.scalar(
+            select(UserSubscription.subscription_id).where(UserSubscription.id == us_id)
+        )
+        used_today = await session.scalar(
+            select(func.count(GenerationLog.id)).where(
+                GenerationLog.user_id == user_id,
+                GenerationLog.subscription_id == launch_sub_id,
+                GenerationLog.created_at >= start_utc,
+            )
+        )
+        if int(used_today or 0) >= int(limit):
+            print("[DEBUG charge_photo] BLOCKED: launch daily limit reached")
+            raise NoGenerationsLeft()
 
     before = await session.scalar(
         select(UserSubscription.remaining_photo, UserSubscription.expires_at).where(
@@ -183,6 +227,19 @@ async def charge_photo_generation(session: AsyncSession, tg_id: int) -> None:
         )
         print(f"[DEBUG charge_photo] FAIL cur row={cur}")
         raise NoGenerationsLeft()
+
+    sub_id = await session.scalar(
+        select(UserSubscription.subscription_id).where(UserSubscription.id == us_id)
+    )
+    if sub_id:
+        session.add(
+            GenerationLog(
+                user_id=user_id,
+                subscription_id=int(sub_id),
+                user_subscription_id=us_id,
+                kind="photo",
+            )
+        )
 
     await session.commit()
     print(f"[DEBUG charge_photo] COMMIT OK new_left={new_left}")
@@ -229,8 +286,24 @@ async def charge_video_generation(session: AsyncSession, tg_id: int) -> None:
 
     sub_name = await get_active_subscription_name(session, tg_id)
     if (sub_name or "").strip().lower() == "launch":
-        print("[DEBUG charge_video] BLOCKED: launch subscription")
-        raise NoGenerationsLeft()
+        limit = await get_launch_daily_limit(session)
+        if limit <= 0:
+            print("[DEBUG charge_video] BLOCKED: launch daily limit=0")
+            raise NoGenerationsLeft()
+        start_utc = _msk_today_start_utc()
+        launch_sub_id = await session.scalar(
+            select(UserSubscription.subscription_id).where(UserSubscription.id == us_id)
+        )
+        used_today = await session.scalar(
+            select(func.count(GenerationLog.id)).where(
+                GenerationLog.user_id == user_id,
+                GenerationLog.subscription_id == launch_sub_id,
+                GenerationLog.created_at >= start_utc,
+            )
+        )
+        if int(used_today or 0) >= int(limit):
+            print("[DEBUG charge_video] BLOCKED: launch daily limit reached")
+            raise NoGenerationsLeft()
 
     before = await session.scalar(
         select(UserSubscription.remaining_video, UserSubscription.expires_at).where(
@@ -263,6 +336,19 @@ async def charge_video_generation(session: AsyncSession, tg_id: int) -> None:
         )
         print(f"[DEBUG charge_video] FAIL cur row={cur}")
         raise NoGenerationsLeft()
+
+    sub_id = await session.scalar(
+        select(UserSubscription.subscription_id).where(UserSubscription.id == us_id)
+    )
+    if sub_id:
+        session.add(
+            GenerationLog(
+                user_id=user_id,
+                subscription_id=int(sub_id),
+                user_subscription_id=us_id,
+                kind="video",
+            )
+        )
 
     await session.commit()
     print(f"[DEBUG charge_video] COMMIT OK new_left={new_left}")

@@ -282,8 +282,6 @@ async def love_is_animate(
     call: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
     await call.answer()
-    if await block_launch_for_call(call, session, reply_markup=buy_generations_kb()):
-        return
     data = await state.get_data()
     path = data.get("love_is_image_path") or ""
     if not path:
@@ -301,12 +299,9 @@ async def love_is_animate(
     try:
         await charge_video_generation(session, tg_id)
     except NoGenerationsLeft:
-        if await is_launch_subscription(session, tg_id):
-            await call.message.answer(launch_limits_message())
-        else:
-            await call.message.answer(
-                "⛔️ Лимит генераций видео исчерпан.\n\nОформи подписку или пополни баланс 💳"
-            )
+        await call.message.answer(
+            "⛔️ Лимит генераций видео исчерпан.\n\nОформи подписку или пополни баланс 💳"
+        )
         await state.clear()
         return
 

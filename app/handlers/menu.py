@@ -10,6 +10,7 @@ from app.keyboards.menu import (
     photo_cars_kb,
     photo_two_kb,
     photo_one_kb,
+    photo_other_kb,
     video_menu_kb,
 )
 from app.utils.tg_edit import edit_text_safe
@@ -53,6 +54,16 @@ async def open_photo_one(call: CallbackQuery) -> None:
         call,
         "🧍‍♂️ Шаблоны для одного — выбери модуль 👇",
         reply_markup=photo_one_kb(),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == MenuCallbacks.PHOTO_OTHER)
+async def open_photo_other(call: CallbackQuery) -> None:
+    await edit_text_safe(
+        call,
+        "🧩 Другое — выбери модуль 👇",
+        reply_markup=photo_other_kb(),
     )
     await call.answer()
 

@@ -26,6 +26,7 @@ class AdminCallbacks:
     CREATE_PROMO = "admin:promo:create"
     LIST_PROMO = "admin:promo:list"
     PROMO_TYPE = "admin:promo:type"
+    LAUNCH_DAILY_LIMIT = "admin:launch_daily_limit"
 
     BACK = "admin:back"
 
@@ -68,6 +69,11 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
     add_button(kb, text="🏆 Топ рефералов", callback_data=AdminCallbacks.TOP_REFERRALS)
     add_button(kb, text="📦 Пакеты", callback_data=AdminCallbacks.PACKAGES)
     add_button(kb, text="🎟 Промокоды", callback_data=AdminCallbacks.PROMO)
+    add_button(
+        kb,
+        text="🆓 Лимит бесплатных/день",
+        callback_data=AdminCallbacks.LAUNCH_DAILY_LIMIT,
+    )
     add_button(kb, text="📣 Рассылка", callback_data=AdminCallbacks.BROADCAST)
     add_button(kb, text="🔐 Доступы", callback_data=AdminCallbacks.ACCESS)
     add_button(kb, text="⬅️ Назад", callback_data=AdminCallbacks.BACK, style="danger")
