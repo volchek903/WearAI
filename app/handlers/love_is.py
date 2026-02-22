@@ -27,6 +27,7 @@ from app.repository.generations import (
     ensure_default_subscription,
     refund_photo_generation,
     refund_video_generation,
+    is_launch_subscription,
 )
 from app.repository.users import (
     increment_generated_photos,
@@ -39,7 +40,7 @@ from app.states.love_is_flow import LoveIsFlow
 from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_photo
 from app.utils.tg_send import send_image_smart
-from app.utils.support_text import with_support
+from app.utils.support_text import with_support, launch_limits_message
 from app.utils.launch_guard import block_launch_for_call
 from app.utils.progress_bar import (
     progress_initial_text,
@@ -142,10 +143,15 @@ async def love_is_text_in(
     try:
         await charge_photo_generation(session, tg_id)
     except NoGenerationsLeft:
-        await message.answer(
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
-            reply_markup=buy_generations_kb(),
-        )
+        if await is_launch_subscription(session, tg_id):
+            await message.answer(
+                launch_limits_message(), reply_markup=buy_generations_kb()
+            )
+        else:
+            await message.answer(
+                "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
+                reply_markup=buy_generations_kb(),
+            )
         await state.clear()
         return
 
@@ -295,9 +301,12 @@ async def love_is_animate(
     try:
         await charge_video_generation(session, tg_id)
     except NoGenerationsLeft:
-        await call.message.answer(
-            "⛔️ Лимит генераций видео исчерпан.\n\nОформи подписку или пополни баланс 💳"
-        )
+        if await is_launch_subscription(session, tg_id):
+            await call.message.answer(launch_limits_message())
+        else:
+            await call.message.answer(
+                "⛔️ Лимит генераций видео исчерпан.\n\nОформи подписку или пополни баланс 💳"
+            )
         await state.clear()
         return
 

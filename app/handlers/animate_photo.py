@@ -23,12 +23,13 @@ from app.repository.generations import (
     charge_video_generation,
     refund_video_generation,
     NoGenerationsLeft,
+    is_launch_subscription,
 )
 from app.repository.users import increment_generated_videos
 from app.states.animate_photo import AnimatePhotoStates
 from app.utils.kie_kling_client import KieKlingClient
 from app.utils.tg_edit import edit_text_safe
-from app.utils.support_text import with_support
+from app.utils.support_text import with_support, launch_limits_message
 from app.utils.launch_guard import block_launch_for_call
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 
@@ -325,10 +326,15 @@ async def animate_got_prompt(
         # ✅ ВАЖНО: generations.py (версия A) ждёт tg_id
         await charge_video_generation(session, tg_id)
     except NoGenerationsLeft:
-        await message.answer(
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
-            reply_markup=buy_generations_kb(),
-        )
+        if await is_launch_subscription(session, tg_id):
+            await message.answer(
+                launch_limits_message(), reply_markup=buy_generations_kb()
+            )
+        else:
+            await message.answer(
+                "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
+                reply_markup=buy_generations_kb(),
+            )
         return
 
     client = KieKlingClient(settings.kie_api_key)
