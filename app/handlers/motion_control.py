@@ -16,7 +16,6 @@ from app.repository.generations import (
     charge_video_generation,
     refund_video_generation,
     ensure_default_subscription,
-    is_launch_subscription,
 )
 from app.repository.users import increment_generated_videos, upsert_user
 from app.states.motion_control_flow import MotionControlFlow
@@ -24,7 +23,7 @@ from app.utils.kie_kling_client import KieKlingClient
 from app.db.config import settings
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.tg_edit import edit_text_safe
-from app.utils.support_text import with_support, launch_limits_message
+from app.utils.support_text import with_support
 from app.utils.tg_callback import safe_answer
 from app.utils.tg_files import tg_file_id_to_bytes
 
@@ -143,16 +142,11 @@ async def motion_control_confirm(
         await ensure_default_subscription(session, call.from_user.id)
         await charge_video_generation(session, call.from_user.id)
     except NoGenerationsLeft:
-        if await is_launch_subscription(session, call.from_user.id):
-            await edit_text_safe(
-                call, launch_limits_message(), reply_markup=buy_generations_kb()
-            )
-        else:
-            await edit_text_safe(
-                call,
-                "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
-                reply_markup=buy_generations_kb(),
-            )
+        await edit_text_safe(
+            call,
+            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
+            reply_markup=buy_generations_kb(),
+        )
         await state.clear()
         await safe_answer(call)
         return

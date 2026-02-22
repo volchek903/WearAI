@@ -16,7 +16,6 @@ from app.repository.generations import (
     charge_photo_generation,
     ensure_default_subscription,
     refund_photo_generation,
-    is_launch_subscription,
 )
 from app.repository.users import increment_generated_photos, upsert_user
 from app.services.album_collector import AlbumCollector
@@ -28,7 +27,7 @@ from app.utils.progress_bar import progress_initial_text, progress_loop, stop_pr
 from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_photo
 from app.utils.tg_send import send_image_smart
-from app.utils.support_text import with_support, launch_limits_message
+from app.utils.support_text import with_support
 from app.utils.launch_guard import block_launch_for_call
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 
@@ -302,16 +301,11 @@ async def radar_review_confirm(
         await charge_photo_generation(session, tg_id)
     except NoGenerationsLeft:
         await stop_progress(stop, progress_task)
-        if await is_launch_subscription(session, tg_id):
-            await edit_text_safe(
-                progress_msg, launch_limits_message(), reply_markup=buy_generations_kb()
-            )
-        else:
-            await edit_text_safe(
-                progress_msg,
-                "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
-                reply_markup=buy_generations_kb(),
-            )
+        await edit_text_safe(
+            progress_msg,
+            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
+            reply_markup=buy_generations_kb(),
+        )
         await state.clear()
         return
 
