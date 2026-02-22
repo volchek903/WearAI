@@ -15,12 +15,4 @@ async def block_launch_for_call(
     *,
     reply_markup=None,
 ) -> bool:
-    if await is_launch_subscription(session, call.from_user.id):
-        await edit_text_safe(
-            call,
-            launch_limits_message(),
-            reply_markup=reply_markup,
-        )
-        await safe_answer(call)
-        return True
     return False

@@ -147,10 +147,7 @@ async def charge_photo_generation(session: AsyncSession, tg_id: int) -> None:
         print("[DEBUG charge_photo] FAIL: no active subscription")
         raise NoGenerationsLeft()
 
-    sub_name = await get_active_subscription_name(session, tg_id)
-    if (sub_name or "").strip().lower() == "launch":
-        print("[DEBUG charge_photo] BLOCKED: launch subscription")
-        raise NoGenerationsLeft()
+    # Launch can generate again
 
     before = await session.scalar(
         select(UserSubscription.remaining_photo, UserSubscription.expires_at).where(
@@ -227,10 +224,7 @@ async def charge_video_generation(session: AsyncSession, tg_id: int) -> None:
         print("[DEBUG charge_video] FAIL: no active subscription")
         raise NoGenerationsLeft()
 
-    sub_name = await get_active_subscription_name(session, tg_id)
-    if (sub_name or "").strip().lower() == "launch":
-        print("[DEBUG charge_video] BLOCKED: launch subscription")
-        raise NoGenerationsLeft()
+    # Launch can generate again
 
     before = await session.scalar(
         select(UserSubscription.remaining_video, UserSubscription.expires_at).where(
