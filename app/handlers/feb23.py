@@ -27,6 +27,7 @@ from app.utils.tg_callback import safe_answer
 from app.utils.launch_guard import block_launch_for_call
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.tg_edit import edit_text_safe
+from app.utils.content_media import send_content_photo
 from app.utils.tg_send import send_image_smart
 from app.utils.support_text import with_support
 
@@ -67,13 +68,20 @@ async def start_feb23(
         return
     await state.clear()
     await state.set_state(Feb23Flow.photos)
-    await edit_text_safe(
-        call,
-        "🎖 <b>Поздравление 23 февраля</b>\n\n"
-        "Пришли 1–2 фото, где чётко видны мужчина и женщина 📸",
-        reply_markup=None,
-        parse_mode="HTML",
-    )
+    if call.message:
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
+        await send_content_photo(
+            call.message,
+            filename="owner_23.jpeg",
+            caption=(
+                "🎖 <b>Поздравление 23 февраля</b>\n\n"
+                "Пришли 1–2 фото, где чётко видны мужчина и женщина 📸"
+            ),
+            parse_mode="HTML",
+        )
 
 
 @router.message(Feb23Flow.photos)

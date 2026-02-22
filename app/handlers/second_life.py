@@ -25,6 +25,7 @@ from app.utils.kie_errors import kie_error_to_user_text
 from app.utils.launch_guard import block_launch_for_call
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.tg_edit import edit_text_safe
+from app.utils.content_media import send_content_album
 from app.utils.tg_send import send_image_smart
 from app.utils.support_text import with_support
 from app.utils.tg_callback import safe_answer
@@ -69,12 +70,20 @@ async def start_second_life(
         return
     await state.clear()
     await state.set_state(SecondLifeFlow.photo)
-    await edit_text_safe(
-        call,
-        "🖼 <b>Вторая жизнь для фото</b>\n\nПришли фото, которое нужно улучшить 📸",
-        reply_markup=None,
-        parse_mode="HTML",
-    )
+    if call.message:
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
+        await send_content_album(
+            call.message,
+            filenames=["old_photo.jpeg", "new_photo.jpeg"],
+            caption=(
+                "🖼 <b>Вторая жизнь для фото</b>\n\n"
+                "Пришли фото, которое нужно улучшить 📸"
+            ),
+            parse_mode="HTML",
+        )
 
 
 @router.message(SecondLifeFlow.photo)
