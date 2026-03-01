@@ -88,6 +88,8 @@ def install_tg_error_logging(
             "Failed to fetch updates - TelegramServerError",
             "ServerDisconnectedError",
             "Bad Gateway",
+            "bot was blocked by the user",
+            "Forbidden: bot was blocked by the user",
         },
     )
     formatter = logging.Formatter(

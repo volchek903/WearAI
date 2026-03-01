@@ -398,7 +398,8 @@ class KieAIClient:
                 return await client.get(url)
 
         last_exc: Exception | None = None
-        for attempt in range(3):
+        max_attempts = 8
+        for attempt in range(max_attempts):
             try:
                 resp = await _do()
                 if resp.status_code != 200:
@@ -408,7 +409,8 @@ class KieAIClient:
                 return resp.content
             except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError) as e:
                 last_exc = e
-                await asyncio.sleep(1.5 * (attempt + 1))
+                backoff = min(15.0, 2.0 * (attempt + 1))
+                await asyncio.sleep(backoff)
             except httpx.HTTPError as e:
                 last_exc = e
                 break

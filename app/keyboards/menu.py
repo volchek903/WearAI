@@ -21,6 +21,8 @@ class MenuCallbacks:
     LOVE_IS = "menu:love_is"
     FEB23 = "menu:feb23"
     MAIN_DEFENDER = "menu:main_defender"
+    MARCH8 = "menu:march8"
+    CINEMA_BW = "menu:cinema_bw"
     RADAR = "menu:radar"
     SECOND_LIFE = "menu:second_life"
     NANO_BANANA = "menu:nano_banana"
@@ -28,6 +30,7 @@ class MenuCallbacks:
     CAR_IN_HAND = "menu:car_in_hand"
     REAR_VIEW_MIRROR = "menu:rear_view_mirror"
     GTA_STYLE = "menu:gta_style"
+    LEGO_STYLE = "menu:lego_style"
     FAQ = "menu:faq"
     SETTINGS = "menu:settings"
     EXTRA = "menu:extra"
@@ -88,6 +91,7 @@ def photo_two_kb() -> InlineKeyboardMarkup:
     add_button(kb, text="❤️ ИИ Love is", callback_data=MenuCallbacks.LOVE_IS)
     add_button(kb, text="🎖 23 февраля", callback_data=MenuCallbacks.FEB23)
     add_button(kb, text="🛡 Мой главный защитник", callback_data=MenuCallbacks.MAIN_DEFENDER)
+    add_button(kb, text="🎞 Одни в кинозале ЧБ", callback_data=MenuCallbacks.CINEMA_BW)
     add_button(kb, text="🛰 ИИ Радар", callback_data=MenuCallbacks.RADAR)
     add_button(kb, text="⬅️ Назад", callback_data=MenuCallbacks.PHOTO, style="danger")
     kb.adjust(1)
@@ -97,6 +101,7 @@ def photo_two_kb() -> InlineKeyboardMarkup:
 def photo_other_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     add_button(kb, text="🖼 Вторая жизнь для фото", callback_data=MenuCallbacks.SECOND_LIFE)
+    add_button(kb, text="🌸 Поздравление с 8 Марта", callback_data=MenuCallbacks.MARCH8)
     add_button(kb, text="⬅️ Назад", callback_data=MenuCallbacks.PHOTO, style="danger")
     kb.adjust(1)
     return kb.as_markup()
@@ -107,6 +112,7 @@ def photo_one_kb() -> InlineKeyboardMarkup:
     add_button(kb, text="🛍️ Модель с товаром", callback_data=MenuCallbacks.MODEL)
     add_button(kb, text="🧥 Примерить одежду", callback_data=MenuCallbacks.TRYON)
     add_button(kb, text="🕶 GTA STYLE", callback_data=MenuCallbacks.GTA_STYLE)
+    add_button(kb, text="🧱 LEGO Style", callback_data=MenuCallbacks.LEGO_STYLE)
     add_button(kb, text="⬅️ Назад", callback_data=MenuCallbacks.PHOTO, style="danger")
     kb.adjust(1)
     return kb.as_markup()

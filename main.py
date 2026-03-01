@@ -29,9 +29,12 @@ from app.handlers.menu import router as menu_router
 from app.handlers.love_is import router as love_is_router
 from app.handlers.radar import router as radar_router
 from app.handlers.feb23 import router as feb23_router
+from app.handlers.march8 import router as march8_router
 from app.handlers.main_defender import router as main_defender_router
+from app.handlers.cinema_bw import router as cinema_bw_router
 from app.handlers.second_life import router as second_life_router
 from app.handlers.gta_style import router as gta_style_router
+from app.handlers.lego_style import router as lego_style_router
 from app.handlers.feedback_offer_video import router as feedback_offer_video_router
 from app.handlers.admin_panel import router as admin_panel_router
 from app.handlers.admin_broadcast import router as admin_broadcast_router
@@ -80,10 +83,13 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(tryon_router)
     dp.include_router(love_is_router)
     dp.include_router(feb23_router)
+    dp.include_router(march8_router)
     dp.include_router(main_defender_router)
+    dp.include_router(cinema_bw_router)
     dp.include_router(second_life_router)
     dp.include_router(radar_router)
     dp.include_router(gta_style_router)
+    dp.include_router(lego_style_router)
     dp.include_router(animate_router)
     dp.include_router(faq_router)
     dp.include_router(feedback_offer_video_router)

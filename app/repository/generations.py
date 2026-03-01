@@ -45,6 +45,70 @@ def _msk_today_start_utc() -> datetime:
     return start_msk.astimezone(timezone.utc)
 
 
+def _calc_expires_at(now_utc: datetime, plan: Subscription) -> datetime:
+    days = int(getattr(plan, "duration_days", 0) or 0)
+    if days > 0:
+        return now_utc + timedelta(days=days)
+    # бессрочно — далеко в будущее
+    return now_utc + timedelta(days=365 * 100)
+
+
+async def _maybe_downgrade_to_base(
+    session: AsyncSession, *, user_id: int, us_id: int
+) -> None:
+    row = (
+        await session.execute(
+        select(
+            UserSubscription.remaining_photo,
+            UserSubscription.remaining_video,
+            Subscription.name,
+        )
+        .join(Subscription, Subscription.id == UserSubscription.subscription_id)
+        .where(UserSubscription.id == us_id, UserSubscription.status == 1)
+        .limit(1)
+        )
+    ).first()
+    if not row:
+        return
+
+    remaining_photo, remaining_video, sub_name = row
+    if int(remaining_photo or 0) > 0 or int(remaining_video or 0) > 0:
+        return
+
+    if (sub_name or "").strip().lower() == "base":
+        return
+
+    base = await session.scalar(
+        select(Subscription).where(Subscription.name == "Base").limit(1)
+    )
+    if not base:
+        base = await session.scalar(
+            select(Subscription).order_by(Subscription.id.asc()).limit(1)
+        )
+    if not base:
+        return
+
+    now = _utcnow()
+    expires = _calc_expires_at(now, base)
+
+    await session.execute(
+        update(UserSubscription)
+        .where(UserSubscription.id == us_id, UserSubscription.status == 1)
+        .values(status=0)
+    )
+    session.add(
+        UserSubscription(
+            user_id=user_id,
+            subscription_id=base.id,
+            expires_at=expires,
+            remaining_photo=0,
+            remaining_video=0,
+            status=1,
+        )
+    )
+    await session.commit()
+
+
 async def get_launch_used_today(session: AsyncSession) -> int:
     launch_id = await session.scalar(
         select(Subscription.id).where(Subscription.name == "Launch").limit(1)
@@ -243,6 +307,7 @@ async def charge_photo_generation(session: AsyncSession, tg_id: int) -> None:
 
     await session.commit()
     print(f"[DEBUG charge_photo] COMMIT OK new_left={new_left}")
+    await _maybe_downgrade_to_base(session, user_id=user_id, us_id=us_id)
 
 
 async def refund_photo_generation(session: AsyncSession, tg_id: int) -> None:
@@ -352,6 +417,7 @@ async def charge_video_generation(session: AsyncSession, tg_id: int) -> None:
 
     await session.commit()
     print(f"[DEBUG charge_video] COMMIT OK new_left={new_left}")
+    await _maybe_downgrade_to_base(session, user_id=user_id, us_id=us_id)
 
 
 async def refund_video_generation(session: AsyncSession, tg_id: int) -> None:

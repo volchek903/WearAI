@@ -26,6 +26,14 @@ def kie_error_to_user_text(err: Exception) -> str:
 
     header = "Не получилось сгенерировать изображение 😅"
 
+    # Перегрузка сервиса (иногда приходит как 422 с кодом E003)
+    if "e003" in raw_l or "service is currently unavailable" in raw_l:
+        return with_support(
+            f"{header}\n\n"
+            "Сервис сейчас перегружен.\n"
+            "Попробуй повторить через 1–2 минуты."
+        )
+
     # 422 / rejected — чаще всего контент- или input-фильтры
     if code == "422" or "rejected" in raw_l:
         return with_support(
