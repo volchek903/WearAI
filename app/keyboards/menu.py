@@ -61,7 +61,7 @@ def main_menu_kb() -> InlineKeyboardMarkup:
 
 def photo_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    add_button(kb, text="🍌 Nano Banano Pro", callback_data=MenuCallbacks.NANO_BANANA)
+    add_button(kb, text="🍌 Nano Banana 2", callback_data=MenuCallbacks.NANO_BANANA)
     add_button(kb, text="🚗 Шаблоны с машинами", callback_data=MenuCallbacks.PHOTO_CARS)
     add_button(kb, text="👫 Шаблоны для двоих", callback_data=MenuCallbacks.PHOTO_TWO)
     add_button(kb, text="🧍‍♂️ Шаблоны для одного", callback_data=MenuCallbacks.PHOTO_ONE)

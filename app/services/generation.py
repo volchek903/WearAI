@@ -147,8 +147,8 @@ async def generate_image_kie_from_telegram(
         )
         uploaded_urls.append(url)
 
-    # 3) createTask (nano-banana-pro) — settings уже из БД
-    task_id = await kie.create_nano_banana_pro_task(
+    # 3) createTask (nano-banana-2) — settings уже из БД
+    task_id = await kie.create_nano_banana_2_task(
         prompt=prompt,
         image_input_urls=uploaded_urls,
         settings=settings,
@@ -227,7 +227,7 @@ async def generate_image_kie_from_telegram_with_extra(
         )
         uploaded_urls.append(url)
 
-    task_id = await kie.create_nano_banana_pro_task(
+    task_id = await kie.create_nano_banana_2_task(
         prompt=prompt,
         image_input_urls=uploaded_urls,
         settings=settings,

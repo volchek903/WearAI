@@ -182,7 +182,7 @@ class KieAIClient:
     """
     KIE integration:
       - Upload images -> https://kieai.redpandaai.co/api/file-stream-upload
-      - Create task   -> https://api.kie.ai/api/v1/jobs/createTask (model nano-banana-pro)
+      - Create task   -> https://api.kie.ai/api/v1/jobs/createTask (model nano-banana-2)
       - Poll status   -> https://api.kie.ai/api/v1/jobs/recordInfo?taskId=...
     """
 
@@ -267,7 +267,7 @@ class KieAIClient:
 
             return dl
 
-    async def create_nano_banana_pro_task(
+    async def create_nano_banana_2_task(
         self,
         *,
         prompt: str,
@@ -300,7 +300,7 @@ class KieAIClient:
         safe_urls = _add_cache_buster(image_input_urls, req_tag)
 
         body: dict[str, Any] = {
-            "model": "nano-banana-pro",
+            "model": "nano-banana-2",
             "input": {
                 "prompt": prompt,
                 "image_input": list(safe_urls),

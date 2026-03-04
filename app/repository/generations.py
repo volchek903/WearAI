@@ -27,9 +27,14 @@ async def _get_user_db_id(session: AsyncSession, tg_id: int) -> int | None:
 
 
 async def _get_active_us_id(session: AsyncSession, user_id: int) -> int | None:
+    now = _utcnow()
     us_id = await session.scalar(
         select(UserSubscription.id)
-        .where(UserSubscription.user_id == user_id, UserSubscription.status == 1)
+        .where(
+            UserSubscription.user_id == user_id,
+            UserSubscription.status == 1,
+            UserSubscription.expires_at > now,
+        )
         .order_by(UserSubscription.activated_at.desc())
         .limit(1)
     )
@@ -133,9 +138,14 @@ async def get_active_subscription_name(
     if not user_id:
         return None
 
+    now = _utcnow()
     us = await session.scalar(
         select(UserSubscription)
-        .where(UserSubscription.user_id == user_id, UserSubscription.status == 1)
+        .where(
+            UserSubscription.user_id == user_id,
+            UserSubscription.status == 1,
+            UserSubscription.expires_at > now,
+        )
         .order_by(UserSubscription.activated_at.desc())
         .limit(1)
     )

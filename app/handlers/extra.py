@@ -42,6 +42,7 @@ from app.repository.extra import (
     get_plan,
     get_all_plans,
 )
+from app.repository.generations import ensure_default_subscription
 from app.repository.payments import (
     create_pending_payment,
     get_payment_by_id,
@@ -478,6 +479,7 @@ async def extra_open(call: CallbackQuery, session: AsyncSession) -> None:
             current_name = "Launch"
             remaining_video, remaining_photo = 2, 3
         else:
+            await ensure_default_subscription(session, call.from_user.id)
             current_name = await get_active_plan_name(session, user.id)
             remaining_video, remaining_photo = await get_active_remaining(session, user.id)
 
