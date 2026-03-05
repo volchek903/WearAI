@@ -53,7 +53,6 @@ def main_menu_kb() -> InlineKeyboardMarkup:
     add_button(kb, text="🎬 Работа с видео", callback_data=MenuCallbacks.VIDEO)
     add_button(kb, text="✨ Доп. возможности", callback_data=MenuCallbacks.EXTRA)
     add_button(kb, text="❓ Вопросы (FAQ)", callback_data=MenuCallbacks.FAQ)
-    add_button(kb, text="⚙️ Настройки", callback_data=MenuCallbacks.SETTINGS)
 
     kb.adjust(1)
     return kb.as_markup()

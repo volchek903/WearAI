@@ -24,7 +24,7 @@ OUTPUT_FORMATS: list[str] = ["png", "jpg"]
 @dataclass(frozen=True)
 class DefaultPhotoSettings:
     aspect_ratio: str = "1:1"
-    resolution: str = "2K"
+    resolution: str = "1K"
     output_format: str = "png"
 
 

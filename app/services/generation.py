@@ -20,10 +20,8 @@ def _normalize_output_format(v: str) -> str:
 
 
 def _normalize_resolution(v: str) -> str:
-    v = (v or "").strip().upper()
-    if v not in {"1K", "2K"}:
-        return "2K"
-    return v
+    del v
+    return "1K"
 
 
 def _normalize_aspect_ratio(v: str) -> str:

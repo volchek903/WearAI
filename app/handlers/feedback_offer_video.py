@@ -113,7 +113,7 @@ async def _get_or_upload_kling_image_url(cb: CallbackQuery, state: FSMContext) -
         logger.warning("No local image for video, fallback to Telegram. err=%s", e)
 
     if not settings.kie_api_key:
-        raise RuntimeError("Не настроен KIE_API_KEY.")
+        raise RuntimeError("Не настроен WAVESPEED_API_KEY.")
 
     if image_bytes is None:
         file_id, filename_from_payload = _pick_best_output_file(fp)

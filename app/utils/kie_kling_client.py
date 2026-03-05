@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import mimetypes
 from dataclasses import dataclass
@@ -11,13 +10,13 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
-KIE_FILE_UPLOAD_URL = "https://kieai.redpandaai.co/api/file-stream-upload"
-KIE_CREATE_TASK_URL = "https://api.kie.ai/api/v1/jobs/createTask"
-KIE_TASK_INFO_URL = "https://api.kie.ai/api/v1/jobs/recordInfo"
-KIE_DOWNLOAD_URL = "https://api.kie.ai/api/v1/common/download-url"
+WAVESPEED_BASE_URL = "https://api.wavespeed.ai/api/v3"
+WAVESPEED_FILE_UPLOAD_URL = f"{WAVESPEED_BASE_URL}/media/upload/binary"
+WAVESPEED_PREDICTIONS_URL = f"{WAVESPEED_BASE_URL}/predictions"
 
-KLING_MODEL = "kling/v2-1-standard"
-KLING_MOTION_CONTROL_MODEL = "kling-2.6/motion-control"
+KLING_I2V_MODEL = "kwaivgi/kling-v3.0-std/image-to-video"
+KLING_MOTION_STD_MODEL = "kwaivgi/kling-v2.6-std/motion-control"
+KLING_MOTION_PRO_MODEL = "kwaivgi/kling-v2.6-pro/motion-control"
 
 
 @dataclass(slots=True)
@@ -27,41 +26,13 @@ class KieTaskResult:
     fail_msg: Optional[str] = None
 
 
-def _as_json_obj(value: Any) -> Optional[Any]:
-    """
-    KIE чаще отдаёт resultJson строкой, но на практике может быть и dict/list.
-    Приводим к объекту Python, если возможно.
-    """
-    if value is None:
-        return None
-    if isinstance(value, (dict, list)):
-        return value
-    if isinstance(value, str):
-        s = value.strip()
-        if not s:
-            return None
-        try:
-            return json.loads(s)
-        except Exception:
-            return None
-    # На всякий случай
-    try:
-        return json.loads(str(value))
-    except Exception:
-        return None
-
-
 def _normalize_url_item(item: Any) -> Optional[str]:
-    """
-    В resultUrls элементы могут быть строками или объектами.
-    Пробуем извлечь URL.
-    """
     if item is None:
         return None
     if isinstance(item, str):
-        return item
+        return item.strip() or None
     if isinstance(item, dict):
-        for k in ("url", "resultUrl", "videoUrl", "downloadUrl", "href"):
+        for k in ("url", "download_url", "downloadUrl", "resultUrl", "href"):
             v = item.get(k)
             if isinstance(v, str) and v.strip():
                 return v.strip()
@@ -69,9 +40,6 @@ def _normalize_url_item(item: Any) -> Optional[str]:
 
 
 def _prefer_video_url(urls: list[str]) -> Optional[str]:
-    """
-    Предпочитаем "настоящий" видеоконтейнер, а не gif-превью.
-    """
     if not urls:
         return None
 
@@ -81,7 +49,6 @@ def _prefer_video_url(urls: list[str]) -> Optional[str]:
         if base.endswith(preferred_exts):
             return u
 
-    # Если нет "явного" расширения — стараемся хотя бы не gif
     for u in urls:
         base = u.split("?", 1)[0].lower()
         if not base.endswith(".gif"):
@@ -90,70 +57,40 @@ def _prefer_video_url(urls: list[str]) -> Optional[str]:
     return urls[0]
 
 
-def _pick_result_url(result_json_value: Any) -> Optional[str]:
-    """
-    Достаёт ссылку на результат из resultJson.
-    Приоритет: видео (mp4/mov/webm), затем любая другая ссылка.
-    """
-    payload = _as_json_obj(result_json_value)
-    if payload is None:
+def _extract_output_url(payload: dict[str, Any]) -> Optional[str]:
+    data = payload.get("data") or {}
+    outputs = data.get("outputs") or []
+    if not isinstance(outputs, list):
         return None
 
-    # 1) Наиболее частый формат: {"resultUrls": ["...", "..."]}
-    if isinstance(payload, dict):
-        urls_raw = payload.get("resultUrls")
-        if isinstance(urls_raw, list) and urls_raw:
-            urls: list[str] = []
-            for it in urls_raw:
-                u = _normalize_url_item(it)
-                if u:
-                    urls.append(u)
-            picked = _prefer_video_url(urls)
-            if picked:
-                return picked
+    urls: list[str] = []
+    for item in outputs:
+        u = _normalize_url_item(item)
+        if u:
+            urls.append(u)
 
-        # 2) Запасные ключи (иногда отдают одной строкой)
-        for key in ("resultUrl", "videoUrl", "video_url", "url", "outputUrl"):
-            v = payload.get(key)
-            if isinstance(v, str) and v.strip():
-                return v.strip()
-
-        # 3) Иногда бывает вложенность: {"data": {"resultUrls": [...]}}
-        data = payload.get("data")
-        if isinstance(data, dict):
-            urls_raw = data.get("resultUrls")
-            if isinstance(urls_raw, list) and urls_raw:
-                urls: list[str] = []
-                for it in urls_raw:
-                    u = _normalize_url_item(it)
-                    if u:
-                        urls.append(u)
-                picked = _prefer_video_url(urls)
-                if picked:
-                    return picked
-
-    # 4) Если payload — список URL’ов
-    if isinstance(payload, list):
-        urls: list[str] = []
-        for it in payload:
-            u = _normalize_url_item(it)
-            if u:
-                urls.append(u)
-        picked = _prefer_video_url(urls)
-        if picked:
-            return picked
-
-    return None
+    return _prefer_video_url(urls)
 
 
 class KieKlingClient:
+    """
+    Backward-compatible wrapper with old class name,
+    implemented via WaveSpeed endpoints.
+    """
+
     def __init__(self, api_key: str) -> None:
-        self.api_key = api_key.strip()
+        self.api_key = (api_key or "").strip()
         self._headers_json = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
         self._headers_auth = {"Authorization": f"Bearer {self.api_key}"}
+
+    @staticmethod
+    def _extract_task_id(payload: dict[str, Any]) -> Optional[str]:
+        data = payload.get("data") or {}
+        tid = data.get("id") or data.get("taskId")
+        return str(tid) if tid else None
 
     async def upload_image_bytes(
         self,
@@ -162,44 +99,35 @@ class KieKlingClient:
         upload_path: str = "images/wearai/animate",
         timeout_s: int = 180,
     ) -> str:
-        """
-        Загружает файл в KIE File Upload API (stream) и возвращает публичный downloadUrl.
-        """
+        del upload_path
+
         mime_type, _ = mimetypes.guess_type(filename)
         if not mime_type:
             mime_type = "application/octet-stream"
 
         form = aiohttp.FormData()
         form.add_field("file", image_bytes, filename=filename, content_type=mime_type)
-        form.add_field("uploadPath", upload_path)
-        form.add_field("fileName", filename)
 
         timeout = aiohttp.ClientTimeout(total=timeout_s)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            logger.info(
-                "KIE upload start: filename=%s upload_path=%s", filename, upload_path
-            )
             async with session.post(
-                KIE_FILE_UPLOAD_URL,
+                WAVESPEED_FILE_UPLOAD_URL,
                 headers=self._headers_auth,
                 data=form,
             ) as resp:
                 data = await resp.json(content_type=None)
-                if resp.status != 200 or not data.get("success"):
-                    logger.error(
-                        "KIE upload failed: http=%s payload=%s", resp.status, data
-                    )
+                if resp.status != 200 or int(data.get("code", 0)) != 200:
                     raise RuntimeError(
-                        f"KIE upload failed: HTTP {resp.status}, payload={data}"
+                        f"WaveSpeed upload failed: HTTP {resp.status}, payload={data}"
                     )
 
-                download_url = data.get("data", {}).get("downloadUrl")
-                if not download_url:
-                    logger.error("KIE upload missing downloadUrl: payload=%s", data)
-                    raise RuntimeError(f"KIE upload: no downloadUrl in payload={data}")
+                out_url = data.get("data", {}).get("download_url")
+                if not out_url:
+                    raise RuntimeError(
+                        f"WaveSpeed upload: no download_url in payload={data}"
+                    )
 
-                logger.info("KIE upload ok: downloadUrl=%s", download_url)
-                return str(download_url)
+                return str(out_url)
 
     async def upload_video_bytes(
         self,
@@ -209,7 +137,10 @@ class KieKlingClient:
         timeout_s: int = 300,
     ) -> str:
         return await self.upload_image_bytes(
-            video_bytes, filename, upload_path=upload_path, timeout_s=timeout_s
+            video_bytes,
+            filename,
+            upload_path=upload_path,
+            timeout_s=timeout_s,
         )
 
     async def create_kling_task(
@@ -221,51 +152,34 @@ class KieKlingClient:
         cfg_scale: float = 0.5,
         timeout_s: int = 120,
     ) -> str:
-        """
-        Создаёт задачу Kling v2.1 Standard и возвращает taskId.
-        duration: "5" или "10"
-        """
         payload = {
-            "model": KLING_MODEL,
-            "input": {
-                "prompt": prompt,
-                "image_url": image_url,
-                "duration": duration,
-                "negative_prompt": negative_prompt,
-                "cfg_scale": cfg_scale,
-            },
+            "image": image_url,
+            "prompt": prompt,
+            "duration": str(duration or "5"),
+            "negative_prompt": negative_prompt,
+            "cfg_scale": float(cfg_scale),
+            "enable_safety_checker": True,
+            "enable_base64_output": False,
+            "enable_sync_mode": False,
         }
+
+        url = f"{WAVESPEED_BASE_URL}/{KLING_I2V_MODEL}"
 
         timeout = aiohttp.ClientTimeout(total=timeout_s)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            logger.info(
-                "KIE createTask start: model=%s duration=%s cfg_scale=%s prompt_len=%s",
-                KLING_MODEL,
-                duration,
-                cfg_scale,
-                len(prompt or ""),
-            )
-            async with session.post(
-                KIE_CREATE_TASK_URL,
-                headers=self._headers_json,
-                json=payload,
-            ) as resp:
+            async with session.post(url, headers=self._headers_json, json=payload) as resp:
                 data = await resp.json(content_type=None)
-                if resp.status != 200 or data.get("code") != 200:
-                    logger.error(
-                        "KIE createTask failed: http=%s payload=%s", resp.status, data
-                    )
+                if resp.status != 200 or int(data.get("code", 0)) != 200:
                     raise RuntimeError(
-                        f"KIE createTask failed: HTTP {resp.status}, payload={data}"
+                        f"WaveSpeed create task failed: HTTP {resp.status}, payload={data}"
                     )
 
-                task_id = (data.get("data") or {}).get("taskId")
+                task_id = self._extract_task_id(data)
                 if not task_id:
-                    logger.error("KIE createTask missing taskId: payload=%s", data)
-                    raise RuntimeError(f"KIE createTask: no taskId in payload={data}")
-
-                logger.info("KIE createTask ok: taskId=%s", task_id)
-                return str(task_id)
+                    raise RuntimeError(
+                        f"WaveSpeed create task: no id in payload={data}"
+                    )
+                return task_id
 
     async def create_motion_control_task(
         self,
@@ -277,119 +191,71 @@ class KieKlingClient:
         mode: str = "std",
         timeout_s: int = 120,
     ) -> str:
-        """
-        Kling 2.6 Motion Control.
-        character_orientation: "image" or "video"
-        mode: "std"(720p) or "pro"(1080p)
-        """
+        mode_l = (mode or "").strip().lower()
+        model = KLING_MOTION_PRO_MODEL if "pro" in mode_l else KLING_MOTION_STD_MODEL
+
         payload = {
-            "model": KLING_MOTION_CONTROL_MODEL,
-            "input": {
-                "prompt": prompt,
-                "input_urls": [image_url],
-                "video_urls": [video_url],
-                "character_orientation": character_orientation,
-                "mode": mode,
-            },
+            "image": image_url,
+            "video": video_url,
+            "prompt": prompt or "",
+            "negative_prompt": "",
+            "character_orientation": (
+                "video"
+                if (character_orientation or "").strip().lower() == "video"
+                else "image"
+            ),
+            "keep_original_sound": True,
+            "enable_safety_checker": True,
+            "enable_base64_output": False,
+            "enable_sync_mode": False,
         }
 
+        url = f"{WAVESPEED_BASE_URL}/{model}"
+
         timeout = aiohttp.ClientTimeout(total=timeout_s)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            logger.info(
-                "KIE motion-control createTask start: model=%s mode=%s prompt_len=%s",
-                KLING_MOTION_CONTROL_MODEL,
-                mode,
-                len(prompt or ""),
-            )
-            async with session.post(
-                KIE_CREATE_TASK_URL,
-                headers=self._headers_json,
-                json=payload,
-            ) as resp:
+            async with session.post(url, headers=self._headers_json, json=payload) as resp:
                 data = await resp.json(content_type=None)
-                if resp.status != 200 or data.get("code") != 200:
-                    logger.error(
-                        "KIE motion-control createTask failed: http=%s payload=%s",
-                        resp.status,
-                        data,
-                    )
+                if resp.status != 200 or int(data.get("code", 0)) != 200:
                     raise RuntimeError(
-                        f"KIE motion-control createTask failed: HTTP {resp.status}, payload={data}"
+                        "WaveSpeed motion-control create task failed: "
+                        f"HTTP {resp.status}, payload={data}"
                     )
 
-                task_id = (data.get("data") or {}).get("taskId")
+                task_id = self._extract_task_id(data)
                 if not task_id:
-                    logger.error(
-                        "KIE motion-control createTask missing taskId: payload=%s", data
-                    )
                     raise RuntimeError(
-                        f"KIE motion-control createTask: no taskId in payload={data}"
+                        f"WaveSpeed motion-control: no id in payload={data}"
                     )
-
-                logger.info("KIE motion-control createTask ok: taskId=%s", task_id)
-                return str(task_id)
+                return task_id
 
     async def get_task_result(self, task_id: str, timeout_s: int = 30) -> KieTaskResult:
-        """
-        Возвращает состояние и (если готово) ссылку на результат.
-        """
         timeout = aiohttp.ClientTimeout(total=timeout_s)
+        url = f"{WAVESPEED_PREDICTIONS_URL}/{task_id}"
+
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(
-                KIE_TASK_INFO_URL,
-                headers=self._headers_auth,
-                params={"taskId": task_id},
-            ) as resp:
+            async with session.get(url, headers=self._headers_auth) as resp:
                 data = await resp.json(content_type=None)
-                if resp.status != 200 or data.get("code") != 200:
-                    logger.error(
-                        "KIE recordInfo failed: http=%s payload=%s", resp.status, data
-                    )
+                if resp.status != 200 or int(data.get("code", 0)) != 200:
                     raise RuntimeError(
-                        f"KIE recordInfo failed: HTTP {resp.status}, payload={data}"
+                        f"WaveSpeed prediction failed: HTTP {resp.status}, payload={data}"
                     )
 
                 d = data.get("data") or {}
-                state = str(d.get("state") or "")
+                state = str(d.get("status") or "")
                 state_l = state.lower()
 
-                if state_l in {"fail", "failed"}:
-                    fail = str(d.get("failMsg") or "Generation failed")
-                    logger.warning("KIE task failed: taskId=%s fail=%s", task_id, fail)
+                if state_l == "failed":
+                    fail = str(d.get("error") or data.get("message") or "Generation failed")
                     return KieTaskResult(state=state, fail_msg=fail)
 
-                if state_l in {"success", "succeed", "done"}:
-                    result_json = d.get("resultJson")
-                    url = _pick_result_url(result_json)
-                    logger.info(
-                        "KIE task success: taskId=%s result_url=%s", task_id, url
-                    )
-                    return KieTaskResult(state=state, result_url=url)
+                if state_l == "completed":
+                    return KieTaskResult(state=state, result_url=_extract_output_url(data))
 
-                # queued / running / processing etc.
-                logger.info("KIE task state: taskId=%s state=%s", task_id, state)
-                return KieTaskResult(state=state)
+                return KieTaskResult(state=state or "processing")
 
     async def to_direct_download_url(self, url: str, timeout_s: int = 30) -> str:
-        """
-        Конвертирует kie.ai generated URL в прямой временный download URL (20 минут).
-        Если конвертация не нужна/не проходит — вернёт исходный url.
-        """
-        payload = {"url": url}
-        timeout = aiohttp.ClientTimeout(total=timeout_s)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(
-                KIE_DOWNLOAD_URL,
-                headers=self._headers_json,
-                json=payload,
-            ) as resp:
-                data = await resp.json(content_type=None)
-                if resp.status == 200 and data.get("code") == 200 and data.get("data"):
-                    direct = str(data["data"])
-                    logger.info("KIE download-url ok: %s -> %s", url, direct)
-                    return direct
-
-        logger.info("KIE download-url passthrough: %s", url)
+        del timeout_s
         return url
 
     async def wait_for_success(
@@ -398,25 +264,22 @@ class KieKlingClient:
         poll_interval_s: int = 10,
         max_wait_s: int = 12 * 60,
     ) -> KieTaskResult:
-        """
-        Polling до success/fail или таймаута.
-        """
         loop = asyncio.get_running_loop()
         deadline = loop.time() + max_wait_s
 
         while True:
             if loop.time() > deadline:
-                logger.warning("KIE task timeout: taskId=%s", task_id)
                 return KieTaskResult(
-                    state="timeout", fail_msg="Timeout waiting for video generation"
+                    state="timeout",
+                    fail_msg="Timeout waiting for video generation",
                 )
 
             res = await self.get_task_result(task_id)
             st = res.state.lower()
 
-            if st in {"success", "succeed", "done"}:
+            if st == "completed":
                 return res
-            if st in {"fail", "failed"}:
+            if st == "failed":
                 return res
 
             await asyncio.sleep(poll_interval_s)

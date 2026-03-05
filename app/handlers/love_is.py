@@ -290,7 +290,7 @@ async def love_is_animate(
         return
 
     if not settings.kie_api_key:
-        await call.message.answer("Не настроен KIE_API_KEY в .env 😕")
+        await call.message.answer("Не настроен WAVESPEED_API_KEY в .env 😕")
         return
 
     tg_id = call.from_user.id

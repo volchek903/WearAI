@@ -29,14 +29,14 @@ def _getenv(name: str, default: Optional[str] = None) -> str:
 
 def load_settings() -> Settings:
     bot_token = _getenv("BOT_TOKEN")
-    kie_api_key = _getenv("KIE_API_KEY")
+    kie_api_key = _getenv("WAVESPEED_API_KEY") or _getenv("KIE_API_KEY")
     database_url = _getenv("DATABASE_URL", "sqlite+aiosqlite:///./wearai.db")
     log_level = _getenv("LOG_LEVEL", "INFO")
     missing = []
     if not bot_token:
         missing.append("BOT_TOKEN")
     if not kie_api_key:
-        missing.append("KIE_API_KEY")
+        missing.append("WAVESPEED_API_KEY (or KIE_API_KEY fallback)")
     if missing:
         raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
     return Settings(

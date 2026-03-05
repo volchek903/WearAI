@@ -92,9 +92,9 @@ async def animate_entry(cb: CallbackQuery, state: FSMContext) -> None:
 @router.message(AnimatePhotoStates.waiting_photo, F.photo)
 async def animate_got_photo(message: Message, state: FSMContext) -> None:
     if not settings.kie_api_key:
-        await message.answer("Не настроен KIE_API_KEY в .env 😕")
+        await message.answer("Не настроен WAVESPEED_API_KEY в .env 😕")
         await state.clear()
-        logger.error("KIE_API_KEY missing in settings")
+        logger.error("WAVESPEED_API_KEY missing in settings")
         return
 
     if message.media_group_id is not None:
