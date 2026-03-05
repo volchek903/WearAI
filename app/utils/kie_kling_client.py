@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import mimetypes
 from dataclasses import dataclass
@@ -24,6 +25,62 @@ class KieTaskResult:
     state: str
     result_url: Optional[str] = None
     fail_msg: Optional[str] = None
+
+
+def _loads_json_loose(text: str) -> Any:
+    raw = (text or "").strip()
+    if not raw:
+        raise json.JSONDecodeError("empty json", raw, 0)
+
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+
+    # If provider returns multi-line payload, try the last JSON line first.
+    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    for ln in reversed(lines):
+        try:
+            return json.loads(ln)
+        except json.JSONDecodeError:
+            continue
+
+    # Fallback: find first decodable JSON object/array inside text.
+    decoder = json.JSONDecoder()
+    for i, ch in enumerate(raw):
+        if ch not in "{[":
+            continue
+        try:
+            obj, _ = decoder.raw_decode(raw[i:])
+            return obj
+        except json.JSONDecodeError:
+            continue
+
+    raise json.JSONDecodeError("cannot decode json", raw, 0)
+
+
+async def _read_json_payload(resp: aiohttp.ClientResponse, *, ctx: str) -> dict[str, Any]:
+    try:
+        data = await resp.json(content_type=None)
+    except Exception as e:
+        text = await resp.text()
+        try:
+            data = _loads_json_loose(text)
+        except Exception as inner:
+            preview = (text or "")[:500].replace("\n", "\\n")
+            raise RuntimeError(
+                f"{ctx}: invalid JSON response (HTTP {resp.status}): {preview}"
+            ) from inner
+        if not isinstance(data, dict):
+            raise RuntimeError(
+                f"{ctx}: unexpected JSON type={type(data).__name__} (HTTP {resp.status})"
+            ) from e
+
+    if not isinstance(data, dict):
+        raise RuntimeError(
+            f"{ctx}: unexpected JSON type={type(data).__name__} (HTTP {resp.status})"
+        )
+    return data
 
 
 def _normalize_url_item(item: Any) -> Optional[str]:
@@ -115,7 +172,7 @@ class KieKlingClient:
                 headers=self._headers_auth,
                 data=form,
             ) as resp:
-                data = await resp.json(content_type=None)
+                data = await _read_json_payload(resp, ctx="WaveSpeed upload")
                 if resp.status != 200 or int(data.get("code", 0)) != 200:
                     raise RuntimeError(
                         f"WaveSpeed upload failed: HTTP {resp.status}, payload={data}"
@@ -168,7 +225,7 @@ class KieKlingClient:
         timeout = aiohttp.ClientTimeout(total=timeout_s)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(url, headers=self._headers_json, json=payload) as resp:
-                data = await resp.json(content_type=None)
+                data = await _read_json_payload(resp, ctx="WaveSpeed create task")
                 if resp.status != 200 or int(data.get("code", 0)) != 200:
                     raise RuntimeError(
                         f"WaveSpeed create task failed: HTTP {resp.status}, payload={data}"
@@ -215,7 +272,10 @@ class KieKlingClient:
         timeout = aiohttp.ClientTimeout(total=timeout_s)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(url, headers=self._headers_json, json=payload) as resp:
-                data = await resp.json(content_type=None)
+                data = await _read_json_payload(
+                    resp,
+                    ctx="WaveSpeed motion-control create task",
+                )
                 if resp.status != 200 or int(data.get("code", 0)) != 200:
                     raise RuntimeError(
                         "WaveSpeed motion-control create task failed: "
@@ -235,7 +295,7 @@ class KieKlingClient:
 
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url, headers=self._headers_auth) as resp:
-                data = await resp.json(content_type=None)
+                data = await _read_json_payload(resp, ctx="WaveSpeed prediction")
                 if resp.status != 200 or int(data.get("code", 0)) != 200:
                     raise RuntimeError(
                         f"WaveSpeed prediction failed: HTTP {resp.status}, payload={data}"
