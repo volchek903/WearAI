@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 
@@ -67,6 +68,14 @@ def get_bot_token() -> str:
     return token
 
 
+def _secret_fingerprint(value: str) -> str:
+    v = (value or "").strip()
+    if not v:
+        return "empty"
+    digest = hashlib.sha256(v.encode("utf-8")).hexdigest()[:10]
+    return f"len={len(v)} sha256[:10]={digest}"
+
+
 def setup_routers(dp: Dispatcher) -> None:
     # ВАЖНО: feedback_router должен быть ПЕРВЫМ,
     # чтобы message-хендлеры FeedbackFlow не перехватывались другими роутерами.
@@ -111,6 +120,8 @@ def setup_middlewares(dp: Dispatcher) -> None:
 async def main() -> None:
     setup_logging()
     log = logging.getLogger(__name__)
+    wavespeed_key = os.getenv("WAVESPEED_API_KEY", "").strip() or os.getenv("KIE_API_KEY", "").strip()
+    log.info("startup: wavespeed_api_key_fingerprint=%s", _secret_fingerprint(wavespeed_key))
 
     bot = Bot(
         token=get_bot_token(),
