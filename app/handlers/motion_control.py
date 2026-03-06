@@ -20,7 +20,7 @@ from app.repository.generations import (
 )
 from app.repository.users import increment_generated_videos, upsert_user
 from app.states.motion_control_flow import MotionControlFlow
-from app.utils.kie_kling_client import KieKlingClient
+from app.utils.wavespeed_kling_client import WaveSpeedKlingClient
 from app.db.config import settings
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.tg_edit import edit_text_safe
@@ -163,7 +163,7 @@ async def motion_control_confirm(
         progress_loop(lambda t: _update_progress_message(progress_msg, t), stop, interval_s=7.0)
     )
 
-    client = KieKlingClient(api_key=settings.kie_api_key)
+    client = WaveSpeedKlingClient(api_key=settings.kie_api_key)
     try:
         photo_bytes = await tg_file_id_to_bytes(call.bot, photo_id, tg_id=call.from_user.id)
         video_bytes = await tg_file_id_to_bytes(call.bot, video_id, tg_id=call.from_user.id)

@@ -35,7 +35,7 @@ from app.repository.users import (
     upsert_user,
 )
 from app.services.album_collector import AlbumCollector
-from app.services.generation import generate_image_kie_from_telegram
+from app.services.generation import generate_image_wavespeed_from_telegram
 from app.states.love_is_flow import LoveIsFlow
 from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_photo
@@ -48,7 +48,7 @@ from app.utils.progress_bar import (
     stop_progress,
 )
 from app.utils.generated_files import save_generated_image_bytes
-from app.utils.kie_kling_client import KieKlingClient
+from app.utils.wavespeed_kling_client import WaveSpeedKlingClient
 from app.db.config import settings
 
 router = Router()
@@ -191,7 +191,7 @@ async def love_is_text_in(
             "cartoon illustration, love is style, valentine postcard, hand-drawn, "
             "soft shading, clean lineart, cute couple."
         )
-        results = await generate_image_kie_from_telegram(
+        results = await generate_image_wavespeed_from_telegram(
             bot=message.bot,
             session=session,
             tg_id=tg_id,
@@ -200,7 +200,7 @@ async def love_is_text_in(
             aspect_ratio="3:4",
         )
         if not results:
-            raise RuntimeError("KIE returned empty result")
+            raise RuntimeError("WaveSpeed returned empty result")
 
         await stop_progress(stop, progress_task)
         await edit_text_safe(progress_msg, "✅ Готово! Отправляю результат…")
@@ -320,7 +320,7 @@ async def love_is_animate(
         await state.clear()
         return
 
-    client = KieKlingClient(settings.kie_api_key)
+    client = WaveSpeedKlingClient(settings.kie_api_key)
     progress_msg = await call.message.answer(progress_initial_text())
     stop = asyncio.Event()
 

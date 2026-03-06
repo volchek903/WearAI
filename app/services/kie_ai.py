@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any, Sequence
@@ -8,6 +9,8 @@ from typing import Any, Sequence
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,18 @@ _ALLOWED_ASPECTS = {
 }
 _ALLOWED_RESOLUTIONS = {"1K", "2K", "4K"}
 _ALLOWED_FORMATS = {"png", "jpg", "jpeg"}
+_SUCCESS_STATES = {"completed", "succeeded", "success", "done", "finished"}
+_FAILED_STATES = {
+    "failed",
+    "error",
+    "errored",
+    "canceled",
+    "cancelled",
+    "rejected",
+    "terminated",
+    "aborted",
+    "timeout",
+}
 
 
 def _norm_aspect_ratio(v: str) -> str:
@@ -98,7 +113,7 @@ async def _load_photo_settings_from_db(
     )
 
 
-class KieAIError(RuntimeError):
+class WaveSpeedError(RuntimeError):
     pass
 
 
@@ -108,7 +123,7 @@ def _debug_save_upload_image(data: bytes, filename: str) -> None:
     return
 
 
-class KieAIClient:
+class WaveSpeedClient:
     """
     Backward-compatible wrapper with the old class name,
     implemented via WaveSpeed API.
@@ -123,7 +138,7 @@ class KieAIClient:
         timeout_s: float = 60.0,
     ) -> None:
         if not api_key:
-            raise KieAIError(
+            raise WaveSpeedError(
                 "WAVESPEED_API_KEY is empty. Put it into .env "
                 "(fallback KIE_API_KEY is also supported)."
             )
@@ -162,6 +177,17 @@ class KieAIClient:
                         break
         return out
 
+    @staticmethod
+    def _extract_status(data: dict[str, Any]) -> str:
+        raw = (
+            data.get("status")
+            or data.get("state")
+            or data.get("phase")
+            or data.get("task_status")
+            or ""
+        )
+        return str(raw).strip().lower()
+
     async def upload_image_bytes(
         self,
         *,
@@ -179,18 +205,18 @@ class KieAIClient:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.post(url, headers=self._headers(), files=files)
             if resp.status_code != 200:
-                raise KieAIError(
+                raise WaveSpeedError(
                     f"WaveSpeed upload failed [HTTP {resp.status_code}]: {resp.text}"
                 )
 
             payload = resp.json()
             if int(payload.get("code", 0)) != 200:
-                raise KieAIError(f"WaveSpeed upload failed: {payload}")
+                raise WaveSpeedError(f"WaveSpeed upload failed: {payload}")
 
             data_obj = payload.get("data") or {}
             download_url = data_obj.get("download_url") or data_obj.get("downloadUrl")
             if not download_url:
-                raise KieAIError(
+                raise WaveSpeedError(
                     f"WaveSpeed upload response has no download_url: {payload}"
                 )
 
@@ -231,7 +257,7 @@ class KieAIClient:
         }
 
         if not body["images"]:
-            raise KieAIError("WaveSpeed task requires at least one image URL")
+            raise WaveSpeedError("WaveSpeed task requires at least one image URL")
 
         url = f"{self.api_base}/api/v3/google/nano-banana-2/edit"
 
@@ -242,17 +268,17 @@ class KieAIClient:
                 json=body,
             )
             if resp.status_code != 200:
-                raise KieAIError(
+                raise WaveSpeedError(
                     f"WaveSpeed create task failed [HTTP {resp.status_code}]: {resp.text}"
                 )
 
             payload = resp.json()
             if int(payload.get("code", 0)) != 200:
-                raise KieAIError(f"WaveSpeed create task failed: {payload}")
+                raise WaveSpeedError(f"WaveSpeed create task failed: {payload}")
 
             task_id = self._extract_task_id(payload)
             if not task_id:
-                raise KieAIError(f"WaveSpeed create task response has no id: {payload}")
+                raise WaveSpeedError(f"WaveSpeed create task response has no id: {payload}")
 
             return task_id
 
@@ -261,13 +287,13 @@ class KieAIClient:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.get(url, headers=self._headers())
             if resp.status_code != 200:
-                raise KieAIError(
+                raise WaveSpeedError(
                     f"WaveSpeed get result failed [HTTP {resp.status_code}]: {resp.text}"
                 )
 
             payload = resp.json()
             if int(payload.get("code", 0)) != 200:
-                raise KieAIError(f"WaveSpeed get result failed: {payload}")
+                raise WaveSpeedError(f"WaveSpeed get result failed: {payload}")
 
             return payload
 
@@ -279,28 +305,37 @@ class KieAIClient:
     ) -> list[str]:
         elapsed = 0
         sleep_s = 2
+        last_state = ""
 
         while elapsed < max_wait_s:
             payload = await self.get_task(task_id)
             data = payload.get("data") or {}
-            state = str(data.get("status") or "").strip().lower()
+            state = self._extract_status(data)
+            if state and state != last_state:
+                logger.info(
+                    "wavespeed: task_id=%s status=%s elapsed=%ss",
+                    task_id,
+                    state,
+                    elapsed,
+                )
+                last_state = state
 
-            if state == "completed":
+            if state in _SUCCESS_STATES:
                 urls = self._extract_outputs(payload)
                 if not urls:
-                    raise KieAIError(f"No outputs in WaveSpeed result: {payload}")
+                    raise WaveSpeedError(f"No outputs in WaveSpeed result: {payload}")
                 return urls
 
-            if state == "failed":
+            if state in _FAILED_STATES:
                 fail_msg = data.get("error") or payload.get("message") or "WaveSpeed task failed"
-                raise KieAIError(str(fail_msg))
+                raise WaveSpeedError(str(fail_msg))
 
             await asyncio.sleep(sleep_s)
             elapsed += sleep_s
             if elapsed > 30:
                 sleep_s = min(10, sleep_s + 3)
 
-        raise KieAIError(f"Task timeout after {max_wait_s}s (taskId={task_id})")
+        raise WaveSpeedError(f"Task timeout after {max_wait_s}s (taskId={task_id})")
 
     async def download_bytes(self, url: str) -> bytes:
         async def _do() -> httpx.Response:
@@ -314,7 +349,7 @@ class KieAIClient:
             try:
                 resp = await _do()
                 if resp.status_code != 200:
-                    raise KieAIError(
+                    raise WaveSpeedError(
                         f"Download failed [HTTP {resp.status_code}]: {resp.text[:1000]}"
                     )
                 return resp.content
@@ -330,7 +365,7 @@ class KieAIClient:
                 last_exc = e
                 break
 
-        raise KieAIError(f"Download failed: {last_exc}")
+        raise WaveSpeedError(f"Download failed: {last_exc}")
 
 
 def get_kie_api_key_from_env() -> str:
@@ -339,3 +374,12 @@ def get_kie_api_key_from_env() -> str:
         os.getenv("WAVESPEED_API_KEY", "").strip()
         or os.getenv("KIE_API_KEY", "").strip()
     )
+
+
+def get_wavespeed_api_key_from_env() -> str:
+    return get_kie_api_key_from_env()
+
+
+# Backward-compatible aliases.
+KieAIError = WaveSpeedError
+KieAIClient = WaveSpeedClient

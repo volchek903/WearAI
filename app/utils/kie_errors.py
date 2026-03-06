@@ -8,7 +8,7 @@ from app.utils.support_text import with_support
 
 def _extract_code(text: str) -> Optional[str]:
     """
-    KIE часто возвращает сообщения вида:
+    WaveSpeed часто возвращает сообщения вида:
     "... (code=422)" / "code=401" и т.п.
     """
     m = re.search(r"code=(\d+)", text)

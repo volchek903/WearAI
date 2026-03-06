@@ -15,7 +15,7 @@ from app.keyboards.feedback import FeedbackCallbacks, feedback_offer_video_kb
 from app.keyboards.menu import main_menu_kb
 from app.states.animate_photo import AnimatePhotoStates
 from app.states.feedback_flow import FeedbackFlow
-from app.utils.kie_kling_client import KieKlingClient
+from app.utils.wavespeed_kling_client import WaveSpeedKlingClient
 from app.utils.tg_edit import edit_text_safe
 from app.utils.support_text import with_support
 
@@ -136,7 +136,7 @@ async def _get_or_upload_kling_image_url(cb: CallbackQuery, state: FSMContext) -
     p = Path(filename)
     unique_filename = f"{p.stem or 'image'}_{tag}{p.suffix or '.png'}"
 
-    client = KieKlingClient(settings.kie_api_key)
+    client = WaveSpeedKlingClient(settings.kie_api_key)
     image_url = await client.upload_image_bytes(
         image_bytes=image_bytes,
         filename=unique_filename,

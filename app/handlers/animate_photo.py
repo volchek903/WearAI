@@ -26,7 +26,7 @@ from app.repository.generations import (
 )
 from app.repository.users import increment_generated_videos
 from app.states.animate_photo import AnimatePhotoStates
-from app.utils.kie_kling_client import KieKlingClient
+from app.utils.wavespeed_kling_client import WaveSpeedKlingClient
 from app.utils.tg_edit import edit_text_safe
 from app.utils.support_text import with_support
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
@@ -121,7 +121,7 @@ async def animate_got_photo(message: Message, state: FSMContext) -> None:
     image_bytes = await _download_telegram_file(message.bot.token, file_path)
     filename = Path(file_path).name or "photo.jpg"
 
-    client = KieKlingClient(settings.kie_api_key)
+    client = WaveSpeedKlingClient(settings.kie_api_key)
     try:
         image_url = await client.upload_image_bytes(
             image_bytes=image_bytes,
@@ -129,9 +129,9 @@ async def animate_got_photo(message: Message, state: FSMContext) -> None:
             upload_path=f"images/wearai/animate/{message.from_user.id}",
         )
     except Exception as e:
-        await message.answer(with_support(f"Ошибка загрузки фото в KIE 😕: {e}"))
+        await message.answer(with_support(f"Ошибка загрузки фото в WaveSpeed 😕: {e}"))
         await state.clear()
-        logger.exception("KIE upload failed for user %s", message.from_user.id)
+        logger.exception("WaveSpeed upload failed for user %s", message.from_user.id)
         return
 
     await state.update_data(image_url=image_url)
@@ -171,7 +171,7 @@ async def _run_video_job(
     )
     action_task = asyncio.create_task(_chat_action_loop(bot, chat_id, stop))
 
-    client = KieKlingClient(settings.kie_api_key)
+    client = WaveSpeedKlingClient(settings.kie_api_key)
 
     try:
         res = await client.wait_for_success(task_id, poll_interval_s=10, max_wait_s=30 * 60)
@@ -326,7 +326,7 @@ async def animate_got_prompt(
         )
         return
 
-    client = KieKlingClient(settings.kie_api_key)
+    client = WaveSpeedKlingClient(settings.kie_api_key)
     try:
         task_id = await client.create_kling_task(
             prompt=prompt,

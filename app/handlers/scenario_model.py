@@ -25,8 +25,8 @@ from app.repository.generations import (
     is_launch_subscription,
 )
 from app.services.album_collector import AlbumCollector
-from app.services.generation import generate_image_kie_from_telegram
-from app.services.kie_ai import KieAIError
+from app.services.generation import generate_image_wavespeed_from_telegram
+from app.services.wavespeed_ai import WaveSpeedError
 from app.states.model_flow import ModelFlow
 from app.states.feedback_flow import FeedbackFlow
 from app.utils.tg_edit import edit_text_safe
@@ -34,7 +34,7 @@ from app.utils.content_media import send_content_album
 from app.utils.tg_send import send_image_smart
 from app.utils.support_text import with_support, launch_limits_message
 from app.utils.launch_guard import block_launch_for_call
-from app.utils.kie_errors import kie_error_to_user_text
+from app.utils.wavespeed_errors import wavespeed_error_to_user_text
 from app.utils.generated_files import save_generated_image_bytes
 from app.utils.progress_bar import (
     progress_initial_text,
@@ -332,7 +332,7 @@ async def review_confirmed(
 
     sent_any = False
     try:
-        results = await generate_image_kie_from_telegram(
+        results = await generate_image_wavespeed_from_telegram(
             bot=call.bot,
             session=session,
             tg_id=tg_id,  # тут именно tg_id нужен (photo_settings + tg download)
@@ -341,7 +341,7 @@ async def review_confirmed(
         )
 
         if not results:
-            raise RuntimeError("KIE returned empty result")
+            raise RuntimeError("WaveSpeed returned empty result")
 
         await stop_progress(stop, progress_task)
         await edit_text_safe(progress_msg, "✅ Готово! Отправляю результат…")
@@ -413,13 +413,13 @@ async def review_confirmed(
         )
         return
 
-    except KieAIError as e:
-        logger.warning("KIE rejected/failed: %s", e)
+    except WaveSpeedError as e:
+        logger.warning("WaveSpeed rejected/failed: %s", e)
         if not sent_any:
             await refund_photo_generation(session, tg_id)
         await stop_progress(stop, progress_task)
         await edit_text_safe(
-            progress_msg, kie_error_to_user_text(e), reply_markup=review_edit_kb()
+            progress_msg, wavespeed_error_to_user_text(e), reply_markup=review_edit_kb()
         )
         return
 

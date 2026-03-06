@@ -18,6 +18,18 @@ WAVESPEED_PREDICTIONS_URL = f"{WAVESPEED_BASE_URL}/predictions"
 KLING_I2V_MODEL = "kwaivgi/kling-v3.0-std/image-to-video"
 KLING_MOTION_STD_MODEL = "kwaivgi/kling-v2.6-std/motion-control"
 KLING_MOTION_PRO_MODEL = "kwaivgi/kling-v2.6-pro/motion-control"
+_SUCCESS_STATES = {"completed", "succeeded", "success", "done", "finished"}
+_FAILED_STATES = {
+    "failed",
+    "error",
+    "errored",
+    "canceled",
+    "cancelled",
+    "rejected",
+    "terminated",
+    "aborted",
+    "timeout",
+}
 
 
 @dataclass(slots=True)
@@ -127,6 +139,18 @@ def _extract_output_url(payload: dict[str, Any]) -> Optional[str]:
             urls.append(u)
 
     return _prefer_video_url(urls)
+
+
+def _extract_task_status(payload: dict[str, Any]) -> str:
+    data = payload.get("data") or {}
+    raw = (
+        data.get("status")
+        or data.get("state")
+        or data.get("phase")
+        or data.get("task_status")
+        or ""
+    )
+    return str(raw).strip().lower()
 
 
 class KieKlingClient:
@@ -302,14 +326,14 @@ class KieKlingClient:
                     )
 
                 d = data.get("data") or {}
-                state = str(d.get("status") or "")
-                state_l = state.lower()
+                state_l = _extract_task_status(data)
+                state = state_l or str(d.get("status") or d.get("state") or "processing")
 
-                if state_l == "failed":
+                if state_l in _FAILED_STATES:
                     fail = str(d.get("error") or data.get("message") or "Generation failed")
                     return KieTaskResult(state=state, fail_msg=fail)
 
-                if state_l == "completed":
+                if state_l in _SUCCESS_STATES:
                     return KieTaskResult(state=state, result_url=_extract_output_url(data))
 
                 return KieTaskResult(state=state or "processing")
@@ -326,6 +350,7 @@ class KieKlingClient:
     ) -> KieTaskResult:
         loop = asyncio.get_running_loop()
         deadline = loop.time() + max_wait_s
+        last_state = ""
 
         while True:
             if loop.time() > deadline:
@@ -336,10 +361,13 @@ class KieKlingClient:
 
             res = await self.get_task_result(task_id)
             st = res.state.lower()
+            if st and st != last_state:
+                logger.info("wavespeed: task_id=%s status=%s", task_id, st)
+                last_state = st
 
-            if st == "completed":
+            if st in _SUCCESS_STATES:
                 return res
-            if st == "failed":
+            if st in _FAILED_STATES:
                 return res
 
             await asyncio.sleep(poll_interval_s)

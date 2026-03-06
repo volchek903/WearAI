@@ -19,10 +19,10 @@ from app.repository.generations import (
     is_launch_subscription,
 )
 from app.repository.users import increment_generated_photos, upsert_user
-from app.services.generation import generate_image_kie_from_telegram
-from app.services.kie_ai import KieAIError
+from app.services.generation import generate_image_wavespeed_from_telegram
+from app.services.wavespeed_ai import WaveSpeedError
 from app.states.drift_heart_flow import DriftHeartFlow
-from app.utils.kie_errors import kie_error_to_user_text
+from app.utils.wavespeed_errors import wavespeed_error_to_user_text
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_photo
@@ -156,7 +156,7 @@ async def drift_heart_confirm(
 
     sent_any = False
     try:
-        results = await generate_image_kie_from_telegram(
+        results = await generate_image_wavespeed_from_telegram(
             bot=call.bot,
             session=session,
             tg_id=tg_id,
@@ -167,7 +167,7 @@ async def drift_heart_confirm(
         )
 
         if not results:
-            raise RuntimeError("KIE returned empty result")
+            raise RuntimeError("WaveSpeed returned empty result")
 
         await stop_progress(stop, progress_task)
         await edit_text_safe(progress_msg, "✅ Готово! Отправляю результат…")
@@ -185,12 +185,12 @@ async def drift_heart_confirm(
         await safe_answer(call)
         return
 
-    except KieAIError as e:
+    except WaveSpeedError as e:
         logger.warning("DRIFT_HEART generation failed: %s", e)
         if not sent_any:
             await refund_photo_generation(session, tg_id)
         await stop_progress(stop, progress_task)
-        await edit_text_safe(progress_msg, kie_error_to_user_text(e))
+        await edit_text_safe(progress_msg, wavespeed_error_to_user_text(e))
         await state.clear()
         await safe_answer(call)
         return
