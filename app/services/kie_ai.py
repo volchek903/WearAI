@@ -37,7 +37,6 @@ _ALLOWED_ASPECTS = {
     "4:1",
     "1:8",
     "8:1",
-    "auto",
 }
 _ALLOWED_RESOLUTIONS = {"1K", "2K", "4K"}
 _ALLOWED_FORMATS = {"png", "jpg", "jpeg"}
@@ -57,6 +56,8 @@ _FAILED_STATES = {
 
 def _norm_aspect_ratio(v: str) -> str:
     v = (v or "").strip()
+    if v == "auto":
+        return DEFAULT_PHOTO_SETTINGS.aspect_ratio
     return v if v in _ALLOWED_ASPECTS else DEFAULT_PHOTO_SETTINGS.aspect_ratio
 
 

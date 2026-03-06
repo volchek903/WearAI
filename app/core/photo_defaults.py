@@ -13,7 +13,6 @@ ASPECT_RATIOS: list[str] = [
     "9:16",
     "16:9",
     "21:9",
-    "auto",
 ]
 
 RESOLUTIONS: list[str] = ["1K", "2K"]  # "4K"

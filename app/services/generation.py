@@ -41,9 +41,8 @@ def _normalize_aspect_ratio(v: str) -> str:
         "9:16",
         "16:9",
         "21:9",
-        "auto",
     }
-    if v not in allowed:
+    if v == "auto" or v not in allowed:
         return "9:16"
     return v
 

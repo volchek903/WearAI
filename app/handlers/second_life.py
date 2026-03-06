@@ -166,7 +166,7 @@ async def second_life_confirm_yes(
             tg_id=tg_id,
             prompt=_PROMPT,
             telegram_photo_file_ids=[photo_id],
-            aspect_ratio="auto",
+            aspect_ratio="9:16",
             max_images=1,
         )
 
