@@ -29,7 +29,14 @@ def _getenv(name: str, default: Optional[str] = None) -> str:
 
 def load_settings() -> Settings:
     bot_token = _getenv("BOT_TOKEN")
-    kie_api_key = _getenv("WAVESPEED_API_KEY") or _getenv("KIE_API_KEY")
+    wavespeed_api_key = _getenv("WAVESPEED_API_KEY")
+    kie_fallback_api_key = _getenv("KIE_API_KEY")
+    if wavespeed_api_key and kie_fallback_api_key and wavespeed_api_key != kie_fallback_api_key:
+        raise RuntimeError(
+            "WAVESPEED_API_KEY and KIE_API_KEY are both set but different. "
+            "Set one value (or make them equal) to avoid using a stale key."
+        )
+    kie_api_key = wavespeed_api_key or kie_fallback_api_key
     database_url = _getenv("DATABASE_URL", "sqlite+aiosqlite:///./wearai.db")
     log_level = _getenv("LOG_LEVEL", "INFO")
     missing = []
