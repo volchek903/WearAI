@@ -31,6 +31,7 @@ class MenuCallbacks:
     REAR_VIEW_MIRROR = "menu:rear_view_mirror"
     GTA_STYLE = "menu:gta_style"
     LEGO_STYLE = "menu:lego_style"
+    GLAM_COLLAGE = "menu:glam_collage"
     FAQ = "menu:faq"
     SETTINGS = "menu:settings"
     EXTRA = "menu:extra"
@@ -112,6 +113,7 @@ def photo_one_kb() -> InlineKeyboardMarkup:
     add_button(kb, text="🧥 Примерить одежду", callback_data=MenuCallbacks.TRYON)
     add_button(kb, text="🕶 GTA STYLE", callback_data=MenuCallbacks.GTA_STYLE)
     add_button(kb, text="🧱 LEGO Style", callback_data=MenuCallbacks.LEGO_STYLE)
+    add_button(kb, text="Шикарный коллаж", callback_data=MenuCallbacks.GLAM_COLLAGE)
     add_button(kb, text="⬅️ Назад", callback_data=MenuCallbacks.PHOTO, style="danger")
     kb.adjust(1)
     return kb.as_markup()
