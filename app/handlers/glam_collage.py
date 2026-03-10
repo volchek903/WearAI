@@ -22,6 +22,7 @@ from app.repository.users import increment_generated_photos, upsert_user
 from app.services.generation import generate_image_wavespeed_from_telegram
 from app.services.wavespeed_ai import WaveSpeedError
 from app.states.glam_collage_flow import GlamCollageFlow
+from app.utils.content_media import send_content_photo
 from app.utils.launch_guard import block_launch_for_call
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.support_text import launch_limits_message, with_support
@@ -94,9 +95,13 @@ async def start_glam_collage(
             await call.message.delete()
         except Exception:
             pass
-        await call.message.answer(
-            "Шикарный коллаж\n\n"
-            "Пришли фотку мужчины или женщины, и я подготовлю гламурный editorial-коллаж в формате 3:4 📸"
+        await send_content_photo(
+            call.message,
+            filename="collage.jpeg",
+            caption=(
+                "Шикарный коллаж\n\n"
+                "Пришли фотку мужчины или женщины, и я подготовлю гламурный editorial-коллаж в формате 3:4 📸"
+            ),
         )
 
 
