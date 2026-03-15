@@ -10,9 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.models.payment import PaymentStatus
 from app.repository.extra import get_plan
 from app.repository.payments import (
+    apply_credit_amount_to_user,
     get_pending_payments_batch,
     mark_payment_status,
     apply_plan_to_user,
+    parse_custom_plan_credits,
 )
 import httpx
 from app.services.platega import build_platega_client, normalize_payment_status
@@ -101,15 +103,26 @@ async def run_payment_poller(
                         )
 
                         if status == "CONFIRMED":
-                            plan = await get_plan(session, p.plan_name)
-                            if plan:
-                                await apply_plan_to_user(session, tg_id, plan)
-                            else:
-                                logger.error(
-                                    "payment_poller: plan not found plan_name=%s payment_id=%s",
-                                    p.plan_name,
-                                    p.id,
+                            custom_credits = parse_custom_plan_credits(p.plan_name)
+                            credited_amount = 0
+                            if custom_credits:
+                                await apply_credit_amount_to_user(
+                                    session, tg_id, custom_credits
                                 )
+                                credited_amount = custom_credits
+                            else:
+                                plan = await get_plan(session, p.plan_name)
+                                if plan:
+                                    await apply_plan_to_user(session, tg_id, plan)
+                                    credited_amount = int(
+                                        getattr(plan, "credit_amount", 0) or 0
+                                    )
+                                else:
+                                    logger.error(
+                                        "payment_poller: plan not found plan_name=%s payment_id=%s",
+                                        p.plan_name,
+                                        p.id,
+                                    )
 
                             await mark_payment_status(
                                 session, p, PaymentStatus.CONFIRMED
@@ -118,7 +131,7 @@ async def run_payment_poller(
                             try:
                                 await bot.send_message(
                                     tg_id,
-                                    "✅ Оплата подтверждена! Пакет активирован 🎉",
+                                    f"✅ Оплата подтверждена! Начислено {credited_amount} кредитов 🎉",
                                 )
                             except Exception:
                                 logger.exception(

@@ -148,7 +148,7 @@ async def drift_heart_confirm(
         else:
             await edit_text_safe(
                 progress_msg,
-                "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
+                "⛔️ Недостаточно кредитов.\n\nПополните баланс 💳",
                 reply_markup=buy_generations_kb(),
             )
         await state.clear()
@@ -176,7 +176,7 @@ async def drift_heart_confirm(
             await send_image_smart(call.message, img_bytes=img_bytes, filename=filename)
             sent_any = True
 
-        await increment_generated_photos(session=session, tg_id=tg_id, delta=1)
+        await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="drift_heart")
         await state.clear()
         await call.message.answer(
             "Хотите ли что-то ещё сгенерировать?",

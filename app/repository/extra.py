@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.subscription import Subscription
 from app.models.user import User
-from app.models.user_subscription import UserSubscription
 
 
 async def get_user(session: AsyncSession, tg_id: int) -> User | None:
@@ -15,47 +12,15 @@ async def get_user(session: AsyncSession, tg_id: int) -> User | None:
 
 
 async def get_active_plan_name(session: AsyncSession, user_id: int) -> str:
-    """
-    Активная подписка берётся из user_subscription.status == 1.
-    Если нет — считаем Launch.
-    """
-    now = datetime.now(timezone.utc)
-    stmt = (
-        select(Subscription.name)
-        .select_from(UserSubscription)
-        .join(Subscription, Subscription.id == UserSubscription.subscription_id)
-        .where(
-            UserSubscription.user_id == user_id,
-            UserSubscription.status == 1,
-            UserSubscription.expires_at > now,
-        )
-        .order_by(UserSubscription.activated_at.desc())
-        .limit(1)
-    )
-    name = await session.scalar(stmt)
-    return name or "Launch"
+    del session, user_id
+    return "Кредитный баланс"
 
 
 async def get_active_remaining(session: AsyncSession, user_id: int) -> tuple[int, int]:
-    """
-    Остатки берём из активной user_subscription (status == 1).
-    Если нет — отдаём free остатки (2 видео, 3 фото) или можно 0/0.
-    """
-    now = datetime.now(timezone.utc)
-    stmt = (
-        select(UserSubscription.remaining_video, UserSubscription.remaining_photo)
-        .where(
-            UserSubscription.user_id == user_id,
-            UserSubscription.status == 1,
-            UserSubscription.expires_at > now,
-        )
-        .order_by(UserSubscription.activated_at.desc())
-        .limit(1)
-    )
-    row = (await session.execute(stmt)).first()
-    if not row:
-        return 2, 3
-    return int(row[0]), int(row[1])
+    user = await session.scalar(select(User).where(User.id == user_id))
+    paid = int(getattr(user, "credit_balance", 0) or 0) if user else 0
+    free = int(getattr(user, "free_credit_balance", 0) or 0) if user else 0
+    return paid, free
 
 
 async def get_plan(session: AsyncSession, plan_name: str) -> Subscription | None:

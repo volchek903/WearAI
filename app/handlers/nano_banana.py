@@ -149,7 +149,7 @@ async def nano_banana_prompt_in(
         else:
             await edit_text_safe(
                 progress_msg,
-                "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
+                "⛔️ Недостаточно кредитов.\n\nПополните баланс 💳",
                 reply_markup=buy_generations_kb(),
             )
         await state.clear()
@@ -178,7 +178,7 @@ async def nano_banana_prompt_in(
             )
             sent_any = True
 
-        await increment_generated_photos(session=session, tg_id=tg_id, delta=1)
+        await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="nano_banana")
         await state.clear()
         await message.answer(
             "Хотите ли что-то ещё сгенерировать?",

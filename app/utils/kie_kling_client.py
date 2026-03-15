@@ -315,28 +315,49 @@ class KieKlingClient:
 
     async def get_task_result(self, task_id: str, timeout_s: int = 30) -> KieTaskResult:
         timeout = aiohttp.ClientTimeout(total=timeout_s)
-        url = f"{WAVESPEED_PREDICTIONS_URL}/{task_id}"
+        urls = [
+            f"{WAVESPEED_PREDICTIONS_URL}/{task_id}/result",
+            f"{WAVESPEED_PREDICTIONS_URL}/{task_id}",
+        ]
 
+        last_error: RuntimeError | None = None
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url, headers=self._headers_auth) as resp:
-                data = await _read_json_payload(resp, ctx="WaveSpeed prediction")
-                if resp.status != 200 or int(data.get("code", 0)) != 200:
-                    raise RuntimeError(
-                        f"WaveSpeed prediction failed: HTTP {resp.status}, payload={data}"
-                    )
+            for idx, url in enumerate(urls):
+                async with session.get(url, headers=self._headers_auth) as resp:
+                    try:
+                        data = await _read_json_payload(resp, ctx="WaveSpeed prediction")
+                    except RuntimeError as e:
+                        last_error = e
+                        if resp.status == 404 and idx == 0:
+                            logger.info(
+                                "wavespeed: prediction endpoint fallback task_id=%s url=%s",
+                                task_id,
+                                url,
+                            )
+                            continue
+                        raise
 
-                d = data.get("data") or {}
-                state_l = _extract_task_status(data)
-                state = state_l or str(d.get("status") or d.get("state") or "processing")
+                    if resp.status != 200 or int(data.get("code", 0)) != 200:
+                        raise RuntimeError(
+                            f"WaveSpeed prediction failed: HTTP {resp.status}, payload={data}"
+                        )
 
-                if state_l in _FAILED_STATES:
-                    fail = str(d.get("error") or data.get("message") or "Generation failed")
-                    return KieTaskResult(state=state, fail_msg=fail)
+                    d = data.get("data") or {}
+                    state_l = _extract_task_status(data)
+                    state = state_l or str(d.get("status") or d.get("state") or "processing")
 
-                if state_l in _SUCCESS_STATES:
-                    return KieTaskResult(state=state, result_url=_extract_output_url(data))
+                    if state_l in _FAILED_STATES:
+                        fail = str(d.get("error") or data.get("message") or "Generation failed")
+                        return KieTaskResult(state=state, fail_msg=fail)
 
-                return KieTaskResult(state=state or "processing")
+                    if state_l in _SUCCESS_STATES:
+                        return KieTaskResult(state=state, result_url=_extract_output_url(data))
+
+                    return KieTaskResult(state=state or "processing")
+
+        if last_error:
+            raise last_error
+        raise RuntimeError(f"WaveSpeed prediction failed: no valid endpoint for task_id={task_id}")
 
     async def to_direct_download_url(self, url: str, timeout_s: int = 30) -> str:
         del timeout_s

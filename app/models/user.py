@@ -24,6 +24,15 @@ class User(Base):
     )
     username: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
+    credit_balance: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    free_credit_balance: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    free_generations_used_today: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    free_generations_day: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    pending_charge_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    pending_charge_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    pending_charge_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     generated_photos: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     generated_videos: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     free_channel_bonus_used: Mapped[bool] = mapped_column(

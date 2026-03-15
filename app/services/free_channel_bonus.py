@@ -77,7 +77,7 @@ async def schedule_bonus_grant(bot: Bot, tg_id: int, delay_s: int = 60) -> None:
         try:
             await bot.send_message(
                 tg_id,
-                "🎁 У тебя появилась +1 бесплатная генерация фото!",
+                "🎁 Начислены кредиты на 1 бесплатную фото-генерацию!",
             )
         except Exception:
             logger.exception("failed to send bonus message tg_id=%s", tg_id)
@@ -102,7 +102,7 @@ async def schedule_free_bonus_reminder(bot: Bot, tg_id: int, delay_s: int = 600)
         try:
             await bot.send_message(
                 tg_id,
-                "Хочешь получить ещё одну бесплатную генерацию?\n"
+                "Хочешь получить ещё одну бесплатную фото-генерацию?\n"
                 "Подпишись на канал и нажми кнопку ниже 👇",
                 reply_markup=free_channel_kb(),
             )

@@ -26,6 +26,8 @@ class ExtraCallbacks:
     FREE_CHECK = "extra:free:check"
     FREE_INFO = "extra:free:info"
     FREE_PROMO = "extra:free:promo"
+    CUSTOM_AMOUNT = "extra:custom_amount"
+    CUSTOM_BUY_PREFIX = "extra:custom_buy:"
 
     @staticmethod
     def want(plan_id: int) -> str:
@@ -34,6 +36,10 @@ class ExtraCallbacks:
     @staticmethod
     def buy(plan_id: int, method: str) -> str:
         return f"{ExtraCallbacks.BUY_PREFIX}{plan_id}:{method}"
+
+    @staticmethod
+    def custom_buy(credits: int, method: str) -> str:
+        return f"{ExtraCallbacks.CUSTOM_BUY_PREFIX}{int(credits)}:{method}"
 
 
 def extra_menu_kb(plans, current_plan_name: str | None) -> InlineKeyboardMarkup:
@@ -57,10 +63,52 @@ def extra_menu_kb(plans, current_plan_name: str | None) -> InlineKeyboardMarkup:
         )
 
     add_button(
+        kb,
+        text="💠 Своя сумма",
+        callback_data=ExtraCallbacks.CUSTOM_AMOUNT,
+        style="success",
+    )
+
+    add_button(
         kb, text="⬅️ Назад", callback_data=ExtraCallbacks.TO_MENU, style="danger"
     )
 
     kb.adjust(1)
+    return kb.as_markup()
+
+
+def extra_custom_buy_kb(credits: int, *, platega_available: bool = True) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+
+    if credits > 0:
+        add_button(
+            kb,
+            text="⭐️ Оплата через Stars",
+            callback_data=ExtraCallbacks.custom_buy(credits, "stars"),
+            style="success",
+        )
+    if platega_available and credits > 0:
+        add_button(
+            kb,
+            text="💳 Купить (СБП)",
+            callback_data=ExtraCallbacks.custom_buy(credits, "sbp"),
+            style="success",
+        )
+        add_button(
+            kb,
+            text="💳 Оплата картой",
+            callback_data=ExtraCallbacks.custom_buy(credits, "card"),
+            style="success",
+        )
+        add_button(
+            kb,
+            text="₿ Купить (Крипто)",
+            callback_data=ExtraCallbacks.custom_buy(credits, "crypto"),
+            style="success",
+        )
+
+    add_button(kb, text="⬅️ Назад", callback_data=ExtraCallbacks.BACK, style="danger")
+    kb.adjust(1, 1)
     return kb.as_markup()
 
 
@@ -117,7 +165,7 @@ def buy_generations_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     add_button(
         kb,
-        text="💳 Купить генерации",
+        text="💳 Пополнить баланс",
         callback_data=MenuCallbacks.EXTRA,
         style="success",
     )

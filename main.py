@@ -52,6 +52,7 @@ from app.services.admin_log_cleanup import run_admin_log_cleanup
 from app.services.platega_callback import run_platega_callback_server
 from app.utils.tg_logging import install_tg_error_logging
 from app.services.admin_seed import ensure_root_admin
+from app.repository.app_settings import ensure_model_pricing_settings
 
 
 def setup_logging() -> None:
@@ -139,6 +140,7 @@ async def main() -> None:
     await init_db()
     async with session_factory() as session:
         await seed_subscriptions(session)
+        await ensure_model_pricing_settings(session)
         await ensure_root_admin(session)
 
     # NEW: запускаем polling платежей (без вебхуков)

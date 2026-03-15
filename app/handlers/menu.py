@@ -11,6 +11,7 @@ from app.keyboards.menu import (
     photo_two_kb,
     photo_one_kb,
     photo_other_kb,
+    photo_archive_kb,
     video_menu_kb,
 )
 from app.utils.tg_edit import edit_text_safe
@@ -64,6 +65,16 @@ async def open_photo_other(call: CallbackQuery) -> None:
         call,
         "🧩 Другое — выбери модуль 👇",
         reply_markup=photo_other_kb(),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == MenuCallbacks.PHOTO_ARCHIVE)
+async def open_photo_archive(call: CallbackQuery) -> None:
+    await edit_text_safe(
+        call,
+        "🗂 Архив — выбери шаблон 👇",
+        reply_markup=photo_archive_kb(),
     )
     await call.answer()
 

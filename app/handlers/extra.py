@@ -21,6 +21,7 @@ from app.keyboards.extra import (
     ExtraCallbacks,
     extra_menu_kb,
     extra_buy_kb,
+    extra_custom_buy_kb,
     extra_pay_poll_kb,
 )
 from app.keyboards.utils import add_button
@@ -44,10 +45,13 @@ from app.repository.extra import (
 )
 from app.repository.generations import ensure_default_subscription
 from app.repository.payments import (
+    apply_credit_amount_to_user,
     create_pending_payment,
     get_payment_by_id,
     mark_payment_status,
     apply_plan_to_user,
+    make_custom_plan_name,
+    parse_custom_plan_credits,
 )
 from app.utils.tg_edit import edit_text_safe
 from app.utils.support_text import with_support
@@ -57,10 +61,17 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 # Показываем только доступные к покупке пакеты (Launch выдаётся один раз)
+STAR_USD_RATE = 23.99 / 1000
+USD_TO_RUB = 79
+RUB_PER_STAR = STAR_USD_RATE * USD_TO_RUB
 
 
 class FreePromoFlow(StatesGroup):
     code = State()
+
+
+class CustomCreditsFlow(StatesGroup):
+    amount = State()
 
 
 def _payment_tg_id(payment) -> int | None:
@@ -70,6 +81,23 @@ def _payment_tg_id(payment) -> int | None:
         or getattr(payment, "user_tg_id", None)
         or getattr(payment, "user_tg", None)
     )
+
+
+def _custom_pitch(credits: int) -> str:
+    stars = _stars_for_credits(credits)
+    return (
+        "💠 <b>Своя сумма</b>\n\n"
+        f"Вы выбрали пополнение на <b>{credits}</b> кредитов.\n"
+        f"К оплате: <b>{credits} ₽</b> / <b>{stars} ⭐</b>\n\n"
+        "Выберите удобный способ оплаты 👇"
+    )
+
+
+def _stars_for_credits(credits: int) -> int:
+    if credits <= 0:
+        return 0
+    raw = max(1, round(int(credits) / RUB_PER_STAR))
+    return ((raw + 9) // 10) * 10
 
 
 @dataclass
@@ -222,7 +250,7 @@ def _purchasable_plans(plans: list[Subscription]) -> list[Subscription]:
 
 
 def _table(plans: list[Subscription]) -> str:
-    lines = ["<b>Пакеты</b>"]
+    lines = ["<b>Кредитные пакеты</b>"]
 
     for p in _purchasable_plans(plans):
 
@@ -235,14 +263,12 @@ def _table(plans: list[Subscription]) -> str:
         else:
             rub_part = f"{rub_price} ₽" if rub_price > 0 else "—"
             stars_part = f"{stars_price} ⭐" if stars_price > 0 else "—"
-        days = "без срока" if p.duration_days == 0 else f"{p.duration_days} дн."
         lines.append(
             "\n".join(
                 [
                     f"<b>{_escape(p.name)}</b>",
-                    f"Фото: <b>{p.photo_generations}</b>",
-                    f"Видео: <b>{p.video_generations}</b>",
-                    f"Срок: <b>{days}</b>",
+                    f"Кредиты: <b>{int(getattr(p, 'credit_amount', 0) or 0)}</b>",
+                    f"Скидка: <b>{_package_discount_text(p.name)}</b>",
                     f"Цена: {rub_part} / {stars_part}",
                 ]
             )
@@ -256,29 +282,44 @@ def _table(plans: list[Subscription]) -> str:
     return joined
 
 
+def _package_discount_text(plan_name: str) -> str:
+    if plan_name == "Orbit":
+        return "10%"
+    if plan_name == "Nova":
+        return "15%"
+    if plan_name == "Cosmic":
+        return "25%"
+    return "0%"
+
+
 def _extra_text(
-    current_name: str, remaining_video: int, remaining_photo: int, table_html: str
+    current_name: str,
+    paid_credit_balance: int,
+    free_credit_balance: int,
+    table_html: str,
 ) -> str:
     return (
         "✨ <b>Дополнительные возможности</b>\n\n"
-        f"Твоя текущая подписка: <b>{_escape(current_name)}</b>\n"
-        f"Осталось генераций: 🎬 <b>{remaining_video}</b> видео • 🖼️ <b>{remaining_photo}</b> фото\n"
+        f"Режим оплаты: <b>{_escape(current_name)}</b>\n"
+        f"Основные кредиты: <b>{int(paid_credit_balance)}</b>\n"
+        f"Бесплатные кредиты: <b>{int(free_credit_balance)}</b>\n"
+        f"Всего доступно: <b>{int(paid_credit_balance) + int(free_credit_balance)}</b>\n"
         "\n"
         f"{table_html}\n\n"
-        "Выбирай пакет ниже — и я расскажу, что там самого кайфового 👇"
+        "Выбирай пакет ниже, чтобы пополнить баланс 👇"
     )
 
 
 def _pitch(plan_name: str, plan: Subscription) -> str:
     if plan_name == "Orbit":
-        intro = "Ооо, <b>Orbit</b> — отличный выбор 🚀"
-        vibe = "Это уверенный режим: тестишь идеи, делаешь карточки товара и вариации спокойно."
+        intro = "Ооо, <b>Orbit</b> — быстрый старт 🚀"
+        vibe = "Подойдет, если хочешь аккуратно тестировать гипотезы и не держать большой остаток."
     elif plan_name == "Nova":
-        intro = "Йо! <b>Nova</b> — это уже мощно 😮‍💨✨"
-        vibe = "Здесь можно разогнаться по ассортименту и делать контент пачками."
+        intro = "Йо! <b>Nova</b> — рабочий объём 😮‍💨✨"
+        vibe = "Хватает для регулярной генерации фото и видео без постоянных пополнений."
     else:
-        intro = "Воу… <b>Cosmic</b> — уровень «я пришёл забирать рынок» 🤯🌌"
-        vibe = "Максимальная свобода: много генераций, можно закрывать линейки товаров без стресса."
+        intro = "Воу… <b>Cosmic</b> — запас с комфортом 🤯🌌"
+        vibe = "Большой баланс для постоянной работы и агрессивного продакшна."
 
     rub_price = int(float(plan.price)) if float(plan.price) > 0 else 0
     stars_price = int(getattr(plan, "stars_price", 0) or 0)
@@ -299,17 +340,11 @@ def _pitch(plan_name: str, plan: Subscription) -> str:
             else "—"
         )
         price = f"{rub_part} / {stars_part}"
-    days = (
-        "без срока"
-        if plan.duration_days == 0
-        else f"на <b>{plan.duration_days}</b> дней"
-    )
-
     return (
         f"{intro}\n\n"
-        f"Вот что ты получаешь {days}:\n"
-        f"• 🎬 Видео: <b>{plan.video_generations}</b>\n"
-        f"• 🖼️ Фото: <b>{plan.photo_generations}</b>\n"
+        "Вот что ты получаешь:\n"
+        f"• 💠 Кредиты: <b>{int(getattr(plan, 'credit_amount', 0) or 0)}</b>\n"
+        f"• 🏷 Скидка: <b>{_package_discount_text(plan.name)}</b>\n"
         f"• 💰 Стоимость: {price}\n\n"
         f"{vibe}\n\n"
         "Если готов — жми <b>Купить</b> 😉"
@@ -362,7 +397,7 @@ async def extra_free_info(call: CallbackQuery, state: FSMContext) -> None:
         "🎁 <b>Бесплатная генерация</b>\n\n"
         "Получить бонус просто:\n"
         "1) Подпишись на наш канал.\n"
-        "2) Нажми кнопку ниже — мы проверим подписку и начислим <b>+1 фото‑генерацию</b> в течение минуты.\n\n"
+        "2) Нажми кнопку ниже — мы проверим подписку и начислим кредиты на <b>1 фото‑генерацию</b> в течение минуты.\n\n"
         "Промокоды мы публикуем в рассылке внутри бота и в нашем Telegram‑канале:\n"
         f"{CHANNEL_URL}\n\n"
         "Бонус за подписку можно получить только <b>1 раз</b> на пользователя.",
@@ -476,12 +511,15 @@ async def extra_open(call: CallbackQuery, session: AsyncSession) -> None:
         user = await get_user(session, call.from_user.id)
 
         if not user:
-            current_name = "Launch"
-            remaining_video, remaining_photo = 2, 3
+            current_name = "Кредитный баланс"
+            paid_credit_balance = 0
+            free_credit_balance = 0
         else:
             await ensure_default_subscription(session, call.from_user.id)
             current_name = await get_active_plan_name(session, user.id)
-            remaining_video, remaining_photo = await get_active_remaining(session, user.id)
+            paid_credit_balance, free_credit_balance = await get_active_remaining(
+                session, user.id
+            )
 
         plans = await get_all_plans(session)
         table_html = _table(plans)
@@ -490,7 +528,12 @@ async def extra_open(call: CallbackQuery, session: AsyncSession) -> None:
         if call.message:
             await edit_text_safe(
                 call,
-                _extra_text(current_name, remaining_video, remaining_photo, table_html),
+                _extra_text(
+                    current_name,
+                    paid_credit_balance,
+                    free_credit_balance,
+                    table_html,
+                ),
                 reply_markup=extra_menu_kb(menu_plans, current_name),
                 parse_mode="HTML",
             )
@@ -529,6 +572,48 @@ async def extra_want(call: CallbackQuery, session: AsyncSession) -> None:
 @router.callback_query(F.data == ExtraCallbacks.BACK)
 async def extra_back(call: CallbackQuery, session: AsyncSession) -> None:
     await extra_open(call, session)
+
+
+@router.callback_query(F.data == ExtraCallbacks.CUSTOM_AMOUNT)
+async def extra_custom_amount_start(call: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(CustomCreditsFlow.amount)
+    if call.message:
+        await edit_text_safe(
+            call,
+            "Введите сумму пополнения в кредитах от <b>200</b> до <b>100000</b> ✍️",
+            reply_markup=None,
+            parse_mode="HTML",
+        )
+    await call.answer()
+
+
+@router.message(CustomCreditsFlow.amount)
+async def extra_custom_amount_value(
+    message: Message, state: FSMContext
+) -> None:
+    raw = (message.text or "").strip()
+    try:
+        credits = int(raw)
+    except Exception:
+        await message.answer("Нужно целое число от 200 до 100000 ✍️")
+        return
+
+    if credits < 200 or credits > 100000:
+        await message.answer("Сумма должна быть от 200 до 100000 кредитов ✍️")
+        return
+
+    await state.clear()
+    from app.services.platega import check_platega_health
+
+    platega_ok = await check_platega_health()
+    text = _custom_pitch(credits)
+    if not platega_ok:
+        text += "\n\n⚠️ Оплата картой/СБП/крипто временно недоступна. Доступна оплата Stars."
+    await message.answer(
+        text,
+        reply_markup=extra_custom_buy_kb(credits, platega_available=platega_ok),
+        parse_mode="HTML",
+    )
 
 
 @router.callback_query(F.data.startswith(ExtraCallbacks.BUY_PREFIX))
@@ -588,7 +673,7 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
         data = await client.create_payment_link(
             amount=amount,
             currency=currency,
-            description=f"Donation plan {plan.name}",
+            description=f"Credit pack {plan.name}",
             payload=payload,
             payment_method=pay_method,
         )
@@ -644,12 +729,150 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
             "✅ Готово!\n\n"
             "1) Нажми <b>Оплатить</b>\n"
             "2) Потом жми <b>Проверить оплату</b> (если не активировалось сразу)\n\n"
-            "Пакет активируется сразу после подтверждения ✅",
+            "Кредиты начислятся сразу после подтверждения ✅",
             reply_markup=extra_pay_poll_kb(redirect, payment.id),
             parse_mode="HTML",
         )
 
     return
+
+
+@router.callback_query(F.data.startswith(ExtraCallbacks.CUSTOM_BUY_PREFIX))
+async def extra_custom_buy(call: CallbackQuery, session: AsyncSession) -> None:
+    await call.answer()
+    raw = (call.data or "").replace(ExtraCallbacks.CUSTOM_BUY_PREFIX, "", 1)
+    parts = raw.split(":")
+    if len(parts) != 2 or not parts[0].isdigit():
+        await call.answer("Некорректный платёж 😕", show_alert=True)
+        return
+
+    credits = int(parts[0])
+    method = parts[1]
+    if credits < 200 or credits > 100000:
+        await call.answer("Сумма должна быть от 200 до 100000", show_alert=True)
+        return
+
+    plan_name = make_custom_plan_name(credits)
+
+    if method == "stars":
+        await extra_buy_custom_stars(call, session, credits)
+        return
+
+    amount = credits
+    currency = "RUB"
+    platega_ok = await check_platega_health()
+    if not platega_ok:
+        if call.message:
+            await edit_text_safe(
+                call,
+                "⚠️ Оплата картой/СБП/крипто временно недоступна.\n"
+                "Попробуй позже или выбери оплату Stars.",
+                reply_markup=extra_custom_buy_kb(credits, platega_available=False),
+                parse_mode="HTML",
+            )
+        return
+
+    try:
+        client = build_platega_client()
+    except Exception:
+        logger.exception("extra_custom_buy: platega client init failed")
+        await call.answer("Платёжный сервис не настроен", show_alert=True)
+        return
+
+    payload = {"tgUserId": call.from_user.id, "customCredits": credits}
+
+    if method == "crypto":
+        pay_method = 13
+    elif method == "card":
+        pay_method = 11
+    else:
+        pay_method = 2
+
+    if call.message:
+        await edit_text_safe(call, "🔥 Супер! Сейчас подготовлю оплату…", parse_mode="HTML")
+
+    try:
+        data = await client.create_payment_link(
+            amount=amount,
+            currency=currency,
+            description=f"Custom credit top-up {credits}",
+            payload=payload,
+            payment_method=pay_method,
+        )
+    except Exception:
+        logger.exception(
+            "extra_custom_buy: failed to create payment credits=%s tg_id=%s",
+            credits,
+            call.from_user.id,
+        )
+        if call.message:
+            await edit_text_safe(
+                call,
+                "Не удалось создать оплату 😕\n\nПопробуй ещё раз чуть позже.",
+                reply_markup=extra_custom_buy_kb(credits, platega_available=platega_ok),
+                parse_mode="HTML",
+            )
+        await call.answer(with_support("Ошибка платежного сервиса"), show_alert=True)
+        return
+
+    redirect = data.get("redirect")
+    tx_id = data.get("transactionId")
+    if not redirect or not tx_id:
+        logger.error(
+            "extra_custom_buy: invalid platega response tg_id=%s data=%s",
+            call.from_user.id,
+            data,
+        )
+        if call.message:
+            await edit_text_safe(
+                call,
+                "Платёжный сервис вернул некорректный ответ 😕",
+                reply_markup=extra_custom_buy_kb(credits, platega_available=platega_ok),
+                parse_mode="HTML",
+            )
+        await call.answer(with_support("Ошибка ответа Platega"), show_alert=True)
+        return
+
+    payment = await create_pending_payment(
+        session,
+        tg_user_id=call.from_user.id,
+        plan_name=plan_name,
+        amount=amount,
+        currency=currency,
+        tx_id=tx_id,
+    )
+
+    if call.message:
+        await edit_text_safe(
+            call,
+            "✅ Готово!\n\n"
+            "1) Нажми <b>Оплатить</b>\n"
+            "2) Потом жми <b>Проверить оплату</b> (если не активировалось сразу)\n\n"
+            "Кредиты начислятся сразу после подтверждения ✅",
+            reply_markup=extra_pay_poll_kb(redirect, payment.id),
+            parse_mode="HTML",
+        )
+
+
+async def extra_buy_custom_stars(
+    call: CallbackQuery, session: AsyncSession, credits: int
+) -> None:
+    del session
+    stars_amount = _stars_for_credits(credits)
+    payload = f"stars_custom:{credits}:{call.from_user.id}"
+    title = f"Пополнение на {credits} кредитов"
+    description = f"{credits} кредитов за {stars_amount} ⭐"
+
+    if call.message:
+        await call.message.answer_invoice(
+            title=title,
+            description=description,
+            payload=payload,
+            provider_token="",
+            currency="XTR",
+            prices=[LabeledPrice(label=f"{credits} кредитов", amount=stars_amount)],
+        )
+    await call.answer()
 
 
 async def extra_buy_stars(
@@ -662,10 +885,8 @@ async def extra_buy_stars(
         return
 
     payload = f"stars:{plan.name}:{call.from_user.id}"
-    title = f"Пакет {plan.name}"
-    description = (
-        f"{plan.video_generations} видео • {plan.photo_generations} фото"
-    )
+    title = f"Кредиты {plan.name}"
+    description = f"{int(getattr(plan, 'credit_amount', 0) or 0)} кредитов"
 
     if call.message:
         await call.message.answer_invoice(
@@ -682,7 +903,7 @@ async def extra_buy_stars(
 @router.pre_checkout_query()
 async def stars_pre_checkout(pre_checkout: PreCheckoutQuery) -> None:
     payload = pre_checkout.invoice_payload or ""
-    if not payload.startswith("stars:"):
+    if not (payload.startswith("stars:") or payload.startswith("stars_custom:")):
         await pre_checkout.answer(ok=False, error_message="Неверные параметры оплаты.")
         return
     await pre_checkout.answer(ok=True)
@@ -698,13 +919,14 @@ async def stars_success(message: Message, session: AsyncSession) -> None:
         return
 
     payload = sp.invoice_payload or ""
-    if not payload.startswith("stars:"):
+    if not (payload.startswith("stars:") or payload.startswith("stars_custom:")):
         return
 
     parts = payload.split(":")
     if len(parts) < 3:
         return
 
+    mode = parts[0]
     plan_name = parts[1]
     payload_tg_id = parts[2]
     tg_id = message.from_user.id
@@ -712,16 +934,28 @@ async def stars_success(message: Message, session: AsyncSession) -> None:
     if payload_tg_id.isdigit() and int(payload_tg_id) != tg_id:
         return
 
-    plan = await get_plan(session, plan_name)
-    if not plan:
-        await message.answer("Пакет не найден 😕")
+    if mode == "stars_custom":
+        if not plan_name.isdigit():
+            await message.answer("Некорректная сумма пополнения 😕")
+            return
+        credits = int(plan_name)
+        await apply_credit_amount_to_user(session, tg_id, credits)
+        await message.answer(
+            f"✅ Оплата Stars подтверждена! Начислено {credits} кредитов 🎉",
+            reply_markup=main_menu_kb(),
+        )
         return
+    else:
+        plan = await get_plan(session, plan_name)
+        if not plan:
+            await message.answer("Пакет не найден 😕")
+            return
 
-    await apply_plan_to_user(session, tg_id, plan)
-    await message.answer(
-        "✅ Оплата Stars подтверждена! Пакет активирован 🎉",
-        reply_markup=main_menu_kb(),
-    )
+        await apply_plan_to_user(session, tg_id, plan)
+        await message.answer(
+            f"✅ Оплата Stars подтверждена! Начислено {int(getattr(plan, 'credit_amount', 0) or 0)} кредитов 🎉",
+            reply_markup=main_menu_kb(),
+        )
 
 
 @router.callback_query(F.data.startswith(ExtraCallbacks.CHECK_PREFIX))
@@ -772,15 +1006,23 @@ async def extra_check_payment(call: CallbackQuery, session: AsyncSession) -> Non
     )
 
     if status == "CONFIRMED":
-        plan = await get_plan(session, payment.plan_name)
-        if plan:
-            await apply_plan_to_user(session, call.from_user.id, plan)
+        custom_credits = parse_custom_plan_credits(payment.plan_name)
+        plan = None
+        credited_amount = 0
+        if custom_credits:
+            await apply_credit_amount_to_user(session, call.from_user.id, custom_credits)
+            credited_amount = custom_credits
+        else:
+            plan = await get_plan(session, payment.plan_name)
+            if plan:
+                await apply_plan_to_user(session, call.from_user.id, plan)
+                credited_amount = int(getattr(plan, "credit_amount", 0) or 0)
         await mark_payment_status(session, payment, PaymentStatus.CONFIRMED)
 
         if call.message:
             await edit_text_safe(
                 call,
-                "✅ Оплата подтверждена! Пакет активирован 🎉",
+                f"✅ Оплата подтверждена! Начислено {credited_amount} кредитов 🎉",
                 reply_markup=main_menu_kb(),
                 parse_mode="HTML",
             )

@@ -31,3 +31,7 @@ class AdminPackageCreateFSM(StatesGroup):
 
 class AdminLaunchLimitFSM(StatesGroup):
     waiting_value = State()
+
+
+class AdminModelPricingFSM(StatesGroup):
+    waiting_value = State()

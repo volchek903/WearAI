@@ -27,6 +27,13 @@ async def upsert_user(
         stmt = sqlite_insert(User).values(
             tg_id=tg_id,
             username=username,
+            credit_balance=0,
+            free_credit_balance=0,
+            free_generations_used_today=0,
+            free_generations_day=None,
+            pending_charge_kind=None,
+            pending_charge_source=None,
+            pending_charge_amount=0,
             generated_photos=0,
             generated_videos=0,
             free_channel_bonus_used=False,
@@ -58,6 +65,13 @@ async def get_or_create_user(
         stmt = sqlite_insert(User).values(
             tg_id=tg_id,
             username=username,
+            credit_balance=0,
+            free_credit_balance=0,
+            free_generations_used_today=0,
+            free_generations_day=None,
+            pending_charge_kind=None,
+            pending_charge_source=None,
+            pending_charge_amount=0,
             generated_photos=0,
             generated_videos=0,
             free_channel_bonus_used=False,
@@ -80,22 +94,34 @@ async def get_or_create_user(
     return user, created
 
 async def increment_generated_photos(
-    session: AsyncSession, tg_id: int, delta: int = 1
+    session: AsyncSession, tg_id: int, delta: int = 1, section: str | None = None
 ) -> None:
+    from app.repository.analytics import log_generation_event
+    from app.repository.generations import finalize_photo_generation
+
     await session.execute(
         update(User)
         .where(User.tg_id == tg_id)
         .values(generated_photos=User.generated_photos + delta)
     )
     await session.commit()
+    if delta > 0 and section:
+        await log_generation_event(session, tg_id=tg_id, section=section, kind="photo")
+    await finalize_photo_generation(session, tg_id)
 
 
 async def increment_generated_videos(
-    session: AsyncSession, tg_id: int, delta: int = 1
+    session: AsyncSession, tg_id: int, delta: int = 1, section: str | None = None
 ) -> None:
+    from app.repository.analytics import log_generation_event
+    from app.repository.generations import finalize_video_generation
+
     await session.execute(
         update(User)
         .where(User.tg_id == tg_id)
         .values(generated_videos=User.generated_videos + delta)
     )
     await session.commit()
+    if delta > 0 and section:
+        await log_generation_event(session, tg_id=tg_id, section=section, kind="video")
+    await finalize_video_generation(session, tg_id)

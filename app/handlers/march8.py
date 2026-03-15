@@ -195,7 +195,7 @@ async def march8_confirm_yes(
         await stop_progress(stop, progress_task)
         await edit_text_safe(
             progress_msg,
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
+            "⛔️ Недостаточно кредитов.\n\nПополните баланс 💳",
             reply_markup=buy_generations_kb(),
         )
         await state.clear()
@@ -224,7 +224,7 @@ async def march8_confirm_yes(
             await send_image_smart(call.message, img_bytes=img_bytes, filename=filename)
             sent_any = True
 
-        await increment_generated_photos(session=session, tg_id=tg_id, delta=1)
+        await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="march8")
         await state.clear()
         await call.message.answer(
             "Хотите ли что-то ещё сгенерировать?",

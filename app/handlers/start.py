@@ -16,12 +16,14 @@ from app.repository.users import get_or_create_user
 from app.repository.referrals import parse_referrer_tg_id, process_referral_for_new_user
 from app.repository.photo_settings import ensure_photo_settings
 from app.repository.generations import ensure_default_subscription
-from app.services.free_channel_bonus import schedule_free_bonus_reminder
+from app.services.free_channel_bonus import free_channel_kb
 from app.repository.extra import get_plan
 from app.repository.payments import (
+    apply_credit_amount_to_user,
     get_latest_pending_payment,
     mark_payment_status,
     apply_plan_to_user,
+    parse_custom_plan_credits,
 )
 from app.models.payment import PaymentStatus
 from app.services.platega import normalize_payment_status
@@ -134,8 +136,6 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) 
         await process_referral_for_new_user(
             session, new_user=user, referrer_tg_id=ref_tg_id
         )
-    if created:
-        await schedule_free_bonus_reminder(message.bot, message.from_user.id, delay_s=600)
 
     # --- если вернулись из оплаты: проверяем PENDING и пытаемся подтвердить ---
     if start_payload in {"pay_ok", "pay_fail"}:
@@ -162,21 +162,29 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) 
         status = await _platega_get_status(pending.platega_transaction_id)
 
         if status == "CONFIRMED":
-            plan = await get_plan(session, pending.plan_name)
-            if not plan:
-                logger.error(
-                    "start.cmd_start: plan not found in DB plan_name=%s payment_id=%s",
-                    pending.plan_name,
-                    pending.id,
+            custom_credits = parse_custom_plan_credits(pending.plan_name)
+            credited_amount = 0
+            if custom_credits:
+                await apply_credit_amount_to_user(
+                    session, message.from_user.id, custom_credits
                 )
+                credited_amount = custom_credits
             else:
-                # apply_plan_to_user уже с логированием и реальным начислением
-                await apply_plan_to_user(session, message.from_user.id, plan)
+                plan = await get_plan(session, pending.plan_name)
+                if not plan:
+                    logger.error(
+                        "start.cmd_start: plan not found in DB plan_name=%s payment_id=%s",
+                        pending.plan_name,
+                        pending.id,
+                    )
+                else:
+                    await apply_plan_to_user(session, message.from_user.id, plan)
+                    credited_amount = int(getattr(plan, "credit_amount", 0) or 0)
 
             await mark_payment_status(session, pending, PaymentStatus.CONFIRMED)
 
             await message.answer(
-                "✅ Оплата подтверждена! Пакет активирован 🎉",
+                f"✅ Оплата подтверждена! Начислено {credited_amount} кредитов 🎉",
                 reply_markup=main_menu_kb(),
             )
             return
@@ -212,13 +220,19 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) 
             "— <b>Шаблоны с машинами</b>\n"
             "— <b>Шаблоны для двоих</b>\n"
             "— <b>Шаблоны для одного</b>\n\n"
-            "✨ <b>Доп. возможности</b> — пакеты генераций и оплата.\n"
+            "✨ <b>Доп. возможности</b> — кредитный баланс и пополнение.\n"
             "❓ <b>FAQ</b> — ответы, инструкции и реферальная система.\n"
             "⚙️ <b>Настройки</b> — параметры генерации фото.\n\n"
-            "<b>Приглашай друзей и получай подписки бесплатно!</b>\n"
+            "<b>Приглашай друзей и получай кредиты бесплатно!</b>\n"
             "Промокоды на генерации — в официальном канале бота или в рассылке внутри бота.\n\n"
             "Выбирай режим ниже 👇✨"
         ),
         reply_markup=main_menu_kb(),
         parse_mode="HTML",
     )
+    if created:
+        await message.answer(
+            "🎁 Подпишись на наш канал и получи бесплатную фото-генерацию.\n\n"
+            "Нажми кнопку ниже после подписки — начислим кредиты на 1 фото 👇",
+            reply_markup=free_channel_kb(),
+        )
