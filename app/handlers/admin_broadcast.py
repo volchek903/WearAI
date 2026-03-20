@@ -4,7 +4,7 @@ import asyncio
 import logging
 
 from aiogram import Router, F
-from aiogram.exceptions import TelegramForbiddenError, TelegramNetworkError
+from aiogram.exceptions import TelegramForbiddenError
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +20,6 @@ from app.repository.admin import get_all_user_tg_ids, is_admin
 from app.repository.admin_actions import log_admin_action
 from app.states.admin_broadcast import AdminBroadcastFSM
 from app.utils.tg_edit import edit_text_safe
-from app.utils.tg_callback import safe_answer
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -90,23 +89,6 @@ async def _send_payload(bot, chat_id: int, payload: dict) -> None:
     raise RuntimeError(f"Unknown broadcast kind: {kind}")
 
 
-async def _send_payload_with_retry(
-    bot, chat_id: int, payload: dict, *, retries: int = 2
-) -> None:
-    last_err: Exception | None = None
-    for attempt in range(retries + 1):
-        try:
-            await _send_payload(bot, chat_id, payload)
-            return
-        except (TelegramNetworkError, ConnectionError, TimeoutError, OSError) as e:
-            last_err = e
-            if attempt >= retries:
-                raise
-            await asyncio.sleep(0.4 * (attempt + 1))
-    if last_err:
-        raise last_err
-
-
 @router.callback_query(F.data == AdminCallbacks.BROADCAST)
 async def broadcast_start(
     call: CallbackQuery, state: FSMContext, session: AsyncSession
@@ -118,7 +100,7 @@ async def broadcast_start(
     await edit_text_safe(
         call, "📣 Выбери формат рассылки:", reply_markup=admin_broadcast_kb()
     )
-    await safe_answer(call)
+    await call.answer()
 
 
 @router.callback_query(
@@ -144,14 +126,14 @@ async def broadcast_pick_type(
     if call.data == AdminBroadcastCallbacks.BACK:
         await state.clear()
         await edit_text_safe(call, "⚙️ Админка", reply_markup=admin_menu_kb())
-        await safe_answer(call)
+        await call.answer()
         return
 
     kind = call.data.replace("admin:broadcast:", "", 1)
     await state.update_data(kind=kind)
     await state.set_state(AdminBroadcastFSM.waiting_content)
     await edit_text_safe(call, _type_prompt(kind), reply_markup=None)
-    await safe_answer(call)
+    await call.answer()
 
 
 @router.message(AdminBroadcastFSM.waiting_content)
@@ -235,7 +217,7 @@ async def broadcast_cancel(
         return
     await state.clear()
     await edit_text_safe(call, "❌ Отменено", reply_markup=admin_menu_kb())
-    await safe_answer(call)
+    await call.answer()
 
 
 @router.callback_query(AdminBroadcastFSM.confirm, F.data == ConfirmCallbacks.YES)
@@ -250,40 +232,40 @@ async def broadcast_confirm(
     if not isinstance(payload, dict):
         await state.clear()
         await edit_text_safe(call, "Нет данных рассылки 😕", reply_markup=admin_menu_kb())
-        await safe_answer(call)
+        await call.answer()
         return
 
     await edit_text_safe(call, "⏳ Начинаю рассылку…", reply_markup=None)
 
     users = await get_all_user_tg_ids(session)
     sent = 0
-    failed = 0
     blocked = 0
+    failed = 0
 
     for tg_id in users:
         try:
-            await _send_payload_with_retry(call.bot, tg_id, payload, retries=2)
+            await _send_payload(call.bot, tg_id, payload)
             sent += 1
-        except TelegramForbiddenError as e:
+        except TelegramForbiddenError:
             blocked += 1
-            logger.info("BROADCAST_BLOCKED tg_id=%s err=%s", tg_id, e)
+            logger.info("BROADCAST_BLOCKED tg_id=%s", tg_id)
         except Exception as e:
             failed += 1
             logger.warning("BROADCAST_FAIL tg_id=%s err=%s", tg_id, e)
         await asyncio.sleep(0.03)
 
     await state.clear()
-    total = len(users)
-    report = (
+    report_text = (
         "✅ Рассылка завершена.\n\n"
-        f"Успешно отправлено: {sent}\n"
+        f"Отправлено: {sent}\n"
         f"Заблокировали бота: {blocked}\n"
-        f"Ошибок: {failed}\n"
-        f"Всего отправок: {total}"
+        f"Ошибок: {failed}"
     )
-    await call.bot.send_message(
-        call.message.chat.id,
-        report,
+
+    await edit_text_safe(
+        call,
+        report_text,
         reply_markup=admin_menu_kb(),
     )
-    await safe_answer(call)
+    await call.bot.send_message(call.from_user.id, report_text)
+    await call.answer()
