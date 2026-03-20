@@ -4,10 +4,11 @@ from __future__ import annotations
 import asyncio
 import os
 import logging
+import time
 
 import httpx
 from aiogram import Router, F
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -104,6 +105,53 @@ async def _platega_get_status(tx_id: str) -> str | None:
         normalized,
     )
     return normalized
+
+
+@router.message(Command("ping"))
+async def cmd_ping(message: Message) -> None:
+    token = os.getenv("BOT_TOKEN", "").strip()
+    if not token:
+        await message.answer("BOT_TOKEN не настроен")
+        return
+
+    url = f"https://api.telegram.org/bot{token}/getMe"
+    started = time.perf_counter()
+    status_code = 0
+    ok = False
+    error_text = ""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url)
+        status_code = resp.status_code
+        payload = resp.json()
+        ok = bool(payload.get("ok"))
+    except Exception as e:
+        error_text = str(e)
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+
+    if error_text:
+        logger.warning(
+            "start.cmd_ping: tg_id=%s elapsed_ms=%s error=%s",
+            message.from_user.id if message.from_user else None,
+            elapsed_ms,
+            error_text,
+        )
+        await message.answer(f"🏓 Ping: ошибка\nВремя: {elapsed_ms} ms\nОшибка: {error_text}")
+        return
+
+    logger.info(
+        "start.cmd_ping: tg_id=%s elapsed_ms=%s http=%s ok=%s",
+        message.from_user.id if message.from_user else None,
+        elapsed_ms,
+        status_code,
+        ok,
+    )
+    await message.answer(
+        "🏓 Ping Telegram API\n"
+        f"Время: {elapsed_ms} ms\n"
+        f"HTTP: {status_code}\n"
+        f"ok: {ok}"
+    )
 
 
 @router.message(CommandStart())
