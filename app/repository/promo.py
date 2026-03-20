@@ -11,6 +11,7 @@ from app.repository.generations import (
     grant_photo_generation,
     grant_video_generation,
 )
+from app.repository.payments import apply_credit_amount_to_user
 
 
 class PromoError(RuntimeError):
@@ -21,8 +22,7 @@ async def create_promo_code(
     session: AsyncSession,
     *,
     code: str,
-    bonus_photo: int,
-    bonus_video: int,
+    bonus_credits: int,
     max_uses: int,
 ) -> PromoCode:
     code = (code or "").strip()
@@ -30,6 +30,8 @@ async def create_promo_code(
         raise PromoError("Промокод пустой")
     if max_uses <= 0:
         raise PromoError("Количество активаций должно быть > 0")
+    if int(bonus_credits) <= 0:
+        raise PromoError("Количество кредитов должно быть > 0")
 
     existing = await session.scalar(select(PromoCode).where(PromoCode.code == code))
     if existing:
@@ -37,8 +39,9 @@ async def create_promo_code(
 
     promo = PromoCode(
         code=code,
-        bonus_photo=max(0, int(bonus_photo)),
-        bonus_video=max(0, int(bonus_video)),
+        bonus_credits=max(0, int(bonus_credits)),
+        bonus_photo=0,
+        bonus_video=0,
         max_uses=int(max_uses),
         used_count=0,
     )
@@ -89,6 +92,10 @@ async def redeem_promo_code(
     )
     await session.commit()
 
+    if int(getattr(promo, "bonus_credits", 0) or 0) > 0:
+        await apply_credit_amount_to_user(
+            session, tg_user_id=tg_id, credits=int(promo.bonus_credits)
+        )
     if promo.bonus_photo > 0:
         await grant_photo_generation(session, tg_id, delta=int(promo.bonus_photo))
     if promo.bonus_video > 0:

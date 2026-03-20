@@ -4,7 +4,7 @@ import asyncio
 import logging
 
 from aiogram import Router, F
-from aiogram.exceptions import TelegramForbiddenError
+from aiogram.exceptions import TelegramForbiddenError, TelegramNetworkError
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -88,6 +88,23 @@ async def _send_payload(bot, chat_id: int, payload: dict) -> None:
         await bot.send_voice(chat_id, payload["file_id"])
         return
     raise RuntimeError(f"Unknown broadcast kind: {kind}")
+
+
+async def _send_payload_with_retry(
+    bot, chat_id: int, payload: dict, *, retries: int = 2
+) -> None:
+    last_err: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            await _send_payload(bot, chat_id, payload)
+            return
+        except (TelegramNetworkError, ConnectionError, TimeoutError, OSError) as e:
+            last_err = e
+            if attempt >= retries:
+                raise
+            await asyncio.sleep(0.4 * (attempt + 1))
+    if last_err:
+        raise last_err
 
 
 @router.callback_query(F.data == AdminCallbacks.BROADCAST)
@@ -245,11 +262,11 @@ async def broadcast_confirm(
 
     for tg_id in users:
         try:
-            await _send_payload(call.bot, tg_id, payload)
+            await _send_payload_with_retry(call.bot, tg_id, payload, retries=2)
             sent += 1
         except TelegramForbiddenError as e:
             blocked += 1
-            logger.warning("BROADCAST_BLOCKED tg_id=%s err=%s", tg_id, e)
+            logger.info("BROADCAST_BLOCKED tg_id=%s err=%s", tg_id, e)
         except Exception as e:
             failed += 1
             logger.warning("BROADCAST_FAIL tg_id=%s err=%s", tg_id, e)

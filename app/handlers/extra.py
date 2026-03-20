@@ -54,6 +54,7 @@ from app.repository.payments import (
     parse_custom_plan_credits,
 )
 from app.utils.tg_edit import edit_text_safe
+from app.utils.tg_callback import safe_answer
 from app.utils.support_text import with_support
 from app.services.platega import normalize_payment_status, check_platega_health
 
@@ -72,6 +73,21 @@ class FreePromoFlow(StatesGroup):
 
 class CustomCreditsFlow(StatesGroup):
     amount = State()
+
+
+def _format_promo_bonus(promo) -> str:
+    bonus_credits = int(getattr(promo, "bonus_credits", 0) or 0)
+    if bonus_credits > 0:
+        return f"{bonus_credits} кредитов"
+
+    bonus_photo = int(getattr(promo, "bonus_photo", 0) or 0)
+    bonus_video = int(getattr(promo, "bonus_video", 0) or 0)
+    parts: list[str] = []
+    if bonus_photo > 0:
+        parts.append(f"🖼️ {bonus_photo} фото")
+    if bonus_video > 0:
+        parts.append(f"🎬 {bonus_video} видео")
+    return " • ".join(parts) if parts else "0 кредитов"
 
 
 def _payment_tg_id(payment) -> int | None:
@@ -283,6 +299,8 @@ def _table(plans: list[Subscription]) -> str:
 
 
 def _package_discount_text(plan_name: str) -> str:
+    if plan_name == "Pulse":
+        return "10%"
     if plan_name == "Orbit":
         return "10%"
     if plan_name == "Nova":
@@ -311,7 +329,10 @@ def _extra_text(
 
 
 def _pitch(plan_name: str, plan: Subscription) -> str:
-    if plan_name == "Orbit":
+    if plan_name == "Pulse":
+        intro = "Лёгкий старт с <b>Pulse</b> ⚡"
+        vibe = "Подойдет, если хочешь быстро протестировать механику без большого пополнения."
+    elif plan_name == "Orbit":
         intro = "Ооо, <b>Orbit</b> — быстрый старт 🚀"
         vibe = "Подойдет, если хочешь аккуратно тестировать гипотезы и не держать большой остаток."
     elif plan_name == "Nova":
@@ -361,7 +382,7 @@ async def extra_to_menu(call: CallbackQuery) -> None:
 @router.callback_query(F.data == ExtraCallbacks.FREE)
 async def extra_free_generation(call: CallbackQuery, session: AsyncSession) -> None:
     if call.message is None:
-        await call.answer()
+        await safe_answer(call)
         return
 
     if await bonus_already_used(session, call.from_user.id):
@@ -370,7 +391,7 @@ async def extra_free_generation(call: CallbackQuery, session: AsyncSession) -> N
             "Ты уже получал(а) бесплатную генерацию за подписку ✅",
             reply_markup=main_menu_kb(),
         )
-        await call.answer()
+        await safe_answer(call)
         return
 
     await edit_text_safe(
@@ -447,8 +468,8 @@ async def extra_free_promo_code(
         return
 
     await message.answer(
-        f"✅ Промокод активирован!\n"
-        f"Бонус: 🖼️ {promo.bonus_photo} фото • 🎬 {promo.bonus_video} видео"
+        "✅ Промокод активирован!\n"
+        f"Бонус: {_format_promo_bonus(promo)}"
     )
 
 @router.callback_query(F.data == ExtraCallbacks.FREE_CHECK)
@@ -537,7 +558,7 @@ async def extra_open(call: CallbackQuery, session: AsyncSession) -> None:
                 reply_markup=extra_menu_kb(menu_plans, current_name),
                 parse_mode="HTML",
             )
-        await call.answer()
+        await safe_answer(call)
     except Exception:
         logger.exception("extra_open failed")
         raise

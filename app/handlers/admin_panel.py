@@ -782,6 +782,7 @@ async def admin_promo_list(call: CallbackQuery, session: AsyncSession) -> None:
         for p in promos:
             lines.append(
                 f"• <code>{p.code}</code> "
+                f"кредиты={int(getattr(p, 'bonus_credits', 0) or 0)} "
                 f"фото={p.bonus_photo} видео={p.bonus_video} "
                 f"использовано {p.used_count}/{p.max_uses}"
             )
@@ -797,82 +798,21 @@ async def admin_promo_code_in(message: Message, state: FSMContext) -> None:
         await message.answer("Промокод пустой. Введи ещё раз ✍️")
         return
     await state.update_data(code=code)
-    await state.set_state(AdminPromoFSM.kind)
-
-    kb = InlineKeyboardBuilder()
-    add_button(
-        kb, text="🖼 Только фото", callback_data=AdminCallbacks.promo_type("photo")
-    )
-    add_button(
-        kb, text="🎬 Только видео", callback_data=AdminCallbacks.promo_type("video")
-    )
-    add_button(
-        kb,
-        text="🖼+🎬 Фото и видео",
-        callback_data=AdminCallbacks.promo_type("both"),
-    )
-    kb.adjust(1)
-    await message.answer("Что выдаёт промокод?", reply_markup=kb.as_markup())
+    await state.set_state(AdminPromoFSM.credit_amount)
+    await message.answer("Сколько кредитов выдаёт промокод?")
 
 
-@router.callback_query(
-    AdminPromoFSM.kind, F.data.startswith(f"{AdminCallbacks.PROMO_TYPE}:")
-)
-async def admin_promo_type(call: CallbackQuery, state: FSMContext) -> None:
-    kind = (call.data or "").rsplit(":", 1)[-1].strip()
-    if kind not in {"photo", "video", "both"}:
-        await call.answer("Неверный тип", show_alert=True)
-        return
-    await state.update_data(kind=kind)
-    if kind == "photo":
-        await state.set_state(AdminPromoFSM.photo_count)
-        await edit_text_safe(call, "Сколько фото-генераций выдаёт промокод?")
-    elif kind == "video":
-        await state.set_state(AdminPromoFSM.video_count)
-        await edit_text_safe(call, "Сколько видео-генераций выдаёт промокод?")
-    else:
-        await state.set_state(AdminPromoFSM.photo_count)
-        await edit_text_safe(call, "Сколько фото-генераций выдаёт промокод?")
-    await call.answer()
-
-
-@router.message(AdminPromoFSM.photo_count)
-async def admin_promo_photo_count(message: Message, state: FSMContext) -> None:
+@router.message(AdminPromoFSM.credit_amount)
+async def admin_promo_credit_amount(message: Message, state: FSMContext) -> None:
     try:
         count = int((message.text or "").strip())
     except Exception:
         await message.answer("Нужно число. Введи ещё раз ✍️")
         return
-    if count < 0:
-        await message.answer("Число должно быть >= 0")
+    if count <= 0:
+        await message.answer("Число должно быть > 0")
         return
-    await state.update_data(photo_count=count)
-    data = await state.get_data()
-    kind = data.get("kind")
-    if kind == "photo":
-        await state.update_data(video_count=0)
-        await state.set_state(AdminPromoFSM.max_uses)
-        await message.answer("Сколько пользователей может активировать промокод?")
-    else:
-        await state.set_state(AdminPromoFSM.video_count)
-        await message.answer("Сколько видео-генераций выдаёт промокод?")
-
-
-@router.message(AdminPromoFSM.video_count)
-async def admin_promo_video_count(message: Message, state: FSMContext) -> None:
-    try:
-        count = int((message.text or "").strip())
-    except Exception:
-        await message.answer("Нужно число. Введи ещё раз ✍️")
-        return
-    if count < 0:
-        await message.answer("Число должно быть >= 0")
-        return
-    await state.update_data(video_count=count)
-    data = await state.get_data()
-    kind = data.get("kind")
-    if kind == "video":
-        await state.update_data(photo_count=0)
+    await state.update_data(credit_amount=count)
     await state.set_state(AdminPromoFSM.max_uses)
     await message.answer("Сколько пользователей может активировать промокод?")
 
@@ -890,8 +830,7 @@ async def admin_promo_max_uses(message: Message, state: FSMContext) -> None:
 
     data = await state.get_data()
     code = data.get("code")
-    photo_count = int(data.get("photo_count") or 0)
-    video_count = int(data.get("video_count") or 0)
+    credit_amount = int(data.get("credit_amount") or 0)
 
     await state.update_data(max_uses=count)
     await state.set_state(AdminPromoFSM.confirm)
@@ -899,8 +838,7 @@ async def admin_promo_max_uses(message: Message, state: FSMContext) -> None:
     await message.answer(
         "Проверь данные промокода:\n\n"
         f"Код: <b>{code}</b>\n"
-        f"Фото-генераций: <b>{photo_count}</b>\n"
-        f"Видео-генераций: <b>{video_count}</b>\n"
+        f"Кредитов: <b>{credit_amount}</b>\n"
         f"Лимит активаций: <b>{count}</b>\n\n"
         "Всё верно?",
         reply_markup=yes_no_kb(
@@ -922,16 +860,14 @@ async def admin_promo_confirm(
 ) -> None:
     data = await state.get_data()
     code = data.get("code") or ""
-    photo_count = int(data.get("photo_count") or 0)
-    video_count = int(data.get("video_count") or 0)
+    credit_amount = int(data.get("credit_amount") or 0)
     max_uses = int(data.get("max_uses") or 0)
 
     try:
         await create_promo_code(
             session,
             code=code,
-            bonus_photo=photo_count,
-            bonus_video=video_count,
+            bonus_credits=credit_amount,
             max_uses=max_uses,
         )
     except PromoError as e:

@@ -328,14 +328,28 @@ class KieKlingClient:
                         data = await _read_json_payload(resp, ctx="WaveSpeed prediction")
                     except RuntimeError as e:
                         last_error = e
-                        if resp.status == 404 and idx == 0:
+                        if resp.status == 404:
                             logger.info(
-                                "wavespeed: prediction endpoint fallback task_id=%s url=%s",
+                                "wavespeed: prediction not ready task_id=%s url=%s idx=%s",
                                 task_id,
                                 url,
+                                idx,
                             )
-                            continue
+                            if idx < len(urls) - 1:
+                                continue
+                            return KieTaskResult(state="processing")
                         raise
+
+                    if resp.status == 404:
+                        logger.info(
+                            "wavespeed: prediction returned 404 task_id=%s url=%s idx=%s",
+                            task_id,
+                            url,
+                            idx,
+                        )
+                        if idx < len(urls) - 1:
+                            continue
+                        return KieTaskResult(state="processing")
 
                     if resp.status != 200 or int(data.get("code", 0)) != 200:
                         raise RuntimeError(

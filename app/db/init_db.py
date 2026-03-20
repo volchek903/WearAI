@@ -59,6 +59,19 @@ async def _ensure_sqlite_columns() -> None:
                 )
             )
 
+        promo_cols = {
+            row[1]
+            for row in (
+                await conn.execute(text("PRAGMA table_info(promo_codes)"))
+            ).fetchall()
+        }
+        if "bonus_credits" not in promo_cols:
+            await conn.execute(
+                text(
+                    "ALTER TABLE promo_codes ADD COLUMN bonus_credits INTEGER NOT NULL DEFAULT 0"
+                )
+            )
+
         sub_cols = {
             row[1]
             for row in (

@@ -21,7 +21,8 @@ def _stars_for_rub(rub_amount: int) -> int:
 PLANS = [
     # name, credit_amount, price_rub
     ("Base", 0, 0),
-    ("Orbit", 840, 20),
+    ("Pulse", 220, 200),
+    ("Orbit", 840, 750),
     ("Nova", 4300, 3650),
     ("Cosmic", 13140, 9850),
 ]

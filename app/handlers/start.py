@@ -205,7 +205,7 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) 
         return
 
     # --- обычный старт ---
-    await send_content_photo(
+    sent_welcome = await send_content_photo(
         message,
         filename="welcome.png",
         caption=(
@@ -218,18 +218,27 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) 
             "— <b>Оживить видео</b>: загрузи фото и напиши, что должно происходить в видео.\n\n"
             "🧩 <b>Шаблоны</b>\n"
             "— <b>Шаблоны с машинами</b>\n"
-            "— <b>Шаблоны для двоих</b>\n"
+            "— <b>Шаблоны для двоих и семейные</b>\n"
             "— <b>Шаблоны для одного</b>\n\n"
             "✨ <b>Доп. возможности</b> — кредитный баланс и пополнение.\n"
             "❓ <b>FAQ</b> — ответы, инструкции и реферальная система.\n"
             "⚙️ <b>Настройки</b> — параметры генерации фото.\n\n"
             "<b>Приглашай друзей и получай кредиты бесплатно!</b>\n"
-            "Промокоды на генерации — в официальном канале бота или в рассылке внутри бота.\n\n"
+            "Промокоды на кредиты — в официальном канале бота или в рассылке внутри бота.\n\n"
             "Выбирай режим ниже 👇✨"
         ),
         reply_markup=main_menu_kb(),
         parse_mode="HTML",
+        request_timeout=12,
     )
+    if not sent_welcome:
+        await message.answer(
+            (
+                "Привет! Я WEARAI 👋\n\n"
+                "Выбирай режим ниже 👇✨"
+            ),
+            reply_markup=main_menu_kb(),
+        )
     if created:
         await message.answer(
             "🎁 Подпишись на наш канал и получи бесплатную фото-генерацию.\n\n"
