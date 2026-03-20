@@ -7,6 +7,9 @@ from .referral import Referral
 from .promo_code import PromoCode
 from .promo_redemption import PromoRedemption
 from .admin_action_log import AdminActionLog
+from .generation_log import GenerationLog
+from .generation_analytics import GenerationAnalytics
+from .app_setting import AppSetting
 
 __all__ = [
     "Base",
@@ -18,4 +21,7 @@ __all__ = [
     "PromoCode",
     "PromoRedemption",
     "AdminActionLog",
+    "GenerationLog",
+    "GenerationAnalytics",
+    "AppSetting",
 ]

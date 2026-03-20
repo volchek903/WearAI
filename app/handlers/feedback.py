@@ -96,7 +96,7 @@ def _format_report(payload: dict[str, Any], user_text: str) -> str:
         "Сообщение пользователя:",
         user_text.strip() if user_text else "(пусто)",
         "",
-        "KIE prompt:",
+        "WaveSpeed prompt:",
         (payload.get("kie_prompt") or "").strip(),
         "",
     ]

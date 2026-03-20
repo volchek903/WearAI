@@ -30,24 +30,34 @@ async def send_content_photo(
     caption: str | None = None,
     reply_markup: InlineKeyboardMarkup | None = None,
     parse_mode: str | None = None,
-) -> None:
+    request_timeout: int = 15,
+) -> bool:
+    kwargs = {"reply_markup": reply_markup}
+    if parse_mode is not None:
+        kwargs["parse_mode"] = parse_mode
+
     try:
         path = _content_dir() / filename
         data = path.read_bytes()
         file = BufferedInputFile(data, filename=filename)
         if len(data) > TG_MAX_PHOTO_BYTES:
             await message.answer_document(
-                file, caption=caption, reply_markup=reply_markup, parse_mode=parse_mode
+                file,
+                caption=caption,
+                request_timeout=request_timeout,
+                **kwargs,
             )
-            return
+            return True
         await message.answer_photo(
             file,
             caption=caption,
-            reply_markup=reply_markup,
-            parse_mode=parse_mode,
+            request_timeout=request_timeout,
+            **kwargs,
         )
+        return True
     except Exception as e:
         logger.warning("send_content_photo failed: %s", e)
+        return False
 
 
 async def send_content_album(
@@ -56,6 +66,7 @@ async def send_content_album(
     filenames: list[str],
     caption: str | None = None,
     parse_mode: str | None = None,
+    request_timeout: int = 15,
 ) -> None:
     files: list[BufferedInputFile] = []
     sizes: list[int] = []
@@ -69,7 +80,15 @@ async def send_content_album(
         for i, f in enumerate(files):
             cap = caption if i == 0 else None
             try:
-                await message.answer_document(f, caption=cap, parse_mode=parse_mode)
+                doc_kwargs = {}
+                if parse_mode is not None:
+                    doc_kwargs["parse_mode"] = parse_mode
+                await message.answer_document(
+                    f,
+                    caption=cap,
+                    request_timeout=request_timeout,
+                    **doc_kwargs,
+                )
             except Exception as e:
                 logger.warning("send_content_album document failed: %s", e)
         return
@@ -81,13 +100,13 @@ async def send_content_album(
                 InputMediaPhoto(
                     media=f,
                     caption=caption,
-                    parse_mode=parse_mode,
+                    **({"parse_mode": parse_mode} if parse_mode is not None else {}),
                 )
             )
         else:
             media.append(InputMediaPhoto(media=f))
     try:
-        await message.answer_media_group(media=media)
+        await message.answer_media_group(media=media, request_timeout=request_timeout)
     except Exception as e:
         logger.warning("send_content_album failed: %s", e)
 TG_MAX_PHOTO_BYTES = 10_485_760  # 10 MB

@@ -10,8 +10,8 @@ from aiogram.types import CallbackQuery, Message, InputMediaPhoto
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.menu import MenuCallbacks
+from app.keyboards.extra import buy_generations_kb
 from app.keyboards.confirm import yes_no_tryon_kb_with_help, ConfirmCallbacks
-from app.keyboards.help import help_button_kb
 from app.keyboards.menu import photo_menu_kb
 from app.keyboards.feedback import feedback_kb
 from app.repository.users import increment_generated_photos, upsert_user
@@ -20,21 +20,24 @@ from app.repository.generations import (
     charge_photo_generation,
     refund_photo_generation,
     NoGenerationsLeft,
+    is_launch_subscription,
 )
-from app.services.generation import generate_image_kie_from_telegram
-from app.services.kie_ai import KieAIError
+from app.services.generation import generate_image_wavespeed_from_telegram
+from app.services.wavespeed_ai import WaveSpeedError
 from app.states.tryon_flow import TryOnFlow
 from app.states.feedback_flow import FeedbackFlow
-from app.utils.kie_errors import kie_error_to_user_text
+from app.utils.wavespeed_errors import wavespeed_error_to_user_text
 from app.utils.tg_edit import edit_text_safe
+from app.utils.content_media import send_content_album
 from app.utils.tg_send import send_image_smart
+from app.utils.support_text import with_support, launch_limits_message
+from app.utils.launch_guard import block_launch_for_call
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 from app.utils.progress_bar import (
     progress_initial_text,
     progress_loop,
     stop_progress,
 )
-from app.utils.content_media import send_content_album
 from app.utils.generated_files import save_generated_image_bytes
 
 
@@ -57,16 +60,22 @@ async def start_tryon_flow(
 ) -> None:
     await call.answer()
     await upsert_user(session, call.from_user.id, call.from_user.username)
+    if await block_launch_for_call(call, session, reply_markup=buy_generations_kb()):
+        return
 
     await state.clear()
     await state.set_state(TryOnFlow.user_photo)
 
-    text = "Поехали! 👕✨\n\nПришли свою фотографию (1 фото) 🤳📸"
     if call.message:
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
         await send_content_album(
             call.message,
             filenames=["scenario_photo1.jpeg", "scenario_photo2.jpeg"],
-            caption=text,
+            caption="Поехали! 👕✨\n\nПришли свою фотографию (1 фото) 🤳📸",
+            parse_mode="HTML",
         )
 
 
@@ -87,7 +96,7 @@ async def user_photo_in(message: Message, state: FSMContext) -> None:
 
     await message.answer(
         "Фото получил ✅😊\n\nТеперь пришли фото вещи (1 фото) 📦📸",
-        reply_markup=help_button_kb("item_photo", text="📦 Как лучше сфоткать вещь?"),
+        reply_markup=None,
     )
 
 
@@ -148,7 +157,7 @@ async def tryon_confirmed_go_prompt(call: CallbackQuery, state: FSMContext) -> N
     await edit_text_safe(
         call,
         TRYON_DESC_EXAMPLE,
-        reply_markup=help_button_kb("tryon_desc", text="🪄 Как лучше написать промпт?"),
+        reply_markup=None,
     )
     await call.answer()
 
@@ -204,9 +213,15 @@ async def tryon_desc_in(
         await charge_photo_generation(session, tg_id)
     except NoGenerationsLeft:
         await stop_progress(stop, progress_task)
-        await message.answer(
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳"
-        )
+        if await is_launch_subscription(session, tg_id):
+            await message.answer(
+                launch_limits_message(), reply_markup=buy_generations_kb()
+            )
+        else:
+            await message.answer(
+                "⛔️ Недостаточно кредитов.\n\nПополните баланс 💳",
+                reply_markup=buy_generations_kb(),
+            )
         return
 
     prompt = (
@@ -220,7 +235,7 @@ async def tryon_desc_in(
 
     sent_any = False
     try:
-        results = await generate_image_kie_from_telegram(
+        results = await generate_image_wavespeed_from_telegram(
             bot=message.bot,
             session=session,
             tg_id=tg_id,  # ✅ тут тоже tg_id
@@ -229,7 +244,7 @@ async def tryon_desc_in(
         )
 
         if not results:
-            raise RuntimeError("KIE returned empty result")
+            raise RuntimeError("WaveSpeed returned empty result")
 
         await stop_progress(stop, progress_task)
         await edit_text_safe(progress_msg, "✅ Готово! Отправляю результат…")
@@ -271,7 +286,7 @@ async def tryon_desc_in(
                     }
                 )
 
-        await increment_generated_photos(session=session, tg_id=tg_id, delta=1)
+        await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="scenario_tryon")
 
         await state.set_data(
             {
@@ -303,12 +318,12 @@ async def tryon_desc_in(
         )
         return
 
-    except KieAIError as e:
-        logger.warning("TRYON KIE failed: %s", e)
+    except WaveSpeedError as e:
+        logger.warning("TRYON WaveSpeed failed: %s", e)
         if not sent_any:
             await refund_photo_generation(session, tg_id)  # ✅ tg_id
         await stop_progress(stop, progress_task)
-        await message.answer(kie_error_to_user_text(e))
+        await message.answer(wavespeed_error_to_user_text(e))
         return
 
     except Exception as e:
@@ -317,7 +332,9 @@ async def tryon_desc_in(
             await refund_photo_generation(session, tg_id)  # ✅ tg_id
         await stop_progress(stop, progress_task)
         await message.answer(
-            "Не получилось сделать примерку 😅\n"
-            "Попробуй изменить описание и отправь ещё раз."
+            with_support(
+                "Не получилось сделать примерку 😅\n"
+                "Попробуй изменить описание и отправь ещё раз."
+            )
         )
         return

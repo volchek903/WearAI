@@ -17,7 +17,9 @@ from PIL import Image
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.keyboards.menu import MenuCallbacks, photo_menu_kb
+from app.keyboards.extra import buy_generations_kb
 from app.keyboards.love_is import LoveIsCallbacks, love_is_post_kb
+from app.keyboards.utils import add_button
 from app.repository.generations import (
     NoGenerationsLeft,
     charge_photo_generation,
@@ -25,6 +27,7 @@ from app.repository.generations import (
     ensure_default_subscription,
     refund_photo_generation,
     refund_video_generation,
+    is_launch_subscription,
 )
 from app.repository.users import (
     increment_generated_photos,
@@ -32,18 +35,20 @@ from app.repository.users import (
     upsert_user,
 )
 from app.services.album_collector import AlbumCollector
-from app.services.generation import generate_image_kie_from_telegram
+from app.services.generation import generate_image_wavespeed_from_telegram
 from app.states.love_is_flow import LoveIsFlow
 from app.utils.tg_edit import edit_text_safe
+from app.utils.content_media import send_content_photo
 from app.utils.tg_send import send_image_smart
+from app.utils.support_text import with_support, launch_limits_message
+from app.utils.launch_guard import block_launch_for_call
 from app.utils.progress_bar import (
     progress_initial_text,
     progress_loop,
     stop_progress,
 )
 from app.utils.generated_files import save_generated_image_bytes
-from app.utils.content_media import send_content_photo
-from app.utils.kie_kling_client import KieKlingClient
+from app.utils.wavespeed_kling_client import WaveSpeedKlingClient
 from app.db.config import settings
 
 router = Router()
@@ -54,27 +59,33 @@ _MAX_BYTES = 10 * 1024 * 1024
 
 
 @router.callback_query(F.data == MenuCallbacks.LOVE_IS)
-async def love_is_start(call: CallbackQuery, state: FSMContext) -> None:
+async def love_is_start(
+    call: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
     await call.answer()
+    if await block_launch_for_call(call, session, reply_markup=buy_generations_kb()):
+        return
     await state.clear()
     await state.set_state(LoveIsFlow.photos)
-    text = (
-        "❤️ <b>ИИ Love is</b>\n\n"
-        "Пришли 1–2 фото (лучше: мужчина и женщина) одним сообщением или альбомом 📸"
-    )
     if call.message:
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
         await send_content_photo(
             call.message,
             filename="love_is.jpeg",
-            caption=text,
+            caption=(
+                "❤️ <b>ИИ Love is</b>\n\n"
+                "Пришли 1–2 фото (лучше: мужчина и женщина) одним сообщением или альбомом 📸"
+            ),
             parse_mode="HTML",
-            reply_markup=_back_only_kb(),
         )
 
 
 def _back_only_kb():
     kb = InlineKeyboardBuilder()
-    kb.button(text="⬅️ В меню", callback_data=MenuCallbacks.BACK)
+    add_button(kb, text="⬅️ В меню", callback_data=MenuCallbacks.BACK, style="danger")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -132,9 +143,15 @@ async def love_is_text_in(
     try:
         await charge_photo_generation(session, tg_id)
     except NoGenerationsLeft:
-        await message.answer(
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳"
-        )
+        if await is_launch_subscription(session, tg_id):
+            await message.answer(
+                launch_limits_message(), reply_markup=buy_generations_kb()
+            )
+        else:
+            await message.answer(
+                "⛔️ Недостаточно кредитов.\n\nПополните баланс 💳",
+                reply_markup=buy_generations_kb(),
+            )
         await state.clear()
         return
 
@@ -174,7 +191,7 @@ async def love_is_text_in(
             "cartoon illustration, love is style, valentine postcard, hand-drawn, "
             "soft shading, clean lineart, cute couple."
         )
-        results = await generate_image_kie_from_telegram(
+        results = await generate_image_wavespeed_from_telegram(
             bot=message.bot,
             session=session,
             tg_id=tg_id,
@@ -183,7 +200,7 @@ async def love_is_text_in(
             aspect_ratio="3:4",
         )
         if not results:
-            raise RuntimeError("KIE returned empty result")
+            raise RuntimeError("WaveSpeed returned empty result")
 
         await stop_progress(stop, progress_task)
         await edit_text_safe(progress_msg, "✅ Готово! Отправляю результат…")
@@ -201,7 +218,7 @@ async def love_is_text_in(
             await send_image_smart(message, img_bytes=img_bytes, filename=filename)
             sent_any = True
 
-        await increment_generated_photos(session=session, tg_id=tg_id, delta=1)
+        await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="love_is_photo")
 
         if first_path:
             await state.update_data(love_is_image_path=first_path)
@@ -221,7 +238,7 @@ async def love_is_text_in(
             await refund_photo_generation(session, tg_id)
         await stop_progress(stop, progress_task)
         await message.answer(
-            "Не получилось сгенерировать 😅 Попробуй ещё раз чуть позже."
+            with_support("Не получилось сгенерировать 😅 Попробуй ещё раз чуть позже.")
         )
     finally:
         if await state.get_state() != LoveIsFlow.ready.state:
@@ -273,7 +290,7 @@ async def love_is_animate(
         return
 
     if not settings.kie_api_key:
-        await call.message.answer("Не настроен KIE_API_KEY в .env 😕")
+        await call.message.answer("Не настроен WAVESPEED_API_KEY в .env 😕")
         return
 
     tg_id = call.from_user.id
@@ -283,7 +300,7 @@ async def love_is_animate(
         await charge_video_generation(session, tg_id)
     except NoGenerationsLeft:
         await call.message.answer(
-            "⛔️ Лимит генераций видео исчерпан.\n\nОформи подписку или пополни баланс 💳"
+            "⛔️ Недостаточно кредитов.\n\nПополните баланс 💳"
         )
         await state.clear()
         return
@@ -303,7 +320,7 @@ async def love_is_animate(
         await state.clear()
         return
 
-    client = KieKlingClient(settings.kie_api_key)
+    client = WaveSpeedKlingClient(settings.kie_api_key)
     progress_msg = await call.message.answer(progress_initial_text())
     stop = asyncio.Event()
 
@@ -333,7 +350,7 @@ async def love_is_animate(
         )
 
         res = await client.wait_for_success(
-            task_id, poll_interval_s=10, max_wait_s=12 * 60
+            task_id, poll_interval_s=10, max_wait_s=30 * 60
         )
         if res.state == "timeout":
             raise RuntimeError("timeout")
@@ -354,7 +371,7 @@ async def love_is_animate(
             caption="Готово! 💞",
             supports_streaming=True,
         )
-        await increment_generated_videos(session=session, tg_id=tg_id, delta=1)
+        await increment_generated_videos(session=session, tg_id=tg_id, delta=1, section="love_is_video")
         await call.message.answer(
             "Хотите ли что-то ещё сгенерировать?",
             reply_markup=photo_menu_kb(),
@@ -363,7 +380,9 @@ async def love_is_animate(
         logger.exception("LOVE_IS animate failed: %s", e)
         await refund_video_generation(session, tg_id)
         await stop_progress(stop, progress_task)
-        await call.message.answer("Не получилось оживить открытку 😅 Попробуй позже.")
+        await call.message.answer(
+            with_support("Не получилось оживить открытку 😅 Попробуй позже.")
+        )
     finally:
         await state.clear()
 

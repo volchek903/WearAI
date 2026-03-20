@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.config import settings
 from app.keyboards.menu import MenuCallbacks
+from app.keyboards.extra import buy_generations_kb
 from app.keyboards.menu import video_menu_kb
 from app.models.subscription import Subscription
 from app.models.user import User
@@ -25,12 +26,15 @@ from app.repository.generations import (
 )
 from app.repository.users import increment_generated_videos
 from app.states.animate_photo import AnimatePhotoStates
-from app.utils.kie_kling_client import KieKlingClient
+from app.utils.wavespeed_kling_client import WaveSpeedKlingClient
 from app.utils.tg_edit import edit_text_safe
+from app.utils.support_text import with_support
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 
 router = Router()
 logger = logging.getLogger(__name__)
+
+MAX_INPUT_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB
 
 # key = tg_id (telegram id) — чтобы не путать с users.id
 _active_jobs: dict[int, asyncio.Task] = {}
@@ -88,9 +92,9 @@ async def animate_entry(cb: CallbackQuery, state: FSMContext) -> None:
 @router.message(AnimatePhotoStates.waiting_photo, F.photo)
 async def animate_got_photo(message: Message, state: FSMContext) -> None:
     if not settings.kie_api_key:
-        await message.answer("Не настроен KIE_API_KEY в .env 😕")
+        await message.answer("Не настроен WAVESPEED_API_KEY в .env 😕")
         await state.clear()
-        logger.error("KIE_API_KEY missing in settings")
+        logger.error("WAVESPEED_API_KEY missing in settings")
         return
 
     if message.media_group_id is not None:
@@ -101,6 +105,13 @@ async def animate_got_photo(message: Message, state: FSMContext) -> None:
         return
 
     photo = message.photo[-1]
+    if (photo.file_size or 0) > MAX_INPUT_PHOTO_BYTES:
+        await message.answer(
+            "Фото слишком большое 😕\n\n"
+            "Пришлите изображение до 5 МБ, чтобы загрузка и генерация проходили стабильно."
+        )
+        return
+
     tg_file = await message.bot.get_file(photo.file_id)
     file_path = tg_file.file_path
     if not file_path:
@@ -110,7 +121,7 @@ async def animate_got_photo(message: Message, state: FSMContext) -> None:
     image_bytes = await _download_telegram_file(message.bot.token, file_path)
     filename = Path(file_path).name or "photo.jpg"
 
-    client = KieKlingClient(settings.kie_api_key)
+    client = WaveSpeedKlingClient(settings.kie_api_key)
     try:
         image_url = await client.upload_image_bytes(
             image_bytes=image_bytes,
@@ -118,9 +129,9 @@ async def animate_got_photo(message: Message, state: FSMContext) -> None:
             upload_path=f"images/wearai/animate/{message.from_user.id}",
         )
     except Exception as e:
-        await message.answer(f"Ошибка загрузки фото в KIE 😕: {e}")
+        await message.answer(with_support(f"Ошибка загрузки фото в WaveSpeed 😕: {e}"))
         await state.clear()
-        logger.exception("KIE upload failed for user %s", message.from_user.id)
+        logger.exception("WaveSpeed upload failed for user %s", message.from_user.id)
         return
 
     await state.update_data(image_url=image_url)
@@ -155,16 +166,15 @@ async def _run_video_job(
                 text=t,
             ),
             stop,
+            interval_s=7.0,
         )
     )
     action_task = asyncio.create_task(_chat_action_loop(bot, chat_id, stop))
 
-    client = KieKlingClient(settings.kie_api_key)
+    client = WaveSpeedKlingClient(settings.kie_api_key)
 
     try:
-        res = await client.wait_for_success(
-            task_id, poll_interval_s=10, max_wait_s=12 * 60
-        )
+        res = await client.wait_for_success(task_id, poll_interval_s=10, max_wait_s=30 * 60)
 
         if res.state == "timeout":
             await refund_video_generation(session, tg_id)
@@ -172,7 +182,7 @@ async def _run_video_job(
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
-                text="Таймаут ожидания результата ⏳ Попробуйте ещё раз.",
+                text=with_support("Таймаут ожидания результата ⏳ Попробуйте ещё раз."),
             )
             return
 
@@ -182,7 +192,7 @@ async def _run_video_job(
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
-                text=f"Генерация завершилась ошибкой: {res.fail_msg}",
+                text=with_support(f"Генерация завершилась ошибкой: {res.fail_msg}"),
             )
             return
 
@@ -192,7 +202,7 @@ async def _run_video_job(
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
-                text="Готово, но не удалось найти ссылку на результат 😕",
+                text=with_support("Готово, но не удалось найти ссылку на результат 😕"),
             )
             return
 
@@ -212,7 +222,7 @@ async def _run_video_job(
             caption="Готово! Если нужно — дай следующий промпт ✍️",
             supports_streaming=True,
         )
-        await increment_generated_videos(session=session, tg_id=tg_id, delta=1)
+        await increment_generated_videos(session=session, tg_id=tg_id, delta=1, section="animate_photo")
         await bot.send_message(
             chat_id=chat_id,
             text="Хотите ли что-то ещё сгенерировать?",
@@ -227,10 +237,12 @@ async def _run_video_job(
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=status_message_id,
-                text=f"Ошибка при ожидании/отправке видео: {e}",
+                text=with_support(f"Ошибка при ожидании/отправке видео: {e}"),
             )
         except Exception:
-            await bot.send_message(chat_id, f"Ошибка при ожидании/отправке видео: {e}")
+            await bot.send_message(
+                chat_id, with_support(f"Ошибка при ожидании/отправке видео: {e}")
+            )
     finally:
         stop.set()
         for t in (progress_task, action_task):
@@ -309,11 +321,12 @@ async def animate_got_prompt(
         await charge_video_generation(session, tg_id)
     except NoGenerationsLeft:
         await message.answer(
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳"
+            "⛔️ Недостаточно кредитов.\n\nПополните баланс 💳",
+            reply_markup=buy_generations_kb(),
         )
         return
 
-    client = KieKlingClient(settings.kie_api_key)
+    client = WaveSpeedKlingClient(settings.kie_api_key)
     try:
         task_id = await client.create_kling_task(
             prompt=prompt,

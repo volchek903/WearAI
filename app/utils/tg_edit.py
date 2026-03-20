@@ -24,16 +24,16 @@ async def edit_text_safe(
     if msg is None:
         return
 
+    kwargs = {"reply_markup": reply_markup}
+    if parse_mode is not None:
+        kwargs["parse_mode"] = parse_mode
+
     try:
         if msg.photo or msg.document or msg.video or msg.animation:
-            await msg.edit_caption(
-                caption=text, reply_markup=reply_markup, parse_mode=parse_mode
-            )
+            await msg.edit_caption(caption=text, **kwargs)
         else:
-            await msg.edit_text(
-                text, reply_markup=reply_markup, parse_mode=parse_mode
-            )
+            await msg.edit_text(text, **kwargs)
     except TelegramBadRequest as e:
         if "message is not modified" in str(e):
             return
-        await msg.answer(text, reply_markup=reply_markup, parse_mode=parse_mode)
+        await msg.answer(text, **kwargs)

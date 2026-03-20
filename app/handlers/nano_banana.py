@@ -9,27 +9,30 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.menu import MenuCallbacks, SettingsCallbacks, photo_menu_kb
+from app.keyboards.extra import buy_generations_kb
 from app.repository.generations import (
     NoGenerationsLeft,
     charge_photo_generation,
     ensure_default_subscription,
     refund_photo_generation,
+    is_launch_subscription,
 )
 from app.repository.users import increment_generated_photos, upsert_user
 from app.services.album_collector import AlbumCollector
-from app.services.generation import generate_image_kie_from_telegram
-from app.services.kie_ai import KieAIError
+from app.services.generation import generate_image_wavespeed_from_telegram
+from app.services.wavespeed_ai import WaveSpeedError
 from app.states.nano_banana_flow import NanoBananaFlow
-from app.utils.kie_errors import kie_error_to_user_text
+from app.utils.wavespeed_errors import wavespeed_error_to_user_text
 from app.utils.progress_bar import (
     progress_initial_text,
     progress_loop,
     stop_progress,
 )
-from app.utils.content_media import send_content_photo
 from app.utils.tg_edit import edit_text_safe
 from app.utils.tg_send import send_image_smart
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
+from app.utils.support_text import with_support, launch_limits_message
+from app.utils.launch_guard import block_launch_for_call
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -50,16 +53,18 @@ async def start_nano_banana(
 ) -> None:
     await call.answer()
     await upsert_user(session, call.from_user.id, call.from_user.username)
+    if await block_launch_for_call(call, session, reply_markup=buy_generations_kb()):
+        return
 
     await state.clear()
     await state.set_state(NanoBananaFlow.photos)
 
     if call.message:
-        await send_content_photo(
-            call.message,
-            filename="nano_banano_pro.png",
-            caption="🍌 nano-banano\n\n"
+        await edit_text_safe(
+            call,
+            "🍌 nano-banano\n\n"
             "Пришли от 1 до 8 фото одним сообщением (альбомом) 📸",
+            reply_markup=None,
         )
 
 
@@ -137,17 +142,22 @@ async def nano_banana_prompt_in(
         await charge_photo_generation(session, tg_id)
     except NoGenerationsLeft:
         await stop_progress(stop, progress_task)
-        await edit_text_safe(
-            progress_msg,
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
-            reply_markup=photo_menu_kb(),
-        )
+        if await is_launch_subscription(session, tg_id):
+            await edit_text_safe(
+                progress_msg, launch_limits_message(), reply_markup=buy_generations_kb()
+            )
+        else:
+            await edit_text_safe(
+                progress_msg,
+                "⛔️ Недостаточно кредитов.\n\nПополните баланс 💳",
+                reply_markup=buy_generations_kb(),
+            )
         await state.clear()
         return
 
     sent_any = False
     try:
-        results = await generate_image_kie_from_telegram(
+        results = await generate_image_wavespeed_from_telegram(
             bot=message.bot,
             session=session,
             tg_id=tg_id,
@@ -157,7 +167,7 @@ async def nano_banana_prompt_in(
         )
 
         if not results:
-            raise RuntimeError("KIE returned empty result")
+            raise RuntimeError("WaveSpeed returned empty result")
 
         await stop_progress(stop, progress_task)
         await edit_text_safe(progress_msg, "✅ Готово! Отправляю результат…")
@@ -168,7 +178,7 @@ async def nano_banana_prompt_in(
             )
             sent_any = True
 
-        await increment_generated_photos(session=session, tg_id=tg_id, delta=1)
+        await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="nano_banana")
         await state.clear()
         await message.answer(
             "Хотите ли что-то ещё сгенерировать?",
@@ -176,12 +186,12 @@ async def nano_banana_prompt_in(
         )
         return
 
-    except KieAIError as e:
-        logger.warning("KIE rejected/failed: %s", e)
+    except WaveSpeedError as e:
+        logger.warning("WaveSpeed rejected/failed: %s", e)
         if not sent_any:
             await refund_photo_generation(session, tg_id)
         await stop_progress(stop, progress_task)
-        await edit_text_safe(progress_msg, kie_error_to_user_text(e))
+        await edit_text_safe(progress_msg, wavespeed_error_to_user_text(e))
         await state.clear()
         return
 
@@ -192,8 +202,10 @@ async def nano_banana_prompt_in(
         await stop_progress(stop, progress_task)
         await edit_text_safe(
             progress_msg,
-            "Не получилось сгенерировать 😅\n"
-            "Попробуй ещё раз или вернись в меню.",
+            with_support(
+                "Не получилось сгенерировать 😅\n"
+                "Попробуй ещё раз или вернись в меню."
+            ),
             reply_markup=photo_menu_kb(),
         )
         await state.clear()

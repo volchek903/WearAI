@@ -6,7 +6,11 @@ from aiogram import Bot
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.kie_ai import KieAIClient, PhotoSettingsDTO, get_kie_api_key_from_env
+from app.services.wavespeed_ai import (
+    WaveSpeedClient,
+    PhotoSettingsDTO,
+    get_wavespeed_api_key_from_env,
+)
 from app.utils.tg_files import tg_file_id_to_bytes
 
 
@@ -20,10 +24,8 @@ def _normalize_output_format(v: str) -> str:
 
 
 def _normalize_resolution(v: str) -> str:
-    v = (v or "").strip().upper()
-    if v not in {"1K", "2K"}:
-        return "2K"
-    return v
+    del v
+    return "1K"
 
 
 def _normalize_aspect_ratio(v: str) -> str:
@@ -39,9 +41,8 @@ def _normalize_aspect_ratio(v: str) -> str:
         "9:16",
         "16:9",
         "21:9",
-        "auto",
     }
-    if v not in allowed:
+    if v == "auto" or v not in allowed:
         return "9:16"
     return v
 
@@ -96,7 +97,7 @@ async def get_user_photo_settings(
     )
 
 
-async def generate_image_kie_from_telegram(
+async def generate_image_wavespeed_from_telegram(
     *,
     bot: Bot,
     session: AsyncSession,
@@ -123,7 +124,7 @@ async def generate_image_kie_from_telegram(
             ),
         )
 
-    kie = KieAIClient(api_key=get_kie_api_key_from_env())
+    wavespeed = WaveSpeedClient(api_key=get_wavespeed_api_key_from_env())
 
     # 1) TG -> bytes (до max_images)
     safe_max = max(1, min(int(max_images or 0), 8))
@@ -140,27 +141,111 @@ async def generate_image_kie_from_telegram(
         # имя файла на upload не обязано совпадать с форматом результата,
         # но так удобнее для дебага.
         filename = f"{tg_id}_{i}.{settings.output_format}"
-        url = await kie.upload_image_bytes(
+        url = await wavespeed.upload_image_bytes(
             data=b,
             filename=filename,
             upload_path=f"wearai/{tg_id}",
         )
         uploaded_urls.append(url)
 
-    # 3) createTask (nano-banana-pro) — settings уже из БД
-    task_id = await kie.create_nano_banana_pro_task(
+    # 3) createTask (nano-banana-2) — settings уже из БД
+    task_id = await wavespeed.create_nano_banana_2_task(
         prompt=prompt,
         image_input_urls=uploaded_urls,
         settings=settings,
     )
 
     # 4) wait -> result urls
-    result_urls = await kie.wait_result_urls(task_id)
+    result_urls = await wavespeed.wait_result_urls(task_id)
 
     # 5) download results -> bytes
     out: list[tuple[str, bytes]] = []
     for idx, url in enumerate(result_urls, start=1):
-        img_bytes = await kie.download_bytes(url)
+        img_bytes = await wavespeed.download_bytes(url)
         out.append((f"result_{idx}.{settings.output_format}", img_bytes))
 
     return out
+
+
+async def generate_image_wavespeed_from_telegram_with_extra(
+    *,
+    bot: Bot,
+    session: AsyncSession,
+    tg_id: int,
+    prompt: str,
+    telegram_photo_file_ids: Sequence[str],
+    extra_images: Sequence[tuple[str, bytes]] = (),
+    aspect_ratio: str | None = None,
+    resolution: str | None = None,
+    output_format: str | None = None,
+    max_images: int = 5,
+) -> list[tuple[str, bytes]]:
+    """
+    Like generate_image_wavespeed_from_telegram, but allows extra input images as raw bytes.
+    """
+    settings = await get_user_photo_settings(session, tg_id)
+    if aspect_ratio or resolution or output_format:
+        settings = PhotoSettingsDTO(
+            aspect_ratio=_normalize_aspect_ratio(
+                aspect_ratio or settings.aspect_ratio
+            ),
+            resolution=_normalize_resolution(resolution or settings.resolution),
+            output_format=_normalize_output_format(
+                output_format or settings.output_format
+            ),
+        )
+
+    wavespeed = WaveSpeedClient(api_key=get_wavespeed_api_key_from_env())
+
+    max_total_inputs = 8
+    extra_list = list(extra_images)[:max_total_inputs]
+    available_slots = max(0, max_total_inputs - len(extra_list))
+
+    safe_max = max(0, min(int(max_images or 0), available_slots))
+    file_ids = list(telegram_photo_file_ids)[:safe_max]
+
+    images_bytes: list[bytes] = []
+    for fid in file_ids:
+        b = await tg_file_id_to_bytes(bot, fid, tg_id=tg_id)
+        images_bytes.append(b)
+
+    uploaded_urls: list[str] = []
+    for idx, (name, data) in enumerate(extra_list, start=1):
+        filename = name or f"extra_{idx}.{settings.output_format}"
+        url = await wavespeed.upload_image_bytes(
+            data=data,
+            filename=filename,
+            upload_path=f"wearai/{tg_id}",
+        )
+        uploaded_urls.append(url)
+
+    for i, b in enumerate(images_bytes, start=1):
+        filename = f"{tg_id}_{i}.{settings.output_format}"
+        url = await wavespeed.upload_image_bytes(
+            data=b,
+            filename=filename,
+            upload_path=f"wearai/{tg_id}",
+        )
+        uploaded_urls.append(url)
+
+    task_id = await wavespeed.create_nano_banana_2_task(
+        prompt=prompt,
+        image_input_urls=uploaded_urls,
+        settings=settings,
+    )
+
+    result_urls = await wavespeed.wait_result_urls(task_id)
+
+    out: list[tuple[str, bytes]] = []
+    for idx, url in enumerate(result_urls, start=1):
+        img_bytes = await wavespeed.download_bytes(url)
+        out.append((f"result_{idx}.{settings.output_format}", img_bytes))
+
+    return out
+
+
+# Backward-compatible aliases.
+generate_image_kie_from_telegram = generate_image_wavespeed_from_telegram
+generate_image_kie_from_telegram_with_extra = (
+    generate_image_wavespeed_from_telegram_with_extra
+)

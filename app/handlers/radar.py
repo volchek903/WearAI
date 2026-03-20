@@ -9,24 +9,28 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.menu import MenuCallbacks, photo_menu_kb
+from app.keyboards.extra import buy_generations_kb
 from app.keyboards.confirm import yes_no_kb, ConfirmCallbacks
 from app.repository.generations import (
     NoGenerationsLeft,
     charge_photo_generation,
     ensure_default_subscription,
     refund_photo_generation,
+    is_launch_subscription,
 )
 from app.repository.users import increment_generated_photos, upsert_user
 from app.services.album_collector import AlbumCollector
-from app.services.generation import generate_image_kie_from_telegram
-from app.services.kie_ai import KieAIError
+from app.services.generation import generate_image_wavespeed_from_telegram
+from app.services.wavespeed_ai import WaveSpeedError
 from app.states.radar_flow import RadarFlow
-from app.utils.kie_errors import kie_error_to_user_text
+from app.utils.wavespeed_errors import wavespeed_error_to_user_text
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.tg_edit import edit_text_safe
-from app.utils.tg_send import send_image_smart
-from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 from app.utils.content_media import send_content_photo
+from app.utils.tg_send import send_image_smart
+from app.utils.support_text import with_support, launch_limits_message
+from app.utils.launch_guard import block_launch_for_call
+from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -101,17 +105,25 @@ async def radar_entry(
 ) -> None:
     await call.answer()
     await upsert_user(session, call.from_user.id, call.from_user.username)
+    if await block_launch_for_call(call, session, reply_markup=buy_generations_kb()):
+        return
     await state.clear()
     await state.set_state(RadarFlow.photos)
 
-    text = (
-        "🛰 <b>ИИ Радар</b>\n\n"
-        "Пришли фото людей, которые будут в кадре.\n"
-        "Можно 1–8 фото одним сообщением (альбомом) 📸"
-    )
     if call.message:
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
         await send_content_photo(
-            call.message, filename="radar.png", caption=text, parse_mode="HTML"
+            call.message,
+            filename="radar.jpg",
+            caption=(
+                "🛰 <b>ИИ Радар</b>\n\n"
+                "Пришли фото людей, которые будут в кадре.\n"
+                "Можно 1–8 фото одним сообщением (альбомом) 📸"
+            ),
+            parse_mode="HTML",
         )
 
 
@@ -290,11 +302,16 @@ async def radar_review_confirm(
         await charge_photo_generation(session, tg_id)
     except NoGenerationsLeft:
         await stop_progress(stop, progress_task)
-        await edit_text_safe(
-            progress_msg,
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
-            reply_markup=photo_menu_kb(),
-        )
+        if await is_launch_subscription(session, tg_id):
+            await edit_text_safe(
+                progress_msg, launch_limits_message(), reply_markup=buy_generations_kb()
+            )
+        else:
+            await edit_text_safe(
+                progress_msg,
+                "⛔️ Недостаточно кредитов.\n\nПополните баланс 💳",
+                reply_markup=buy_generations_kb(),
+            )
         await state.clear()
         return
 
@@ -310,7 +327,7 @@ async def radar_review_confirm(
 
     sent_any = False
     try:
-        results = await generate_image_kie_from_telegram(
+        results = await generate_image_wavespeed_from_telegram(
             bot=call.bot,
             session=session,
             tg_id=tg_id,
@@ -319,7 +336,7 @@ async def radar_review_confirm(
             max_images=8,
         )
         if not results:
-            raise RuntimeError("KIE returned empty result")
+            raise RuntimeError("WaveSpeed returned empty result")
 
         await stop_progress(stop, progress_task)
         await edit_text_safe(progress_msg, "✅ Готово! Отправляю результат…")
@@ -328,7 +345,7 @@ async def radar_review_confirm(
             await send_image_smart(call.message, img_bytes=img_bytes, filename=filename)
             sent_any = True
 
-        await increment_generated_photos(session=session, tg_id=tg_id, delta=1)
+        await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="radar")
         await state.clear()
         await call.message.answer(
             "Хотите ли что-то ещё сгенерировать?",
@@ -336,12 +353,12 @@ async def radar_review_confirm(
         )
         return
 
-    except KieAIError as e:
-        logger.warning("RADAR KIE failed: %s", e)
+    except WaveSpeedError as e:
+        logger.warning("RADAR WaveSpeed failed: %s", e)
         if not sent_any:
             await refund_photo_generation(session, tg_id)
         await stop_progress(stop, progress_task)
-        await edit_text_safe(progress_msg, kie_error_to_user_text(e))
+        await edit_text_safe(progress_msg, wavespeed_error_to_user_text(e))
         await state.clear()
         return
 
@@ -352,7 +369,7 @@ async def radar_review_confirm(
         await stop_progress(stop, progress_task)
         await edit_text_safe(
             progress_msg,
-            "Не получилось сгенерировать 😅\nПопробуй ещё раз чуть позже.",
+            with_support("Не получилось сгенерировать 😅\nПопробуй ещё раз чуть позже."),
         )
         await state.clear()
         return

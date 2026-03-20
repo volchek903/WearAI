@@ -3,7 +3,18 @@ from __future__ import annotations
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
-from app.keyboards.menu import MenuCallbacks, main_menu_kb, photo_menu_kb, video_menu_kb
+from app.keyboards.menu import (
+    MenuCallbacks,
+    main_menu_kb,
+    photo_menu_kb,
+    photo_cars_kb,
+    photo_two_kb,
+    disney_style_kb,
+    photo_one_kb,
+    photo_other_kb,
+    photo_archive_kb,
+    video_menu_kb,
+)
 from app.utils.tg_edit import edit_text_safe
 
 router = Router()
@@ -13,8 +24,70 @@ router = Router()
 async def open_photo_menu(call: CallbackQuery) -> None:
     await edit_text_safe(
         call,
-        "Выбери, что сделать с фото 👇",
+        "Выбери раздел для генерации фото 👇",
         reply_markup=photo_menu_kb(),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == MenuCallbacks.PHOTO_CARS)
+async def open_photo_cars(call: CallbackQuery) -> None:
+    await edit_text_safe(
+        call,
+        "🚗 Шаблоны с машинами — выбери модуль 👇",
+        reply_markup=photo_cars_kb(),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == MenuCallbacks.PHOTO_TWO)
+async def open_photo_two(call: CallbackQuery) -> None:
+    await edit_text_safe(
+        call,
+        "👫 Шаблоны для двоих и семейные — выбери модуль 👇",
+        reply_markup=photo_two_kb(),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == MenuCallbacks.DISNEY_STYLE)
+async def open_disney_style(call: CallbackQuery) -> None:
+    await edit_text_safe(
+        call,
+        "🏰 <b>Дисней стиль</b>\n\n"
+        "Сделаем фото в дисней-стиле для вас с любимой/любимым или для семьи.\n"
+        "Выбери шаблон 👇",
+        reply_markup=disney_style_kb(),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == MenuCallbacks.PHOTO_ONE)
+async def open_photo_one(call: CallbackQuery) -> None:
+    await edit_text_safe(
+        call,
+        "🧍‍♂️ Шаблоны для одного — выбери модуль 👇",
+        reply_markup=photo_one_kb(),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == MenuCallbacks.PHOTO_OTHER)
+async def open_photo_other(call: CallbackQuery) -> None:
+    await edit_text_safe(
+        call,
+        "🧩 Другое — выбери модуль 👇",
+        reply_markup=photo_other_kb(),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == MenuCallbacks.PHOTO_ARCHIVE)
+async def open_photo_archive(call: CallbackQuery) -> None:
+    await edit_text_safe(
+        call,
+        "🗂 Архив — выбери шаблон 👇",
+        reply_markup=photo_archive_kb(),
     )
     await call.answer()
 
@@ -31,5 +104,5 @@ async def open_video_menu(call: CallbackQuery) -> None:
 
 @router.callback_query(F.data == MenuCallbacks.BACK)
 async def back_to_main_menu(call: CallbackQuery) -> None:
-    await edit_text_safe(call, "Выбирай режим ниже 👇✨", reply_markup=main_menu_kb())
+    await edit_text_safe(call, "Главное меню 👇", reply_markup=main_menu_kb())
     await call.answer()

@@ -15,8 +15,9 @@ from app.keyboards.feedback import FeedbackCallbacks, feedback_offer_video_kb
 from app.keyboards.menu import main_menu_kb
 from app.states.animate_photo import AnimatePhotoStates
 from app.states.feedback_flow import FeedbackFlow
-from app.utils.kie_kling_client import KieKlingClient
+from app.utils.wavespeed_kling_client import WaveSpeedKlingClient
 from app.utils.tg_edit import edit_text_safe
+from app.utils.support_text import with_support
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -112,7 +113,7 @@ async def _get_or_upload_kling_image_url(cb: CallbackQuery, state: FSMContext) -
         logger.warning("No local image for video, fallback to Telegram. err=%s", e)
 
     if not settings.kie_api_key:
-        raise RuntimeError("Не настроен KIE_API_KEY.")
+        raise RuntimeError("Не настроен WAVESPEED_API_KEY.")
 
     if image_bytes is None:
         file_id, filename_from_payload = _pick_best_output_file(fp)
@@ -135,7 +136,7 @@ async def _get_or_upload_kling_image_url(cb: CallbackQuery, state: FSMContext) -
     p = Path(filename)
     unique_filename = f"{p.stem or 'image'}_{tag}{p.suffix or '.png'}"
 
-    client = KieKlingClient(settings.kie_api_key)
+    client = WaveSpeedKlingClient(settings.kie_api_key)
     image_url = await client.upload_image_bytes(
         image_bytes=image_bytes,
         filename=unique_filename,
@@ -254,7 +255,9 @@ async def fb_animate(cb: CallbackQuery, state: FSMContext) -> None:
         image_url = await _get_or_upload_kling_image_url(cb, state)
     except Exception as e:
         logger.warning("Cannot start animate from feedback: %s", e)
-        await edit_text_safe(cb, f"Ошибка: {e}", reply_markup=main_menu_kb())
+        await edit_text_safe(
+            cb, with_support(f"Ошибка: {e}"), reply_markup=main_menu_kb()
+        )
         await state.clear()
         return
 

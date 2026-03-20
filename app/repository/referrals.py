@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import desc, func, select, update
@@ -59,6 +60,29 @@ async def get_referrals_count(session: AsyncSession, referrer_user_id: int) -> i
         .where(Referral.referrer_user_id == referrer_user_id)
     )
     return int(count or 0)
+
+
+async def get_top_referrers_last_week(
+    session: AsyncSession, *, limit: int = 10
+) -> list[dict[str, int | str | None]]:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    q = await session.execute(
+        select(
+            User.tg_id,
+            User.username,
+            func.count(Referral.id).label("cnt"),
+        )
+        .select_from(Referral)
+        .join(User, User.id == Referral.referrer_user_id)
+        .where(Referral.created_at >= cutoff)
+        .group_by(User.id)
+        .order_by(desc("cnt"))
+        .limit(limit)
+    )
+    rows = q.all()
+    return [
+        {"tg_id": r[0], "username": r[1], "count": int(r[2] or 0)} for r in rows
+    ]
 
 
 async def process_referral_for_new_user(

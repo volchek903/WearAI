@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 from app.keyboards.menu import MenuCallbacks, photo_menu_kb
+from app.keyboards.extra import buy_generations_kb
 from app.keyboards.confirm import yes_no_kb, review_edit_kb, ConfirmCallbacks
-from app.keyboards.help import help_button_kb
 from app.keyboards.feedback import feedback_kb
 from app.repository.users import increment_generated_photos, upsert_user
 
@@ -22,22 +22,25 @@ from app.repository.generations import (
     charge_photo_generation,
     refund_photo_generation,
     NoGenerationsLeft,
+    is_launch_subscription,
 )
 from app.services.album_collector import AlbumCollector
-from app.services.generation import generate_image_kie_from_telegram
-from app.services.kie_ai import KieAIError
+from app.services.generation import generate_image_wavespeed_from_telegram
+from app.services.wavespeed_ai import WaveSpeedError
 from app.states.model_flow import ModelFlow
 from app.states.feedback_flow import FeedbackFlow
 from app.utils.tg_edit import edit_text_safe
+from app.utils.content_media import send_content_album
 from app.utils.tg_send import send_image_smart
-from app.utils.kie_errors import kie_error_to_user_text
+from app.utils.support_text import with_support, launch_limits_message
+from app.utils.launch_guard import block_launch_for_call
+from app.utils.wavespeed_errors import wavespeed_error_to_user_text
 from app.utils.generated_files import save_generated_image_bytes
 from app.utils.progress_bar import (
     progress_initial_text,
     progress_loop,
     stop_progress,
 )
-from app.utils.content_media import send_content_photo
 
 
 router = Router()
@@ -67,16 +70,23 @@ async def start_model_flow(
 ) -> None:
     await call.answer()
     await upsert_user(session, call.from_user.id, call.from_user.username)
+    if await block_launch_for_call(call, session, reply_markup=buy_generations_kb()):
+        return
 
     await state.clear()
     await state.set_state(ModelFlow.model_desc)
 
     if call.message:
-        await send_content_photo(
+        # Убираем сообщение с welcome.png, чтобы не висело над альбомом
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
+        await send_content_album(
             call.message,
-            filename="model_photo.jpeg",
+            filenames=["model_photo.jpeg", "model_photo1.jpg"],
             caption=MODEL_DESC_EXAMPLE,
-            reply_markup=help_button_kb("model_desc"),
+            parse_mode="HTML",
         )
 
 
@@ -116,7 +126,7 @@ async def model_desc_edit(call: CallbackQuery, state: FSMContext) -> None:
         call,
         "Хорошо 😄 Тогда опиши модель заново 👇\n\n"
         + MODEL_DESC_EXAMPLE.split("\n\n", 1)[1],
-        reply_markup=help_button_kb("model_desc"),
+        reply_markup=None,
     )
     await call.answer()
 
@@ -129,7 +139,7 @@ async def model_desc_confirmed(call: CallbackQuery, state: FSMContext) -> None:
         call,
         "Отлично! Теперь пришли фото товара 📸\n"
         "Можно от 1 до 5 фото за один раз (одним сообщением/альбомом) 🙌",
-        reply_markup=help_button_kb("product_photos", text="📸 Как лучше сфоткать?"),
+        reply_markup=None,
     )
     await call.answer()
 
@@ -150,7 +160,7 @@ async def product_photos_in(message: Message, state: FSMContext) -> None:
         await state.set_state(ModelFlow.presentation_desc)
 
         await message.answer(
-            PRODUCT_ACTION_EXAMPLE, reply_markup=help_button_kb("presentation_desc")
+            PRODUCT_ACTION_EXAMPLE, reply_markup=None
         )
         return
 
@@ -172,7 +182,7 @@ async def product_photos_in(message: Message, state: FSMContext) -> None:
     await state.set_state(ModelFlow.presentation_desc)
 
     await message.answer(
-        PRODUCT_ACTION_EXAMPLE, reply_markup=help_button_kb("presentation_desc")
+        PRODUCT_ACTION_EXAMPLE, reply_markup=None
     )
 
 
@@ -220,7 +230,7 @@ async def review_edit_model(call: CallbackQuery, state: FSMContext) -> None:
         call,
         "Хорошо 😄 Меняем описание модели 👇\n\n"
         + MODEL_DESC_EXAMPLE.split("\n\n", 1)[1],
-        reply_markup=help_button_kb("model_desc"),
+        reply_markup=None,
     )
     await call.answer()
 
@@ -233,7 +243,7 @@ async def review_edit_photos(call: CallbackQuery, state: FSMContext) -> None:
     await edit_text_safe(
         call,
         "Хорошо 😄 Пришли фото товара заново (1–5 фото одним сообщением) 📸",
-        reply_markup=help_button_kb("product_photos", text="📸 Как лучше сфоткать?"),
+        reply_markup=None,
     )
     await call.answer()
 
@@ -247,7 +257,7 @@ async def review_edit_presentation(call: CallbackQuery, state: FSMContext) -> No
         call,
         "Хорошо 😊 Напиши заново, что нужно сделать с товаром 👇\n\n"
         + PRODUCT_ACTION_EXAMPLE,
-        reply_markup=help_button_kb("presentation_desc"),
+        reply_markup=None,
     )
     await call.answer()
 
@@ -301,11 +311,16 @@ async def review_confirmed(
         await charge_photo_generation(session, tg_id)
     except NoGenerationsLeft:
         await stop_progress(stop, progress_task)
-        await edit_text_safe(
-            progress_msg,
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
-            reply_markup=review_edit_kb(),
-        )
+        if await is_launch_subscription(session, tg_id):
+            await edit_text_safe(
+                progress_msg, launch_limits_message(), reply_markup=buy_generations_kb()
+            )
+        else:
+            await edit_text_safe(
+                progress_msg,
+                "⛔️ Недостаточно кредитов.\n\nПополните баланс 💳",
+                reply_markup=buy_generations_kb(),
+            )
         return
 
     prompt = (
@@ -317,7 +332,7 @@ async def review_confirmed(
 
     sent_any = False
     try:
-        results = await generate_image_kie_from_telegram(
+        results = await generate_image_wavespeed_from_telegram(
             bot=call.bot,
             session=session,
             tg_id=tg_id,  # тут именно tg_id нужен (photo_settings + tg download)
@@ -326,7 +341,7 @@ async def review_confirmed(
         )
 
         if not results:
-            raise RuntimeError("KIE returned empty result")
+            raise RuntimeError("WaveSpeed returned empty result")
 
         await stop_progress(stop, progress_task)
         await edit_text_safe(progress_msg, "✅ Готово! Отправляю результат…")
@@ -368,7 +383,7 @@ async def review_confirmed(
                     }
                 )
 
-        await increment_generated_photos(session=session, tg_id=tg_id, delta=1)
+        await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="scenario_model")
 
         await state.set_data(
             {
@@ -398,13 +413,13 @@ async def review_confirmed(
         )
         return
 
-    except KieAIError as e:
-        logger.warning("KIE rejected/failed: %s", e)
+    except WaveSpeedError as e:
+        logger.warning("WaveSpeed rejected/failed: %s", e)
         if not sent_any:
             await refund_photo_generation(session, tg_id)
         await stop_progress(stop, progress_task)
         await edit_text_safe(
-            progress_msg, kie_error_to_user_text(e), reply_markup=review_edit_kb()
+            progress_msg, wavespeed_error_to_user_text(e), reply_markup=review_edit_kb()
         )
         return
 
@@ -415,8 +430,10 @@ async def review_confirmed(
         await stop_progress(stop, progress_task)
         await edit_text_safe(
             progress_msg,
-            "Не получилось сгенерировать 😅\n"
-            "Попробуй нажать «✅ Всё верно» ещё раз или внеси правки.",
+            with_support(
+                "Не получилось сгенерировать 😅\n"
+                "Попробуй нажать «✅ Всё верно» ещё раз или внеси правки."
+            ),
             reply_markup=review_edit_kb(),
         )
         return

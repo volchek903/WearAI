@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 
@@ -18,13 +19,26 @@ from app.handlers.feedback import router as feedback_router
 from app.handlers.start import router as start_router
 from app.handlers.scenario_model import router as model_router
 from app.handlers.nano_banana import router as nano_banana_router
+from app.handlers.drift_heart import router as drift_heart_router
+from app.handlers.rear_view_mirror import router as rear_view_mirror_router
+from app.handlers.motion_control import router as motion_control_router
+from app.handlers.car_in_hand import router as car_in_hand_router
 from app.handlers.scenario_tryon import router as tryon_router
-from app.handlers.help import router as help_router
 from app.handlers.settings import router as settings_router
 from app.handlers.animate_photo import router as animate_router
 from app.handlers.menu import router as menu_router
 from app.handlers.love_is import router as love_is_router
+from app.handlers.disney_family_heart import router as disney_family_heart_router
+from app.handlers.disney_family_wall import router as disney_family_wall_router
 from app.handlers.radar import router as radar_router
+from app.handlers.feb23 import router as feb23_router
+from app.handlers.march8 import router as march8_router
+from app.handlers.main_defender import router as main_defender_router
+from app.handlers.cinema_bw import router as cinema_bw_router
+from app.handlers.second_life import router as second_life_router
+from app.handlers.gta_style import router as gta_style_router
+from app.handlers.lego_style import router as lego_style_router
+from app.handlers.glam_collage import router as glam_collage_router
 from app.handlers.feedback_offer_video import router as feedback_offer_video_router
 from app.handlers.admin_panel import router as admin_panel_router
 from app.handlers.admin_broadcast import router as admin_broadcast_router
@@ -37,8 +51,10 @@ from app.services.subscription_seed import seed_subscriptions
 from app.services.subscription_expirer import run_subscription_expirer
 from app.services.payment_poller import run_payment_poller  # NEW
 from app.services.admin_log_cleanup import run_admin_log_cleanup
+from app.services.platega_callback import run_platega_callback_server
 from app.utils.tg_logging import install_tg_error_logging
 from app.services.admin_seed import ensure_root_admin
+from app.repository.app_settings import ensure_model_pricing_settings
 
 
 def setup_logging() -> None:
@@ -56,6 +72,14 @@ def get_bot_token() -> str:
     return token
 
 
+def _secret_fingerprint(value: str) -> str:
+    v = (value or "").strip()
+    if not v:
+        return "empty"
+    digest = hashlib.sha256(v.encode("utf-8")).hexdigest()[:10]
+    return f"len={len(v)} sha256[:10]={digest}"
+
+
 def setup_routers(dp: Dispatcher) -> None:
     # ВАЖНО: feedback_router должен быть ПЕРВЫМ,
     # чтобы message-хендлеры FeedbackFlow не перехватывались другими роутерами.
@@ -65,9 +89,23 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(menu_router)
     dp.include_router(model_router)
     dp.include_router(nano_banana_router)
+    dp.include_router(drift_heart_router)
+    dp.include_router(rear_view_mirror_router)
+    dp.include_router(motion_control_router)
+    dp.include_router(car_in_hand_router)
     dp.include_router(tryon_router)
     dp.include_router(love_is_router)
+    dp.include_router(disney_family_heart_router)
+    dp.include_router(disney_family_wall_router)
+    dp.include_router(feb23_router)
+    dp.include_router(march8_router)
+    dp.include_router(main_defender_router)
+    dp.include_router(cinema_bw_router)
+    dp.include_router(second_life_router)
     dp.include_router(radar_router)
+    dp.include_router(gta_style_router)
+    dp.include_router(lego_style_router)
+    dp.include_router(glam_collage_router)
     dp.include_router(animate_router)
     dp.include_router(faq_router)
     dp.include_router(feedback_offer_video_router)
@@ -77,7 +115,6 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(admin_access_router)
     dp.include_router(referrals_router)
     # Роутеры с более “общими” хендлерами — ниже
-    dp.include_router(help_router)
     dp.include_router(settings_router)
     dp.include_router(errors_router)
 
@@ -90,6 +127,8 @@ def setup_middlewares(dp: Dispatcher) -> None:
 async def main() -> None:
     setup_logging()
     log = logging.getLogger(__name__)
+    wavespeed_key = os.getenv("WAVESPEED_API_KEY", "").strip() or os.getenv("KIE_API_KEY", "").strip()
+    log.info("startup: wavespeed_api_key_fingerprint=%s", _secret_fingerprint(wavespeed_key))
 
     bot = Bot(
         token=get_bot_token(),
@@ -105,6 +144,7 @@ async def main() -> None:
     await init_db()
     async with session_factory() as session:
         await seed_subscriptions(session)
+        await ensure_model_pricing_settings(session)
         await ensure_root_admin(session)
 
     # NEW: запускаем polling платежей (без вебхуков)
@@ -121,6 +161,12 @@ async def main() -> None:
         run_subscription_expirer(sessionmaker=session_factory)
     )
     admin_log_cleanup_task = asyncio.create_task(run_admin_log_cleanup())
+    platega_callback_task = asyncio.create_task(
+        run_platega_callback_server(
+            bot=bot,
+            sessionmaker=session_factory,
+        )
+    )
 
     try:
         log.info("Bot started. Polling...")
@@ -129,10 +175,12 @@ async def main() -> None:
         poller_task.cancel()
         expirer_task.cancel()
         admin_log_cleanup_task.cancel()
+        platega_callback_task.cancel()
         try:
             await poller_task
             await expirer_task
             await admin_log_cleanup_task
+            await platega_callback_task
         except asyncio.CancelledError:
             pass
 

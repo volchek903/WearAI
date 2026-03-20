@@ -1,23 +1,18 @@
 # app/keyboards/extra.py
 from __future__ import annotations
 
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from app.keyboards.menu import MenuCallbacks
+from app.keyboards.utils import add_button, make_button
 
 class ExtraCallbacks:
     # выбор пакета
-    WANT_ORBIT = "extra:want:orbit"
-    WANT_NOVA = "extra:want:nova"
-    WANT_COSMIC = "extra:want:cosmic"
+    WANT_PREFIX = "extra:want:"
 
     # покупка
-    BUY_ORBIT = "extra:buy:orbit:sbp"
-    BUY_NOVA = "extra:buy:nova:sbp"
-    BUY_COSMIC = "extra:buy:cosmic:sbp"
-    BUY_ORBIT_CRYPTO = "extra:buy:orbit:crypto"
-    BUY_NOVA_CRYPTO = "extra:buy:nova:crypto"
-    BUY_COSMIC_CRYPTO = "extra:buy:cosmic:crypto"
+    BUY_PREFIX = "extra:buy:"  # extra:buy:<plan_id>:<method>
 
     # NEW: ручная проверка оплаты (polling)
     CHECK_PREFIX = "extra:check:"  # + <payment_id>
@@ -31,40 +26,127 @@ class ExtraCallbacks:
     FREE_CHECK = "extra:free:check"
     FREE_INFO = "extra:free:info"
     FREE_PROMO = "extra:free:promo"
+    CUSTOM_AMOUNT = "extra:custom_amount"
+    CUSTOM_BUY_PREFIX = "extra:custom_buy:"
+
+    @staticmethod
+    def want(plan_id: int) -> str:
+        return f"{ExtraCallbacks.WANT_PREFIX}{plan_id}"
+
+    @staticmethod
+    def buy(plan_id: int, method: str) -> str:
+        return f"{ExtraCallbacks.BUY_PREFIX}{plan_id}:{method}"
+
+    @staticmethod
+    def custom_buy(credits: int, method: str) -> str:
+        return f"{ExtraCallbacks.CUSTOM_BUY_PREFIX}{int(credits)}:{method}"
 
 
-def extra_menu_kb(current_plan_name: str | None) -> InlineKeyboardMarkup:
+def extra_menu_kb(plans, current_plan_name: str | None) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
 
-    kb.button(text="Как получить бесплатную генерацию", callback_data=ExtraCallbacks.FREE_INFO)
+    add_button(
+        kb,
+        text="Как получить бесплатно",
+        callback_data=ExtraCallbacks.FREE_INFO,
+        style="success",
+    )
 
-    if current_plan_name != "Orbit":
-        kb.button(text="✨ Хочу Orbit", callback_data=ExtraCallbacks.WANT_ORBIT)
-    if current_plan_name != "Nova":
-        kb.button(text="🚀 Хочу Nova", callback_data=ExtraCallbacks.WANT_NOVA)
-    if current_plan_name != "Cosmic":
-        kb.button(text="🌌 Хочу Cosmic", callback_data=ExtraCallbacks.WANT_COSMIC)
+    for p in plans:
+        if current_plan_name and p.name == current_plan_name:
+            continue
+        add_button(
+            kb,
+            text=f"✨ Хочу {p.name}",
+            callback_data=ExtraCallbacks.want(int(p.id)),
+            style="success",
+        )
 
-    kb.button(text="⬅️ Назад", callback_data=ExtraCallbacks.TO_MENU)
+    add_button(
+        kb,
+        text="💠 Своя сумма",
+        callback_data=ExtraCallbacks.CUSTOM_AMOUNT,
+        style="success",
+    )
+
+    add_button(
+        kb, text="⬅️ Назад", callback_data=ExtraCallbacks.TO_MENU, style="danger"
+    )
 
     kb.adjust(1)
     return kb.as_markup()
 
 
-def extra_buy_kb(plan_name: str) -> InlineKeyboardMarkup:
+def extra_custom_buy_kb(credits: int, *, platega_available: bool = True) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
 
-    if plan_name == "Orbit":
-        kb.button(text="💳 Купить (СБП)", callback_data=ExtraCallbacks.BUY_ORBIT)
-        kb.button(text="₿ Купить (Крипто)", callback_data=ExtraCallbacks.BUY_ORBIT_CRYPTO)
-    elif plan_name == "Nova":
-        kb.button(text="💳 Купить (СБП)", callback_data=ExtraCallbacks.BUY_NOVA)
-        kb.button(text="₿ Купить (Крипто)", callback_data=ExtraCallbacks.BUY_NOVA_CRYPTO)
-    elif plan_name == "Cosmic":
-        kb.button(text="💳 Купить (СБП)", callback_data=ExtraCallbacks.BUY_COSMIC)
-        kb.button(text="₿ Купить (Крипто)", callback_data=ExtraCallbacks.BUY_COSMIC_CRYPTO)
+    if credits > 0:
+        add_button(
+            kb,
+            text="⭐️ Оплата через Stars",
+            callback_data=ExtraCallbacks.custom_buy(credits, "stars"),
+            style="success",
+        )
+    if platega_available and credits > 0:
+        add_button(
+            kb,
+            text="💳 Купить (СБП)",
+            callback_data=ExtraCallbacks.custom_buy(credits, "sbp"),
+            style="success",
+        )
+        add_button(
+            kb,
+            text="💳 Оплата картой",
+            callback_data=ExtraCallbacks.custom_buy(credits, "card"),
+            style="success",
+        )
+        add_button(
+            kb,
+            text="₿ Купить (Крипто)",
+            callback_data=ExtraCallbacks.custom_buy(credits, "crypto"),
+            style="success",
+        )
 
-    kb.button(text="⬅️ Назад", callback_data=ExtraCallbacks.BACK)
+    add_button(kb, text="⬅️ Назад", callback_data=ExtraCallbacks.BACK, style="danger")
+    kb.adjust(1, 1)
+    return kb.as_markup()
+
+
+def extra_buy_kb(plan, *, platega_available: bool = True) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+
+    plan_id = int(plan.id)
+    stars_price = int(getattr(plan, "stars_price", 0) or 0)
+    rub_price = int(float(plan.price)) if float(plan.price) > 0 else 0
+
+    if stars_price > 0:
+        add_button(
+            kb,
+            text="⭐️ Оплата через Stars",
+            callback_data=ExtraCallbacks.buy(plan_id, "stars"),
+            style="success",
+        )
+    if platega_available and rub_price > 0:
+        add_button(
+            kb,
+            text="💳 Купить (СБП)",
+            callback_data=ExtraCallbacks.buy(plan_id, "sbp"),
+            style="success",
+        )
+        add_button(
+            kb,
+            text="💳 Оплата картой",
+            callback_data=ExtraCallbacks.buy(plan_id, "card"),
+            style="success",
+        )
+        add_button(
+            kb,
+            text="₿ Купить (Крипто)",
+            callback_data=ExtraCallbacks.buy(plan_id, "crypto"),
+            style="success",
+        )
+
+    add_button(kb, text="⬅️ Назад", callback_data=ExtraCallbacks.BACK, style="danger")
 
     kb.adjust(1, 1)
     return kb.as_markup()
@@ -73,8 +155,20 @@ def extra_buy_kb(plan_name: str) -> InlineKeyboardMarkup:
 # Старый вариант (просто URL оплаты)
 def extra_pay_url_kb(redirect_url: str) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.row(InlineKeyboardButton(text="💳 Оплатить", url=redirect_url))
-    kb.row(InlineKeyboardButton(text="⬅️ Назад", callback_data=ExtraCallbacks.BACK))
+    kb.row(make_button(text="💳 Оплатить", url=redirect_url, style="success"))
+    kb.row(make_button(text="⬅️ Назад", callback_data=ExtraCallbacks.BACK, style="danger"))
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def buy_generations_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    add_button(
+        kb,
+        text="💳 Пополнить баланс",
+        callback_data=MenuCallbacks.EXTRA,
+        style="success",
+    )
     kb.adjust(1)
     return kb.as_markup()
 
@@ -82,13 +176,14 @@ def extra_pay_url_kb(redirect_url: str) -> InlineKeyboardMarkup:
 # NEW: вариант под polling (Оплатить + Проверить оплату)
 def extra_pay_poll_kb(redirect_url: str, payment_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.row(InlineKeyboardButton(text="💳 Оплатить", url=redirect_url))
+    kb.row(make_button(text="💳 Оплатить", url=redirect_url, style="success"))
     kb.row(
-        InlineKeyboardButton(
+        make_button(
             text="🔄 Проверить оплату",
             callback_data=f"{ExtraCallbacks.CHECK_PREFIX}{payment_id}",
+            style="success",
         )
     )
-    kb.row(InlineKeyboardButton(text="⬅️ Назад", callback_data=ExtraCallbacks.BACK))
+    kb.row(make_button(text="⬅️ Назад", callback_data=ExtraCallbacks.BACK, style="danger"))
     kb.adjust(1)
     return kb.as_markup()

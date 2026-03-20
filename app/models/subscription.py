@@ -24,8 +24,12 @@ class Subscription(Base):
     duration_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     video_generations: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     photo_generations: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    credit_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, default=0)
+    stars_price: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
 
     user_subscriptions: Mapped[list["UserSubscription"]] = relationship(
         "UserSubscription",

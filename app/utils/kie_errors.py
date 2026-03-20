@@ -3,10 +3,12 @@ from __future__ import annotations
 import re
 from typing import Optional
 
+from app.utils.support_text import with_support
+
 
 def _extract_code(text: str) -> Optional[str]:
     """
-    KIE часто возвращает сообщения вида:
+    WaveSpeed часто возвращает сообщения вида:
     "... (code=422)" / "code=401" и т.п.
     """
     m = re.search(r"code=(\d+)", text)
@@ -15,7 +17,7 @@ def _extract_code(text: str) -> Optional[str]:
 
 def kie_error_to_user_text(err: Exception) -> str:
     """
-    Преобразует ошибку KIE в понятный текст для пользователя.
+    Преобразует ошибку генерации в понятный текст для пользователя.
     Важно: НЕ выводим пользователю сырые тех. детали/тексты провайдера.
     """
     raw = (str(err) or "").strip()
@@ -24,9 +26,17 @@ def kie_error_to_user_text(err: Exception) -> str:
 
     header = "Не получилось сгенерировать изображение 😅"
 
+    # Перегрузка сервиса (иногда приходит как 422 с кодом E003)
+    if "e003" in raw_l or "service is currently unavailable" in raw_l:
+        return with_support(
+            f"{header}\n\n"
+            "Сервис сейчас перегружен.\n"
+            "Попробуй повторить через 1–2 минуты."
+        )
+
     # 422 / rejected — чаще всего контент- или input-фильтры
     if code == "422" or "rejected" in raw_l:
-        return (
+        return with_support(
             f"{header}\n\n"
             "Сервис отклонил входные данные (ошибка 422). Обычно это одна из причин:\n"
             "• В тексте/запросе упоминается несовершеннолетний возраст (< 18).\n"
@@ -44,18 +54,18 @@ def kie_error_to_user_text(err: Exception) -> str:
 
     # Ошибка авторизации
     if code == "401":
-        return (
+        return with_support(
             f"{header}\n\n"
             "Похоже, проблема с доступом к API (401).\n"
-            "Обычно это означает, что KIE_API_KEY пустой или неверный.\n\n"
+            "Обычно это означает, что API ключ пустой или неверный.\n\n"
             "Что сделать:\n"
-            "• Проверь .env и переменную KIE_API_KEY\n"
+            "• Проверь .env и переменную WAVESPEED_API_KEY\n"
             "• Перезапусти приложение после изменения .env"
         )
 
     # Rate limit
     if code == "429":
-        return (
+        return with_support(
             f"{header}\n\n"
             "Слишком много запросов за короткое время (429).\n"
             "Попробуй повторить через 30–60 секунд."
@@ -63,7 +73,7 @@ def kie_error_to_user_text(err: Exception) -> str:
 
     # Слишком большой payload (иногда возвращают 413)
     if code == "413" or "payload too large" in raw_l or "entity too large" in raw_l:
-        return (
+        return with_support(
             f"{header}\n\n"
             "Входные файлы слишком большие.\n\n"
             "Что попробовать:\n"
@@ -73,24 +83,49 @@ def kie_error_to_user_text(err: Exception) -> str:
 
     # Таймауты задач / сети
     if "timeout" in raw_l or "task timeout" in raw_l:
-        return (
+        return with_support(
             f"{header}\n\n"
             "Сервис не успел обработать запрос вовремя (таймаут).\n\n"
             "Что попробовать:\n"
             "• Нажми «✅ Всё верно» ещё раз\n"
             "• Попробуй позже (иногда очередь перегружена)\n"
-            "• Упростить промпт и/или заменить фото на менее тяжёлое"
+            "• Упростить промпт и/или заменить фото на менее тяжёлое\n"
+            "• Держать входы в пределах: фото до 5 МБ, видео до 10 минут"
+        )
+
+    # Фильтр/политики провайдера (например, Google)
+    if "prohibited use" in raw_l or "filtered out" in raw_l or "no images found" in raw_l:
+        return with_support(
+            f"{header}\n\n"
+            "Сервис заблокировал результат из‑за запретной темы в запросе или изображении.\n\n"
+            "Что сделать:\n"
+            "• Убери любые упоминания насилия/сексуального контента/политики/экстремизма.\n"
+            "• Не проси менять возраст/личность людей, особенно в сторону несовершеннолетних.\n"
+            "• Упростить промпт и заменить фото на более нейтральное.\n"
+            "• Повтори попытку позже — иногда фильтр срабатывает слишком строго."
+        )
+
+    # Частая ошибка провайдера: AI Studio 400 (code=502)
+    if code == "502" or "ai studio api http error: 400" in raw_l:
+        return with_support(
+            f"{header}\n\n"
+            "Провайдер временно отклонил запрос (ошибка 502).\n"
+            "Чаще всего это связано с фильтрацией запретных тем или временным сбоем.\n\n"
+            "Что сделать:\n"
+            "• Упростить запрос, убрать спорные темы.\n"
+            "• Заменить фото на более нейтральное.\n"
+            "• Повторить попытку через пару минут."
         )
 
     # 5xx
     if code and code.startswith("5"):
-        return (
+        return with_support(
             f"{header}\n\n"
             "Сервис временно недоступен (ошибка 5xx). Попробуй повторить позже."
         )
 
     # Fallback
-    return (
+    return with_support(
         f"{header}\n\n"
         "Возможные причины:\n"
         "• Временный сбой сервиса или сети\n"

@@ -13,7 +13,6 @@ ASPECT_RATIOS: list[str] = [
     "9:16",
     "16:9",
     "21:9",
-    "auto",
 ]
 
 RESOLUTIONS: list[str] = ["1K", "2K"]  # "4K"
@@ -24,7 +23,7 @@ OUTPUT_FORMATS: list[str] = ["png", "jpg"]
 @dataclass(frozen=True)
 class DefaultPhotoSettings:
     aspect_ratio: str = "1:1"
-    resolution: str = "2K"
+    resolution: str = "1K"
     output_format: str = "png"
 
 

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.admin import AdminCallbacks, admin_access_kb, admin_menu_kb
 from app.keyboards.confirm import ConfirmCallbacks, yes_no_kb
+from app.keyboards.utils import add_button
 from app.repository.access import (
     get_user_by_tg_id,
     is_user_admin,
@@ -35,8 +36,8 @@ def _plans_kb(plans) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for p in plans:
         # можно сделать красивее: f"{p.name} · {p.duration_days}д · {p.video_generations}/{p.photo_generations}"
-        kb.button(text=f"📦 {p.name}", callback_data=f"{SUB_PICK_PREFIX}{p.id}")
-    kb.button(text="⬅️ Назад", callback_data=AdminCallbacks.BACK)
+        add_button(kb, text=f"📦 {p.name}", callback_data=f"{SUB_PICK_PREFIX}{p.id}")
+    add_button(kb, text="⬅️ Назад", callback_data=AdminCallbacks.BACK, style="danger")
     kb.adjust(1)
     return kb.as_markup()
 

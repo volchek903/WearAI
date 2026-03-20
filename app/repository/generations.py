@@ -1,286 +1,284 @@
-# app/repository/generations.py
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.subscription import Subscription
 from app.models.user import User
-from app.models.user_subscription import UserSubscription
+from app.repository.app_settings import (
+    MODEL_PRICE_KLING_I2V_KEY,
+    MODEL_PRICE_KLING_MOTION_KEY,
+    MODEL_PRICE_NANO_BANANA_KEY,
+    get_launch_daily_limit,
+    get_model_price_credits,
+)
 
 
 class NoGenerationsLeft(Exception):
     pass
 
 
+PHOTO_MODEL_KEY = MODEL_PRICE_NANO_BANANA_KEY
+VIDEO_MODEL_I2V_KEY = MODEL_PRICE_KLING_I2V_KEY
+VIDEO_MODEL_MOTION_KEY = MODEL_PRICE_KLING_MOTION_KEY
+
+CHARGE_SOURCE_FREE = "free"
+CHARGE_SOURCE_PAID = "paid"
+
+
+@dataclass(frozen=True, slots=True)
+class ChargeResult:
+    kind: str
+    source: str
+    amount: int
+    model_key: str
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-async def _get_user_db_id(session: AsyncSession, tg_id: int) -> int | None:
-    user_id = await session.scalar(select(User.id).where(User.tg_id == tg_id))
-    return int(user_id) if user_id is not None else None
+def _msk_today_key() -> str:
+    msk = timezone(timedelta(hours=3))
+    return datetime.now(msk).date().isoformat()
 
 
-async def _get_active_us_id(session: AsyncSession, user_id: int) -> int | None:
-    us_id = await session.scalar(
-        select(UserSubscription.id)
-        .where(UserSubscription.user_id == user_id, UserSubscription.status == 1)
-        .order_by(UserSubscription.activated_at.desc())
-        .limit(1)
+async def _get_user(session: AsyncSession, tg_id: int) -> User | None:
+    return await session.scalar(select(User).where(User.tg_id == tg_id))
+
+
+async def get_launch_used_today(session: AsyncSession) -> int:
+    day_key = _msk_today_key()
+    result = await session.execute(
+        select(User.free_generations_used_today).where(User.free_generations_day == day_key)
     )
-    return int(us_id) if us_id is not None else None
+    return sum(int(v or 0) for v in result.scalars().all())
 
 
-async def _has_any_subscription(session: AsyncSession, user_id: int) -> bool:
-    any_id = await session.scalar(
-        select(UserSubscription.id)
-        .where(UserSubscription.user_id == user_id)
-        .limit(1)
-    )
-    return any_id is not None
+async def get_active_subscription_name(
+    session: AsyncSession, tg_id: int
+) -> str | None:
+    user = await _get_user(session, tg_id)
+    if not user:
+        return None
+    return "Credits"
+
+
+async def is_launch_subscription(session: AsyncSession, tg_id: int) -> bool:
+    del session, tg_id
+    return False
 
 
 async def ensure_default_subscription(session: AsyncSession, tg_id: int) -> None:
-    user_id = await _get_user_db_id(session, tg_id)
+    del session, tg_id
+    return
 
-    print(f"[DEBUG ensure_default_subscription] tg_id={tg_id} -> user_id={user_id}")
 
-    if not user_id:
-        print(f"[DEBUG ensure_default_subscription] FAIL: no user for tg_id={tg_id}")
-        return
+def _daily_free_count_for_user(user: User) -> int:
+    if (user.free_generations_day or "") != _msk_today_key():
+        return 0
+    return int(user.free_generations_used_today or 0)
 
-    active_id = await _get_active_us_id(session, user_id)
-    print(
-        f"[DEBUG ensure_default_subscription] user_id={user_id} active_us_id={active_id}"
+
+async def _charge_credits(
+    session: AsyncSession,
+    *,
+    tg_id: int,
+    credits: int,
+    kind: str,
+    model_key: str,
+) -> ChargeResult:
+    user = await _get_user(session, tg_id)
+    if not user:
+        raise NoGenerationsLeft()
+
+    day_key = _msk_today_key()
+    free_limit = await get_launch_daily_limit(session)
+    current_free_used = _daily_free_count_for_user(user)
+
+    can_use_free = (
+        int(user.free_credit_balance or 0) >= int(credits)
+        and (int(free_limit) <= 0 or current_free_used < int(free_limit))
     )
-    if active_id:
-        return
 
-    has_any = await _has_any_subscription(session, user_id)
-    target_name = "Launch" if not has_any else "Base"
-    sub = await session.scalar(
-        select(Subscription).where(Subscription.name == target_name).limit(1)
-    )
-    if not sub:
-        sub = await session.scalar(
-            select(Subscription).order_by(Subscription.id.asc()).limit(1)
+    if can_use_free:
+        await session.execute(
+            update(User)
+            .where(User.id == user.id, User.free_credit_balance >= int(credits))
+            .values(
+                free_credit_balance=User.free_credit_balance - int(credits),
+                free_generations_day=day_key,
+                free_generations_used_today=current_free_used + 1,
+                pending_charge_kind=kind,
+                pending_charge_source=CHARGE_SOURCE_FREE,
+                pending_charge_amount=int(credits),
+            )
         )
-    print(
-        f"[DEBUG ensure_default_subscription] picked sub="
-        f"{getattr(sub, 'id', None)} {getattr(sub, 'name', None)}"
+        await session.commit()
+        return ChargeResult(
+            kind=kind,
+            source=CHARGE_SOURCE_FREE,
+            amount=int(credits),
+            model_key=model_key,
+        )
+
+    updated = await session.execute(
+        update(User)
+        .where(User.id == user.id, User.credit_balance >= int(credits))
+        .values(
+            credit_balance=User.credit_balance - int(credits),
+            pending_charge_kind=kind,
+            pending_charge_source=CHARGE_SOURCE_PAID,
+            pending_charge_amount=int(credits),
+        )
     )
-    if not sub:
+    if updated.rowcount != 1:
+        raise NoGenerationsLeft()
+
+    await session.commit()
+    return ChargeResult(
+        kind=kind,
+        source=CHARGE_SOURCE_PAID,
+        amount=int(credits),
+        model_key=model_key,
+    )
+
+
+async def _refund_pending_charge(
+    session: AsyncSession,
+    *,
+    tg_id: int,
+    kind: str,
+) -> None:
+    user = await _get_user(session, tg_id)
+    if not user:
         return
 
-    now = _utcnow()
+    pending_kind = (user.pending_charge_kind or "").strip()
+    pending_source = (user.pending_charge_source or "").strip()
+    pending_amount = int(user.pending_charge_amount or 0)
+    if pending_kind != kind or pending_amount <= 0:
+        return
 
-    # duration_days<=0 трактуем как "без срока" (очень далеко)
-    if int(sub.duration_days) <= 0:
-        expires = now + timedelta(days=365 * 100)  # 100 лет
+    values: dict[str, object] = {
+        "pending_charge_kind": None,
+        "pending_charge_source": None,
+        "pending_charge_amount": 0,
+    }
+    if pending_source == CHARGE_SOURCE_FREE:
+        values["free_credit_balance"] = User.free_credit_balance + pending_amount
+        if (user.free_generations_day or "") == _msk_today_key():
+            values["free_generations_used_today"] = max(
+                0, int(user.free_generations_used_today or 0) - 1
+            )
     else:
-        expires = now + timedelta(days=int(sub.duration_days))
+        values["credit_balance"] = User.credit_balance + pending_amount
 
-    session.add(
-        UserSubscription(
-            user_id=user_id,
-            subscription_id=sub.id,
-            expires_at=expires,
-            remaining_photo=int(sub.photo_generations),
-            remaining_video=int(sub.video_generations),
-            status=1,
-        )
-    )
+    await session.execute(update(User).where(User.id == user.id).values(**values))
     await session.commit()
 
-    print(
-        "[DEBUG ensure_default_subscription] CREATED default sub "
-        f"user_id={user_id} sub_id={sub.id} expires_at={expires.isoformat()} "
-        f"photo={int(sub.photo_generations)} video={int(sub.video_generations)}"
-    )
 
-
-async def charge_photo_generation(session: AsyncSession, tg_id: int) -> None:
-    now = _utcnow()
-    user_id = await _get_user_db_id(session, tg_id)
-    print(
-        f"[DEBUG charge_photo] tg_id={tg_id} -> user_id={user_id} now_utc={now.isoformat()}"
-    )
-
-    if not user_id:
-        print("[DEBUG charge_photo] FAIL: user not found")
-        raise NoGenerationsLeft()
-
-    us_id = await _get_active_us_id(session, user_id)
-    print(f"[DEBUG charge_photo] active_us_id={us_id}")
-
-    if not us_id:
-        print("[DEBUG charge_photo] FAIL: no active subscription")
-        raise NoGenerationsLeft()
-
-    before = await session.scalar(
-        select(UserSubscription.remaining_photo, UserSubscription.expires_at).where(
-            UserSubscription.id == us_id
-        )
-    )
-    print(f"[DEBUG charge_photo] before (remaining_photo, expires_at) = {before}")
-
-    new_left = await session.scalar(
-        update(UserSubscription)
-        .where(
-            UserSubscription.id == us_id,
-            UserSubscription.status == 1,
-            UserSubscription.remaining_photo > 0,
-            UserSubscription.expires_at > now,
-        )
-        .values(remaining_photo=UserSubscription.remaining_photo - 1)
-        .returning(UserSubscription.remaining_photo)
-    )
-    print(f"[DEBUG charge_photo] update returning new_left={new_left}")
-
-    if new_left is None:
-        cur = await session.scalar(
-            select(
-                UserSubscription.remaining_photo,
-                UserSubscription.remaining_video,
-                UserSubscription.expires_at,
-                UserSubscription.status,
-            ).where(UserSubscription.id == us_id)
-        )
-        print(f"[DEBUG charge_photo] FAIL cur row={cur}")
-        raise NoGenerationsLeft()
-
-    await session.commit()
-    print(f"[DEBUG charge_photo] COMMIT OK new_left={new_left}")
-
-
-async def refund_photo_generation(session: AsyncSession, tg_id: int) -> None:
-    user_id = await _get_user_db_id(session, tg_id)
-    print(f"[DEBUG refund_photo] tg_id={tg_id} -> user_id={user_id}")
-
-    if not user_id:
+async def _finalize_pending_charge(
+    session: AsyncSession,
+    *,
+    tg_id: int,
+    kind: str,
+) -> None:
+    user = await _get_user(session, tg_id)
+    if not user:
         return
-
-    us_id = await _get_active_us_id(session, user_id)
-    print(f"[DEBUG refund_photo] active_us_id={us_id}")
-    if not us_id:
+    if (user.pending_charge_kind or "").strip() != kind:
         return
-
     await session.execute(
-        update(UserSubscription)
-        .where(UserSubscription.id == us_id, UserSubscription.status == 1)
-        .values(remaining_photo=UserSubscription.remaining_photo + 1)
-    )
-    await session.commit()
-    print("[DEBUG refund_photo] COMMIT OK +1")
-
-
-async def charge_video_generation(session: AsyncSession, tg_id: int) -> None:
-    now = _utcnow()
-    user_id = await _get_user_db_id(session, tg_id)
-    print(
-        f"[DEBUG charge_video] tg_id={tg_id} -> user_id={user_id} now_utc={now.isoformat()}"
-    )
-
-    if not user_id:
-        print("[DEBUG charge_video] FAIL: user not found")
-        raise NoGenerationsLeft()
-
-    us_id = await _get_active_us_id(session, user_id)
-    print(f"[DEBUG charge_video] active_us_id={us_id}")
-
-    if not us_id:
-        print("[DEBUG charge_video] FAIL: no active subscription")
-        raise NoGenerationsLeft()
-
-    before = await session.scalar(
-        select(UserSubscription.remaining_video, UserSubscription.expires_at).where(
-            UserSubscription.id == us_id
+        update(User)
+        .where(User.id == user.id)
+        .values(
+            pending_charge_kind=None,
+            pending_charge_source=None,
+            pending_charge_amount=0,
         )
     )
-    print(f"[DEBUG charge_video] before (remaining_video, expires_at) = {before}")
-
-    new_left = await session.scalar(
-        update(UserSubscription)
-        .where(
-            UserSubscription.id == us_id,
-            UserSubscription.status == 1,
-            UserSubscription.remaining_video > 0,
-            UserSubscription.expires_at > now,
-        )
-        .values(remaining_video=UserSubscription.remaining_video - 1)
-        .returning(UserSubscription.remaining_video)
-    )
-    print(f"[DEBUG charge_video] update returning new_left={new_left}")
-
-    if new_left is None:
-        cur = await session.scalar(
-            select(
-                UserSubscription.remaining_photo,
-                UserSubscription.remaining_video,
-                UserSubscription.expires_at,
-                UserSubscription.status,
-            ).where(UserSubscription.id == us_id)
-        )
-        print(f"[DEBUG charge_video] FAIL cur row={cur}")
-        raise NoGenerationsLeft()
-
     await session.commit()
-    print(f"[DEBUG charge_video] COMMIT OK new_left={new_left}")
 
 
-async def refund_video_generation(session: AsyncSession, tg_id: int) -> None:
-    user_id = await _get_user_db_id(session, tg_id)
-    print(f"[DEBUG refund_video] tg_id={tg_id} -> user_id={user_id}")
-
-    if not user_id:
-        return
-
-    us_id = await _get_active_us_id(session, user_id)
-    print(f"[DEBUG refund_video] active_us_id={us_id}")
-    if not us_id:
-        return
-
-    await session.execute(
-        update(UserSubscription)
-        .where(UserSubscription.id == us_id, UserSubscription.status == 1)
-        .values(remaining_video=UserSubscription.remaining_video + 1)
+async def charge_photo_generation(
+    session: AsyncSession, tg_id: int, model_key: str = PHOTO_MODEL_KEY
+) -> ChargeResult:
+    credits = await get_model_price_credits(session, model_key)
+    return await _charge_credits(
+        session,
+        tg_id=tg_id,
+        credits=credits,
+        kind="photo",
+        model_key=model_key,
     )
-    await session.commit()
-    print("[DEBUG refund_video] COMMIT OK +1")
+
+
+async def refund_photo_generation(
+    session: AsyncSession, tg_id: int, model_key: str = PHOTO_MODEL_KEY
+) -> None:
+    del model_key
+    await _refund_pending_charge(session, tg_id=tg_id, kind="photo")
+
+
+async def charge_video_generation(
+    session: AsyncSession,
+    tg_id: int,
+    model_key: str = VIDEO_MODEL_I2V_KEY,
+    credits_override: int | None = None,
+) -> ChargeResult:
+    credits = (
+        int(credits_override)
+        if credits_override is not None
+        else await get_model_price_credits(session, model_key)
+    )
+    return await _charge_credits(
+        session,
+        tg_id=tg_id,
+        credits=credits,
+        kind="video",
+        model_key=model_key,
+    )
+
+
+async def refund_video_generation(
+    session: AsyncSession, tg_id: int, model_key: str = VIDEO_MODEL_I2V_KEY
+) -> None:
+    del model_key
+    await _refund_pending_charge(session, tg_id=tg_id, kind="video")
 
 
 async def grant_photo_generation(session: AsyncSession, tg_id: int, delta: int = 1) -> None:
-    user_id = await _get_user_db_id(session, tg_id)
-    if not user_id:
+    price = await get_model_price_credits(session, PHOTO_MODEL_KEY)
+    user = await _get_user(session, tg_id)
+    if not user:
         return
-
-    us_id = await _get_active_us_id(session, user_id)
-    if not us_id:
-        return
-
     await session.execute(
-        update(UserSubscription)
-        .where(UserSubscription.id == us_id, UserSubscription.status == 1)
-        .values(remaining_photo=UserSubscription.remaining_photo + int(delta))
+        update(User)
+        .where(User.id == user.id)
+        .values(free_credit_balance=User.free_credit_balance + price * max(0, int(delta)))
     )
     await session.commit()
 
 
 async def grant_video_generation(session: AsyncSession, tg_id: int, delta: int = 1) -> None:
-    user_id = await _get_user_db_id(session, tg_id)
-    if not user_id:
+    price = await get_model_price_credits(session, VIDEO_MODEL_I2V_KEY)
+    user = await _get_user(session, tg_id)
+    if not user:
         return
-
-    us_id = await _get_active_us_id(session, user_id)
-    if not us_id:
-        return
-
     await session.execute(
-        update(UserSubscription)
-        .where(UserSubscription.id == us_id, UserSubscription.status == 1)
-        .values(remaining_video=UserSubscription.remaining_video + int(delta))
+        update(User)
+        .where(User.id == user.id)
+        .values(free_credit_balance=User.free_credit_balance + price * max(0, int(delta)))
     )
     await session.commit()
+
+
+async def finalize_photo_generation(session: AsyncSession, tg_id: int) -> None:
+    await _finalize_pending_charge(session, tg_id=tg_id, kind="photo")
+
+
+async def finalize_video_generation(session: AsyncSession, tg_id: int) -> None:
+    await _finalize_pending_charge(session, tg_id=tg_id, kind="video")

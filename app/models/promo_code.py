@@ -14,6 +14,7 @@ class PromoCode(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
 
+    bonus_credits: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     bonus_photo: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     bonus_video: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
