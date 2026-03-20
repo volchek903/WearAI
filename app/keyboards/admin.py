@@ -18,6 +18,8 @@ class AdminCallbacks:
     PACKAGE_EDIT = "admin:packages:edit"
     PACKAGE_FIELD = "admin:packages:field"
     PACKAGE_CREATE = "admin:packages:create"
+    PACKAGE_DELETE = "admin:packages:delete"
+    PACKAGE_DELETE_CONFIRM = "admin:packages:delete_confirm"
 
     ADD_ADMIN = "admin:add_admin"
     REMOVE_ADMIN = "admin:remove_admin"
@@ -52,6 +54,14 @@ class AdminCallbacks:
     @staticmethod
     def package_field(plan_id: int, field: str) -> str:
         return f"{AdminCallbacks.PACKAGE_FIELD}:{plan_id}:{field}"
+
+    @staticmethod
+    def package_delete(plan_id: int) -> str:
+        return f"{AdminCallbacks.PACKAGE_DELETE}:{plan_id}"
+
+    @staticmethod
+    def package_delete_confirm(plan_id: int, decision: str) -> str:
+        return f"{AdminCallbacks.PACKAGE_DELETE_CONFIRM}:{plan_id}:{decision}"
 
     @staticmethod
     def model_price_edit(model_key: str) -> str:
@@ -187,7 +197,30 @@ def admin_package_actions_kb(plan_id: int) -> InlineKeyboardMarkup:
         text="✏️ Изменить пакет",
         callback_data=AdminCallbacks.package_edit(plan_id),
     )
+    add_button(
+        kb,
+        text="🗑 Удалить пакет",
+        callback_data=AdminCallbacks.package_delete(plan_id),
+        style="danger",
+    )
     add_button(kb, text="⬅️ Назад", callback_data=AdminCallbacks.PACKAGES, style="danger")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def admin_package_delete_confirm_kb(plan_id: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    add_button(
+        kb,
+        text="🗑 Да, удалить",
+        callback_data=AdminCallbacks.package_delete_confirm(plan_id, "yes"),
+        style="danger",
+    )
+    add_button(
+        kb,
+        text="❌ Отмена",
+        callback_data=AdminCallbacks.package_pick(plan_id),
+    )
     kb.adjust(1)
     return kb.as_markup()
 

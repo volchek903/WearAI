@@ -12,6 +12,7 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.admin import (
@@ -23,6 +24,7 @@ from app.keyboards.admin import (
     admin_packages_kb,
     admin_package_actions_kb,
     admin_package_fields_kb,
+    admin_package_delete_confirm_kb,
 )
 from app.keyboards.confirm import yes_no_kb, ConfirmCallbacks
 from app.keyboards.utils import add_button
@@ -478,6 +480,87 @@ async def admin_package_edit(call: CallbackQuery, session: AsyncSession) -> None
         call,
         "Что хотите менять? 👇",
         reply_markup=admin_package_fields_kb(plan.id),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith(f"{AdminCallbacks.PACKAGE_DELETE}:"))
+async def admin_package_delete_start(call: CallbackQuery, session: AsyncSession) -> None:
+    if not await _ensure_admin(call, session, "admin_panel.package_delete_start"):
+        return
+    raw = call.data or ""
+    plan_id = raw.split(":", 3)[-1]
+    if not plan_id.isdigit():
+        await call.answer("Некорректный пакет 😕", show_alert=True)
+        return
+    plan = await session.get(Subscription, int(plan_id))
+    if not plan:
+        await call.answer("Пакет не найден 😕", show_alert=True)
+        return
+    if plan.name == "Base":
+        await call.answer("Системный пакет Base удалять нельзя", show_alert=True)
+        return
+    await edit_text_safe(
+        call,
+        "⚠️ Вы уверены, что хотите удалить пакет?\n\n"
+        f"Пакет: <b>{plan.name}</b>\n"
+        "Действие необратимо.",
+        reply_markup=admin_package_delete_confirm_kb(plan.id),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith(f"{AdminCallbacks.PACKAGE_DELETE_CONFIRM}:"))
+async def admin_package_delete_confirm(call: CallbackQuery, session: AsyncSession) -> None:
+    if not await _ensure_admin(call, session, "admin_panel.package_delete_confirm"):
+        return
+    raw = call.data or ""
+    parts = raw.split(":")
+    if len(parts) < 5:
+        await call.answer("Некорректная команда 😕", show_alert=True)
+        return
+    plan_id_str = parts[-2]
+    decision = parts[-1]
+    if not plan_id_str.isdigit():
+        await call.answer("Некорректный пакет 😕", show_alert=True)
+        return
+    if decision != "yes":
+        await call.answer()
+        return
+
+    plan = await session.get(Subscription, int(plan_id_str))
+    if not plan:
+        await call.answer("Пакет уже удалён", show_alert=True)
+        plans = await get_all_plans(session)
+        await edit_text_safe(
+            call,
+            "📦 <b>Пакеты</b>\n\nВыбери пакет для просмотра/редактирования 👇",
+            reply_markup=admin_packages_kb(plans),
+        )
+        return
+    if plan.name == "Base":
+        await call.answer("Системный пакет Base удалять нельзя", show_alert=True)
+        return
+
+    try:
+        await session.delete(plan)
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        await edit_text_safe(
+            call,
+            "❌ Пакет нельзя удалить: есть связанные данные "
+            "(активные/исторические подписки или логи генераций).",
+            reply_markup=admin_package_actions_kb(int(plan_id_str)),
+        )
+        await call.answer()
+        return
+
+    plans = await get_all_plans(session)
+    await edit_text_safe(
+        call,
+        "✅ Пакет удалён.\n\n📦 <b>Пакеты</b>\n\nВыбери пакет для просмотра/редактирования 👇",
+        reply_markup=admin_packages_kb(plans),
     )
     await call.answer()
 
