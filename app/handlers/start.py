@@ -1,6 +1,7 @@
 # app/handlers/start.py
 from __future__ import annotations
 
+import asyncio
 import os
 import logging
 
