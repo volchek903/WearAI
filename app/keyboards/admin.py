@@ -27,6 +27,9 @@ class AdminCallbacks:
     LIST_PROMO = "admin:promo:list"
     PROMO_TYPE = "admin:promo:type"
     LAUNCH_DAILY_LIMIT = "admin:launch_daily_limit"
+    MODEL_PRICING = "admin:model_pricing"
+    MODEL_PRICE_EDIT = "admin:model_price:edit"
+    ANALYTICS = "admin:analytics"
 
     BACK = "admin:back"
 
@@ -50,6 +53,10 @@ class AdminCallbacks:
     def package_field(plan_id: int, field: str) -> str:
         return f"{AdminCallbacks.PACKAGE_FIELD}:{plan_id}:{field}"
 
+    @staticmethod
+    def model_price_edit(model_key: str) -> str:
+        return f"{AdminCallbacks.MODEL_PRICE_EDIT}:{model_key}"
+
 
 class AdminBroadcastCallbacks:
     PHOTO = "admin:broadcast:photo"
@@ -68,6 +75,8 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
     add_button(kb, text="👥 Пользователи", callback_data=AdminCallbacks.USERS)
     add_button(kb, text="🏆 Топ рефералов", callback_data=AdminCallbacks.TOP_REFERRALS)
     add_button(kb, text="📦 Пакеты", callback_data=AdminCallbacks.PACKAGES)
+    add_button(kb, text="💸 Настройка цен моделей", callback_data=AdminCallbacks.MODEL_PRICING)
+    add_button(kb, text="📈 Аналитика шаблонов", callback_data=AdminCallbacks.ANALYTICS)
     add_button(kb, text="🎟 Промокоды", callback_data=AdminCallbacks.PROMO)
     add_button(
         kb,
@@ -190,18 +199,8 @@ def admin_package_fields_kb(plan_id: int) -> InlineKeyboardMarkup:
     )
     add_button(
         kb,
-        text="Количество видео",
-        callback_data=AdminCallbacks.package_field(plan_id, "video_generations"),
-    )
-    add_button(
-        kb,
-        text="Количество фото",
-        callback_data=AdminCallbacks.package_field(plan_id, "photo_generations"),
-    )
-    add_button(
-        kb,
-        text="Кол-во дней действия",
-        callback_data=AdminCallbacks.package_field(plan_id, "duration_days"),
+        text="Кредиты",
+        callback_data=AdminCallbacks.package_field(plan_id, "credit_amount"),
     )
     add_button(
         kb,
@@ -214,5 +213,18 @@ def admin_package_fields_kb(plan_id: int) -> InlineKeyboardMarkup:
         callback_data=AdminCallbacks.package_field(plan_id, "stars_price"),
     )
     add_button(kb, text="⬅️ Назад", callback_data=AdminCallbacks.package_pick(plan_id), style="danger")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def admin_model_pricing_kb(pricing) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for item in pricing:
+        add_button(
+            kb,
+            text=f"✏️ {item.title}: {item.user_price_credits} кр.",
+            callback_data=AdminCallbacks.model_price_edit(item.model_key),
+        )
+    add_button(kb, text="⬅️ Назад", callback_data=AdminCallbacks.BACK, style="danger")
     kb.adjust(1)
     return kb.as_markup()

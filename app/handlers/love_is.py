@@ -149,7 +149,7 @@ async def love_is_text_in(
             )
         else:
             await message.answer(
-                "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
+                "⛔️ Недостаточно кредитов.\n\nПополните баланс 💳",
                 reply_markup=buy_generations_kb(),
             )
         await state.clear()
@@ -218,7 +218,7 @@ async def love_is_text_in(
             await send_image_smart(message, img_bytes=img_bytes, filename=filename)
             sent_any = True
 
-        await increment_generated_photos(session=session, tg_id=tg_id, delta=1)
+        await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="love_is_photo")
 
         if first_path:
             await state.update_data(love_is_image_path=first_path)
@@ -300,7 +300,7 @@ async def love_is_animate(
         await charge_video_generation(session, tg_id)
     except NoGenerationsLeft:
         await call.message.answer(
-            "⛔️ Лимит генераций видео исчерпан.\n\nОформи подписку или пополни баланс 💳"
+            "⛔️ Недостаточно кредитов.\n\nПополните баланс 💳"
         )
         await state.clear()
         return
@@ -371,7 +371,7 @@ async def love_is_animate(
             caption="Готово! 💞",
             supports_streaming=True,
         )
-        await increment_generated_videos(session=session, tg_id=tg_id, delta=1)
+        await increment_generated_videos(session=session, tg_id=tg_id, delta=1, section="love_is_video")
         await call.message.answer(
             "Хотите ли что-то ещё сгенерировать?",
             reply_markup=photo_menu_kb(),

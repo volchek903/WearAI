@@ -9,8 +9,10 @@ from app.keyboards.menu import (
     photo_menu_kb,
     photo_cars_kb,
     photo_two_kb,
+    disney_style_kb,
     photo_one_kb,
     photo_other_kb,
+    photo_archive_kb,
     video_menu_kb,
 )
 from app.utils.tg_edit import edit_text_safe
@@ -42,8 +44,20 @@ async def open_photo_cars(call: CallbackQuery) -> None:
 async def open_photo_two(call: CallbackQuery) -> None:
     await edit_text_safe(
         call,
-        "👫 Шаблоны для двоих — выбери модуль 👇",
+        "👫 Шаблоны для двоих и семейные — выбери модуль 👇",
         reply_markup=photo_two_kb(),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == MenuCallbacks.DISNEY_STYLE)
+async def open_disney_style(call: CallbackQuery) -> None:
+    await edit_text_safe(
+        call,
+        "🏰 <b>Дисней стиль</b>\n\n"
+        "Сделаем фото в дисней-стиле для вас с любимой/любимым или для семьи.\n"
+        "Выбери шаблон 👇",
+        reply_markup=disney_style_kb(),
     )
     await call.answer()
 
@@ -64,6 +78,16 @@ async def open_photo_other(call: CallbackQuery) -> None:
         call,
         "🧩 Другое — выбери модуль 👇",
         reply_markup=photo_other_kb(),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == MenuCallbacks.PHOTO_ARCHIVE)
+async def open_photo_archive(call: CallbackQuery) -> None:
+    await edit_text_safe(
+        call,
+        "🗂 Архив — выбери шаблон 👇",
+        reply_markup=photo_archive_kb(),
     )
     await call.answer()
 

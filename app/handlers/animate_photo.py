@@ -222,7 +222,7 @@ async def _run_video_job(
             caption="Готово! Если нужно — дай следующий промпт ✍️",
             supports_streaming=True,
         )
-        await increment_generated_videos(session=session, tg_id=tg_id, delta=1)
+        await increment_generated_videos(session=session, tg_id=tg_id, delta=1, section="animate_photo")
         await bot.send_message(
             chat_id=chat_id,
             text="Хотите ли что-то ещё сгенерировать?",
@@ -321,7 +321,7 @@ async def animate_got_prompt(
         await charge_video_generation(session, tg_id)
     except NoGenerationsLeft:
         await message.answer(
-            "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
+            "⛔️ Недостаточно кредитов.\n\nПополните баланс 💳",
             reply_markup=buy_generations_kb(),
         )
         return

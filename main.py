@@ -28,6 +28,8 @@ from app.handlers.settings import router as settings_router
 from app.handlers.animate_photo import router as animate_router
 from app.handlers.menu import router as menu_router
 from app.handlers.love_is import router as love_is_router
+from app.handlers.disney_family_heart import router as disney_family_heart_router
+from app.handlers.disney_family_wall import router as disney_family_wall_router
 from app.handlers.radar import router as radar_router
 from app.handlers.feb23 import router as feb23_router
 from app.handlers.march8 import router as march8_router
@@ -52,6 +54,7 @@ from app.services.admin_log_cleanup import run_admin_log_cleanup
 from app.services.platega_callback import run_platega_callback_server
 from app.utils.tg_logging import install_tg_error_logging
 from app.services.admin_seed import ensure_root_admin
+from app.repository.app_settings import ensure_model_pricing_settings
 
 
 def setup_logging() -> None:
@@ -92,6 +95,8 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(car_in_hand_router)
     dp.include_router(tryon_router)
     dp.include_router(love_is_router)
+    dp.include_router(disney_family_heart_router)
+    dp.include_router(disney_family_wall_router)
     dp.include_router(feb23_router)
     dp.include_router(march8_router)
     dp.include_router(main_defender_router)
@@ -139,6 +144,7 @@ async def main() -> None:
     await init_db()
     async with session_factory() as session:
         await seed_subscriptions(session)
+        await ensure_model_pricing_settings(session)
         await ensure_root_admin(session)
 
     # NEW: запускаем polling платежей (без вебхуков)

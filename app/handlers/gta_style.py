@@ -120,7 +120,7 @@ async def gta_style_photo_in(
         else:
             await edit_text_safe(
                 progress_msg,
-                "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
+                "⛔️ Недостаточно кредитов.\n\nПополните баланс 💳",
                 reply_markup=buy_generations_kb(),
             )
         await state.clear()
@@ -150,7 +150,7 @@ async def gta_style_photo_in(
             await send_image_smart(message, img_bytes=img_bytes, filename=filename)
             sent_any = True
 
-        await increment_generated_photos(session=session, tg_id=tg_id, delta=1)
+        await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="gta_style")
         await state.clear()
         await message.answer(
             "Хотите ли что-то ещё сгенерировать?",

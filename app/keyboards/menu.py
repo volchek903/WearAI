@@ -15,8 +15,12 @@ class MenuCallbacks:
     PHOTO = "menu:photo"
     PHOTO_CARS = "menu:photo:cars"
     PHOTO_TWO = "menu:photo:two"
+    DISNEY_STYLE = "menu:disney_style"
+    DISNEY_FAMILY_HEART = "menu:disney_family_heart"
+    DISNEY_FAMILY_WALL = "menu:disney_family_wall"
     PHOTO_ONE = "menu:photo:one"
     PHOTO_OTHER = "menu:photo:other"
+    PHOTO_ARCHIVE = "menu:photo:archive"
     VIDEO = "menu:video"
     LOVE_IS = "menu:love_is"
     FEB23 = "menu:feb23"
@@ -63,9 +67,14 @@ def photo_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     add_button(kb, text="🍌 Nano Banana 2", callback_data=MenuCallbacks.NANO_BANANA)
     add_button(kb, text="🚗 Шаблоны с машинами", callback_data=MenuCallbacks.PHOTO_CARS)
-    add_button(kb, text="👫 Шаблоны для двоих", callback_data=MenuCallbacks.PHOTO_TWO)
+    add_button(
+        kb,
+        text="👫 Шаблоны для двоих и семейные",
+        callback_data=MenuCallbacks.PHOTO_TWO,
+    )
     add_button(kb, text="🧍‍♂️ Шаблоны для одного", callback_data=MenuCallbacks.PHOTO_ONE)
     add_button(kb, text="🧩 Другое", callback_data=MenuCallbacks.PHOTO_OTHER)
+    add_button(kb, text="🗂 Архив", callback_data=MenuCallbacks.PHOTO_ARCHIVE)
     add_button(kb, text="⬅️ В меню", callback_data=MenuCallbacks.BACK, style="danger")
     kb.adjust(1)
     return kb.as_markup()
@@ -88,8 +97,8 @@ def photo_cars_kb() -> InlineKeyboardMarkup:
 
 def photo_two_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
+    add_button(kb, text="🏰 Дисней стиль", callback_data=MenuCallbacks.DISNEY_STYLE)
     add_button(kb, text="❤️ ИИ Love is", callback_data=MenuCallbacks.LOVE_IS)
-    add_button(kb, text="🎖 23 февраля", callback_data=MenuCallbacks.FEB23)
     add_button(kb, text="🛡 Мой главный защитник", callback_data=MenuCallbacks.MAIN_DEFENDER)
     add_button(kb, text="🎞 Одни в кинозале ЧБ", callback_data=MenuCallbacks.CINEMA_BW)
     add_button(kb, text="🛰 ИИ Радар", callback_data=MenuCallbacks.RADAR)
@@ -98,10 +107,35 @@ def photo_two_kb() -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
+def disney_style_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    add_button(
+        kb,
+        text="💖 Семья в сердечке",
+        callback_data=MenuCallbacks.DISNEY_FAMILY_HEART,
+    )
+    add_button(
+        kb,
+        text="🧱 Семья выглядывает из-за стены",
+        callback_data=MenuCallbacks.DISNEY_FAMILY_WALL,
+    )
+    add_button(kb, text="⬅️ Назад", callback_data=MenuCallbacks.PHOTO_TWO, style="danger")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
 def photo_other_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     add_button(kb, text="🖼 Вторая жизнь для фото", callback_data=MenuCallbacks.SECOND_LIFE)
     add_button(kb, text="🌸 Поздравление с 8 Марта", callback_data=MenuCallbacks.MARCH8)
+    add_button(kb, text="⬅️ Назад", callback_data=MenuCallbacks.PHOTO, style="danger")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def photo_archive_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    add_button(kb, text="🎖 23 февраля", callback_data=MenuCallbacks.FEB23)
     add_button(kb, text="⬅️ Назад", callback_data=MenuCallbacks.PHOTO, style="danger")
     kb.adjust(1)
     return kb.as_markup()
@@ -124,7 +158,7 @@ def video_menu_kb() -> InlineKeyboardMarkup:
     add_button(kb, text="🎬 Оживить видео", callback_data=MenuCallbacks.ANIMATE)
     add_button(
         kb,
-        text="🎞 Оживить фото по видео (скоро)",
+        text="🎞 Оживить фото по видео",
         callback_data=MenuCallbacks.MOTION_CONTROL,
     )
     add_button(kb, text="⬅️ В меню", callback_data=MenuCallbacks.BACK, style="danger")

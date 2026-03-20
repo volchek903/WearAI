@@ -7,9 +7,7 @@ class AdminAccessFSM(StatesGroup):
 
 class AdminPromoFSM(StatesGroup):
     code = State()
-    kind = State()
-    photo_count = State()
-    video_count = State()
+    credit_amount = State()
     max_uses = State()
     confirm = State()
 
@@ -30,4 +28,8 @@ class AdminPackageCreateFSM(StatesGroup):
 
 
 class AdminLaunchLimitFSM(StatesGroup):
+    waiting_value = State()
+
+
+class AdminModelPricingFSM(StatesGroup):
     waiting_value = State()

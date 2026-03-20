@@ -10,13 +10,14 @@ from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.admin import (
     AdminCallbacks,
     admin_menu_kb,
+    admin_model_pricing_kb,
     admin_users_nav_kb,
     admin_promo_kb,
     admin_packages_kb,
@@ -27,13 +28,28 @@ from app.keyboards.confirm import yes_no_kb, ConfirmCallbacks
 from app.keyboards.utils import add_button
 from app.repository.admin import is_admin, get_users_page, get_users_stats
 from app.repository.admin_actions import log_admin_action
-from app.repository.app_settings import get_launch_daily_limit, set_launch_daily_limit
+from app.repository.analytics import (
+    get_revenue_stats,
+    get_section_breakdown,
+    get_top_sections,
+    get_user_entry_stats,
+)
+from app.repository.app_settings import (
+    MODEL_TITLES,
+    get_launch_daily_limit,
+    get_pricing_markup_multiplier_pct,
+    get_usd_to_rub_rate,
+    list_model_pricing,
+    set_launch_daily_limit,
+    set_model_price_credits,
+)
 from app.models.subscription import Subscription
 from app.repository.extra import get_all_plans
 from app.repository.promo import create_promo_code, get_last_promo_codes, PromoError
 from app.repository.referrals import get_top_referrers_last_week
 from app.states.admin import (
     AdminPromoFSM,
+    AdminModelPricingFSM,
     AdminPackagesFSM,
     AdminPackageCreateFSM,
     AdminLaunchLimitFSM,
@@ -85,16 +101,54 @@ async def admin_stats(call: CallbackQuery, session: AsyncSession) -> None:
     total_users, active_subs, total_photos, total_videos = await get_users_stats(
         session
     )
+    payments_count, revenue_rub = await get_revenue_stats(session)
+    entries = await get_user_entry_stats(session)
 
     text = (
         "📊 <b>Статистика</b>\n\n"
-        f"👥 Всего пользователей: <code>{total_users}</code>\n"
+        f"💰 Заработано: <code>{revenue_rub} ₽</code>\n"
+        f"🧾 Оплат подтверждено: <code>{payments_count}</code>\n\n"
+        f"👥 Пользователей за всё время: <code>{entries['all_time']}</code>\n"
+        f"🗓 За 30 дней: <code>{entries['month']}</code>\n"
+        f"📅 За 7 дней: <code>{entries['week']}</code>\n"
+        f"⏱ За 24 часа: <code>{entries['day']}</code>\n\n"
+        f"👥 Всего пользователей в БД: <code>{total_users}</code>\n"
         f"✅ Активных подписок: <code>{active_subs}</code>\n"
         f"🖼️ Сгенерировано фото: <code>{total_photos}</code>\n"
         f"🎬 Сгенерировано видео: <code>{total_videos}</code>"
     )
 
     await edit_text_safe(call, text, reply_markup=admin_menu_kb())
+    await call.answer()
+
+
+@router.callback_query(F.data == AdminCallbacks.ANALYTICS)
+async def admin_analytics(call: CallbackQuery, session: AsyncSession) -> None:
+    if not await _ensure_admin(call, session, "admin_panel.analytics"):
+        return
+
+    top_sections = await get_top_sections(session, limit=5)
+    breakdown = await get_section_breakdown(session)
+
+    lines = ["📈 <b>Аналитика шаблонов</b>", ""]
+    lines.append("🏆 Топ 5 шаблонов / разделов:")
+    if not top_sections:
+        lines.append("Пока нет данных.")
+    else:
+        for idx, (section, cnt) in enumerate(top_sections, start=1):
+            lines.append(f"{idx}. <b>{section}</b> — {cnt}")
+
+    lines.append("")
+    lines.append("🧩 По разделам:")
+    if not breakdown:
+        lines.append("Пока нет данных.")
+    else:
+        for section, photo_cnt, video_cnt, total_cnt in breakdown:
+            lines.append(
+                f"• <b>{section}</b> — всего {total_cnt}, фото {photo_cnt}, видео {video_cnt}"
+            )
+
+    await edit_text_safe(call, "\n".join(lines), reply_markup=admin_menu_kb())
     await call.answer()
 
 
@@ -130,9 +184,7 @@ def _plan_info(plan: Subscription) -> str:
     return (
         "📦 <b>Пакет</b>\n\n"
         f"Название: <b>{plan.name}</b>\n"
-        f"Дней действия: <b>{plan.duration_days}</b>\n"
-        f"Видео: <b>{plan.video_generations}</b>\n"
-        f"Фото: <b>{plan.photo_generations}</b>\n"
+        f"Кредиты: <b>{int(getattr(plan, 'credit_amount', 0) or 0)}</b>\n"
         f"Цена: <b>{price}</b>\n"
         f"Цена в ⭐: <b>{stars}</b>"
     )
@@ -140,9 +192,7 @@ def _plan_info(plan: Subscription) -> str:
 
 def _new_plan_preview(data: dict) -> str:
     name = str(data.get("name", "")).strip()
-    days = int(data.get("duration_days") or 0)
-    photos = int(data.get("photo_generations") or 0)
-    videos = int(data.get("video_generations") or 0)
+    credits = int(data.get("credit_amount") or 0)
     price = data.get("price")
     stars_price = int(data.get("stars_price") or 0)
     if price is None or Decimal(price) == 0:
@@ -153,12 +203,92 @@ def _new_plan_preview(data: dict) -> str:
     return (
         "📦 <b>Новый пакет</b>\n\n"
         f"Название: <b>{name}</b>\n"
-        f"Дней действия: <b>{days}</b>\n"
-        f"Фото: <b>{photos}</b>\n"
-        f"Видео: <b>{videos}</b>\n"
+        f"Кредиты: <b>{credits}</b>\n"
         f"Цена: <b>{price_text}</b>\n"
         f"Цена в ⭐: <b>{stars_text}</b>\n\n"
         "Все верно?"
+    )
+
+
+async def _render_model_pricing(call: CallbackQuery, session: AsyncSession) -> None:
+    pricing = await list_model_pricing(session)
+    markup_pct = await get_pricing_markup_multiplier_pct(session)
+    usd_to_rub = await get_usd_to_rub_rate(session)
+    lines = [
+        "💸 <b>Настройка цен моделей</b>",
+        "",
+        f"Курс USD->RUB для базового расчёта: <b>{usd_to_rub}</b>",
+        f"Целевая наценка: <b>x{markup_pct / 100:.1f}</b>",
+        "",
+    ]
+    for item in pricing:
+        cost_rub = (item.provider_cost_usd * Decimal(usd_to_rub)).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        margin_rub = (Decimal(item.user_price_credits) - cost_rub).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        lines.append(
+            f"• <b>{item.title}</b>: {item.user_price_credits} кр. "
+            f"(себестоимость {item.provider_cost_usd}$ / {cost_rub} ₽, +{margin_rub} ₽)"
+        )
+    await edit_text_safe(
+        call,
+        "\n".join(lines),
+        reply_markup=admin_model_pricing_kb(pricing),
+    )
+
+
+@router.callback_query(F.data == AdminCallbacks.MODEL_PRICING)
+async def admin_model_pricing(call: CallbackQuery, session: AsyncSession) -> None:
+    if not await _ensure_admin(call, session, "admin_panel.model_pricing"):
+        return
+    await _render_model_pricing(call, session)
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith(f"{AdminCallbacks.MODEL_PRICE_EDIT}:"))
+async def admin_model_price_edit(
+    call: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    if not await _ensure_admin(call, session, "admin_panel.model_price_edit"):
+        return
+    model_key = (call.data or "").split(":", 3)[-1]
+    if model_key not in MODEL_TITLES:
+        await call.answer("Неизвестная модель", show_alert=True)
+        return
+    await state.set_state(AdminModelPricingFSM.waiting_value)
+    await state.update_data(model_key=model_key)
+    if call.message:
+        await call.message.answer(
+            f"Введите новую цену в кредитах для «{MODEL_TITLES[model_key]}» ✍️"
+        )
+    await call.answer()
+
+
+@router.message(AdminModelPricingFSM.waiting_value)
+async def admin_model_price_value(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
+    data = await state.get_data()
+    model_key = data.get("model_key")
+    if model_key not in MODEL_TITLES:
+        await state.clear()
+        await message.answer("Сессия редактирования потеряна.")
+        return
+    try:
+        value = int((message.text or "").strip())
+    except Exception:
+        await message.answer("Нужно целое число. Введи ещё раз ✍️")
+        return
+    if value <= 0:
+        await message.answer("Значение должно быть > 0")
+        return
+    await set_model_price_credits(session, model_key, value)
+    await state.clear()
+    await message.answer(
+        f"Сохранено: {MODEL_TITLES[model_key]} = {value} кр.",
+        reply_markup=admin_menu_kb(),
     )
 
 
@@ -196,57 +326,23 @@ async def admin_package_create_name(
         await message.answer("Название слишком короткое. Введи ещё раз ✍️")
         return
     await state.update_data(name=name)
-    await state.set_state(AdminPackageCreateFSM.duration_days)
-    await message.answer("Сколько дней действует подписка? (целое число) ✍️")
-
-
-@router.message(AdminPackageCreateFSM.duration_days)
-async def admin_package_create_days(
-    message: Message, state: FSMContext
-) -> None:
-    try:
-        days = int((message.text or "").strip())
-    except Exception:
-        await message.answer("Нужно целое число. Введи ещё раз ✍️")
-        return
-    if days < 0:
-        await message.answer("Число должно быть >= 0")
-        return
-    await state.update_data(duration_days=days)
     await state.set_state(AdminPackageCreateFSM.photo_generations)
-    await message.answer("Сколько фото-генераций выдаёт пакет? ✍️")
+    await message.answer("Сколько кредитов начисляет пакет? ✍️")
 
 
 @router.message(AdminPackageCreateFSM.photo_generations)
-async def admin_package_create_photos(
+async def admin_package_create_credits(
     message: Message, state: FSMContext
 ) -> None:
     try:
-        photos = int((message.text or "").strip())
+        credits = int((message.text or "").strip())
     except Exception:
         await message.answer("Нужно целое число. Введи ещё раз ✍️")
         return
-    if photos < 0:
+    if credits < 0:
         await message.answer("Число должно быть >= 0")
         return
-    await state.update_data(photo_generations=photos)
-    await state.set_state(AdminPackageCreateFSM.video_generations)
-    await message.answer("Сколько видео-генераций выдаёт пакет? ✍️")
-
-
-@router.message(AdminPackageCreateFSM.video_generations)
-async def admin_package_create_videos(
-    message: Message, state: FSMContext
-) -> None:
-    try:
-        videos = int((message.text or "").strip())
-    except Exception:
-        await message.answer("Нужно целое число. Введи ещё раз ✍️")
-        return
-    if videos < 0:
-        await message.answer("Число должно быть >= 0")
-        return
-    await state.update_data(video_generations=videos)
+    await state.update_data(credit_amount=credits)
     await state.set_state(AdminPackageCreateFSM.price)
     await message.answer("Введите цену в рублях (например 750) ✍️")
 
@@ -324,9 +420,10 @@ async def admin_package_create_confirm(
 
     plan = Subscription(
         name=name,
-        duration_days=int(data.get("duration_days") or 0),
-        photo_generations=int(data.get("photo_generations") or 0),
-        video_generations=int(data.get("video_generations") or 0),
+        duration_days=0,
+        photo_generations=0,
+        video_generations=0,
+        credit_amount=int(data.get("credit_amount") or 0),
         price=Decimal(data.get("price") or 0),
         stars_price=int(data.get("stars_price") or 0),
     )
@@ -403,9 +500,7 @@ async def admin_package_field(
         return
     if field not in {
         "name",
-        "video_generations",
-        "photo_generations",
-        "duration_days",
+        "credit_amount",
         "price",
         "stars_price",
     }:
@@ -417,16 +512,14 @@ async def admin_package_field(
 
     if field == "name":
         prompt = "Введите новое название пакета ✍️"
-    elif field == "video_generations":
-        prompt = "Введите новое количество видео (целое число) ✍️"
-    elif field == "photo_generations":
-        prompt = "Введите новое количество фото (целое число) ✍️"
+    elif field == "credit_amount":
+        prompt = "Введите новое количество кредитов (целое число) ✍️"
     elif field == "price":
         prompt = "Введите новую цену в рублях (например 750) ✍️"
     elif field == "stars_price":
         prompt = "Введите новую цену в звёздах (целое число) ✍️"
     else:
-        prompt = "Введите новое количество дней действия (целое число) ✍️"
+        prompt = "Введите новое значение ✍️"
 
     if call.message:
         await call.message.answer(prompt)
@@ -529,12 +622,8 @@ async def admin_package_confirm(
             await call.answer("Пакет с таким названием уже существует", show_alert=True)
             return
         plan.name = name
-    elif field == "video_generations":
-        plan.video_generations = int(new_value)
-    elif field == "photo_generations":
-        plan.photo_generations = int(new_value)
-    elif field == "duration_days":
-        plan.duration_days = int(new_value)
+    elif field == "credit_amount":
+        plan.credit_amount = int(new_value)
     elif field == "price":
         plan.price = Decimal(new_value)
     elif field == "stars_price":
@@ -572,10 +661,11 @@ async def _render_users_page(
         reply_markup = admin_menu_kb()
     else:
         lines: list[str] = []
-        for uid, tg_id, username, created_at, photos, videos in rows:
+        for uid, tg_id, username, created_at, credits, free_credits, photos, videos in rows:
             uname = username or "-"
             lines.append(
                 f"• id={uid} tg={tg_id} @{uname} ({created_at:%Y-%m-%d}) "
+                f"осн={int(credits or 0)} free={int(free_credits or 0)} "
                 f"фото={int(photos or 0)} видео={int(videos or 0)}"
             )
         total_pages = max(1, (total_users + limit - 1) // limit)
@@ -692,6 +782,7 @@ async def admin_promo_list(call: CallbackQuery, session: AsyncSession) -> None:
         for p in promos:
             lines.append(
                 f"• <code>{p.code}</code> "
+                f"кредиты={int(getattr(p, 'bonus_credits', 0) or 0)} "
                 f"фото={p.bonus_photo} видео={p.bonus_video} "
                 f"использовано {p.used_count}/{p.max_uses}"
             )
@@ -707,82 +798,21 @@ async def admin_promo_code_in(message: Message, state: FSMContext) -> None:
         await message.answer("Промокод пустой. Введи ещё раз ✍️")
         return
     await state.update_data(code=code)
-    await state.set_state(AdminPromoFSM.kind)
-
-    kb = InlineKeyboardBuilder()
-    add_button(
-        kb, text="🖼 Только фото", callback_data=AdminCallbacks.promo_type("photo")
-    )
-    add_button(
-        kb, text="🎬 Только видео", callback_data=AdminCallbacks.promo_type("video")
-    )
-    add_button(
-        kb,
-        text="🖼+🎬 Фото и видео",
-        callback_data=AdminCallbacks.promo_type("both"),
-    )
-    kb.adjust(1)
-    await message.answer("Что выдаёт промокод?", reply_markup=kb.as_markup())
+    await state.set_state(AdminPromoFSM.credit_amount)
+    await message.answer("Сколько кредитов выдаёт промокод?")
 
 
-@router.callback_query(
-    AdminPromoFSM.kind, F.data.startswith(f"{AdminCallbacks.PROMO_TYPE}:")
-)
-async def admin_promo_type(call: CallbackQuery, state: FSMContext) -> None:
-    kind = (call.data or "").rsplit(":", 1)[-1].strip()
-    if kind not in {"photo", "video", "both"}:
-        await call.answer("Неверный тип", show_alert=True)
-        return
-    await state.update_data(kind=kind)
-    if kind == "photo":
-        await state.set_state(AdminPromoFSM.photo_count)
-        await edit_text_safe(call, "Сколько фото-генераций выдаёт промокод?")
-    elif kind == "video":
-        await state.set_state(AdminPromoFSM.video_count)
-        await edit_text_safe(call, "Сколько видео-генераций выдаёт промокод?")
-    else:
-        await state.set_state(AdminPromoFSM.photo_count)
-        await edit_text_safe(call, "Сколько фото-генераций выдаёт промокод?")
-    await call.answer()
-
-
-@router.message(AdminPromoFSM.photo_count)
-async def admin_promo_photo_count(message: Message, state: FSMContext) -> None:
+@router.message(AdminPromoFSM.credit_amount)
+async def admin_promo_credit_amount(message: Message, state: FSMContext) -> None:
     try:
         count = int((message.text or "").strip())
     except Exception:
         await message.answer("Нужно число. Введи ещё раз ✍️")
         return
-    if count < 0:
-        await message.answer("Число должно быть >= 0")
+    if count <= 0:
+        await message.answer("Число должно быть > 0")
         return
-    await state.update_data(photo_count=count)
-    data = await state.get_data()
-    kind = data.get("kind")
-    if kind == "photo":
-        await state.update_data(video_count=0)
-        await state.set_state(AdminPromoFSM.max_uses)
-        await message.answer("Сколько пользователей может активировать промокод?")
-    else:
-        await state.set_state(AdminPromoFSM.video_count)
-        await message.answer("Сколько видео-генераций выдаёт промокод?")
-
-
-@router.message(AdminPromoFSM.video_count)
-async def admin_promo_video_count(message: Message, state: FSMContext) -> None:
-    try:
-        count = int((message.text or "").strip())
-    except Exception:
-        await message.answer("Нужно число. Введи ещё раз ✍️")
-        return
-    if count < 0:
-        await message.answer("Число должно быть >= 0")
-        return
-    await state.update_data(video_count=count)
-    data = await state.get_data()
-    kind = data.get("kind")
-    if kind == "video":
-        await state.update_data(photo_count=0)
+    await state.update_data(credit_amount=count)
     await state.set_state(AdminPromoFSM.max_uses)
     await message.answer("Сколько пользователей может активировать промокод?")
 
@@ -800,8 +830,7 @@ async def admin_promo_max_uses(message: Message, state: FSMContext) -> None:
 
     data = await state.get_data()
     code = data.get("code")
-    photo_count = int(data.get("photo_count") or 0)
-    video_count = int(data.get("video_count") or 0)
+    credit_amount = int(data.get("credit_amount") or 0)
 
     await state.update_data(max_uses=count)
     await state.set_state(AdminPromoFSM.confirm)
@@ -809,8 +838,7 @@ async def admin_promo_max_uses(message: Message, state: FSMContext) -> None:
     await message.answer(
         "Проверь данные промокода:\n\n"
         f"Код: <b>{code}</b>\n"
-        f"Фото-генераций: <b>{photo_count}</b>\n"
-        f"Видео-генераций: <b>{video_count}</b>\n"
+        f"Кредитов: <b>{credit_amount}</b>\n"
         f"Лимит активаций: <b>{count}</b>\n\n"
         "Всё верно?",
         reply_markup=yes_no_kb(
@@ -832,16 +860,14 @@ async def admin_promo_confirm(
 ) -> None:
     data = await state.get_data()
     code = data.get("code") or ""
-    photo_count = int(data.get("photo_count") or 0)
-    video_count = int(data.get("video_count") or 0)
+    credit_amount = int(data.get("credit_amount") or 0)
     max_uses = int(data.get("max_uses") or 0)
 
     try:
         await create_promo_code(
             session,
             code=code,
-            bonus_photo=photo_count,
-            bonus_video=video_count,
+            bonus_credits=credit_amount,
             max_uses=max_uses,
         )
     except PromoError as e:

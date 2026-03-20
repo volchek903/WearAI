@@ -219,7 +219,7 @@ async def tryon_desc_in(
             )
         else:
             await message.answer(
-                "⛔️ Лимит генераций исчерпан.\n\nОформи подписку или пополни баланс 💳",
+                "⛔️ Недостаточно кредитов.\n\nПополните баланс 💳",
                 reply_markup=buy_generations_kb(),
             )
         return
@@ -286,7 +286,7 @@ async def tryon_desc_in(
                     }
                 )
 
-        await increment_generated_photos(session=session, tg_id=tg_id, delta=1)
+        await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="scenario_tryon")
 
         await state.set_data(
             {
