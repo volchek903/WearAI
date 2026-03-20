@@ -107,9 +107,23 @@ def install_tg_error_logging(
     try:
         loop = asyncio.get_event_loop()
 
+        def _is_transient_network_error(exc: BaseException | None) -> bool:
+            if exc is None:
+                return False
+            text = str(exc).lower()
+            transient_markers = {
+                "ssl shutdown timed out",
+                "connection lost",
+                "server disconnected",
+                "clientoserror",
+            }
+            return any(marker in text for marker in transient_markers)
+
         def _loop_exception_handler(loop, context) -> None:
             err = context.get("exception")
-            if err:
+            if err and _is_transient_network_error(err):
+                logger.warning("Asyncio transient network error: %s", err)
+            elif err:
                 logger.exception("Asyncio exception", exc_info=err)
             else:
                 logger.error("Asyncio error: %s", context.get("message"))
