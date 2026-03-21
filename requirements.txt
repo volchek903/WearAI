@@ -37,3 +37,4 @@ typing-inspection==0.4.2
 typing_extensions==4.15.0
 wheel==0.45.1
 yarl==1.22.0
+aiohttp-socks==0.10.1

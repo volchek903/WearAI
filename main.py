@@ -4,11 +4,14 @@ import asyncio
 import hashlib
 import logging
 import os
+from urllib.parse import quote
+from urllib.parse import urlsplit
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.client.session.aiohttp import AiohttpSession
 
 from app.db.init_db import init_db
 from app.db import engine, session_factory
@@ -80,6 +83,40 @@ def _secret_fingerprint(value: str) -> str:
     return f"len={len(v)} sha256[:10]={digest}"
 
 
+def _build_proxy_url() -> str | None:
+    # Preferred: full URL, e.g. http://user:pass@host:port or socks5://...
+    raw_url = (os.getenv("PROXY_URL") or "").strip()
+    if raw_url:
+        return raw_url
+
+    # Legacy compact format: host:port:user:password
+    compact = (os.getenv("BOT_PROXY") or "").strip()
+    if not compact:
+        return None
+    parts = compact.split(":")
+    if len(parts) == 4:
+        host, port, user, password = parts
+        user_enc = quote(user, safe="")
+        pass_enc = quote(password, safe="")
+        return f"http://{user_enc}:{pass_enc}@{host}:{port}"
+    if len(parts) == 2:
+        host, port = parts
+        return f"http://{host}:{port}"
+    return None
+
+
+def _proxy_log_view(proxy_url: str) -> str:
+    try:
+        parsed = urlsplit(proxy_url)
+        host = parsed.hostname or ""
+        port = f":{parsed.port}" if parsed.port else ""
+        user = f"{parsed.username}@" if parsed.username else ""
+        scheme = parsed.scheme or "http"
+        return f"{scheme}://{user}{host}{port}"
+    except Exception:
+        return "<invalid-proxy-url>"
+
+
 def setup_routers(dp: Dispatcher) -> None:
     # ВАЖНО: feedback_router должен быть ПЕРВЫМ,
     # чтобы message-хендлеры FeedbackFlow не перехватывались другими роутерами.
@@ -130,10 +167,29 @@ async def main() -> None:
     wavespeed_key = os.getenv("WAVESPEED_API_KEY", "").strip() or os.getenv("KIE_API_KEY", "").strip()
     log.info("startup: wavespeed_api_key_fingerprint=%s", _secret_fingerprint(wavespeed_key))
 
-    bot = Bot(
-        token=get_bot_token(),
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    )
+    proxy_url = _build_proxy_url()
+    if proxy_url:
+        log.info("startup: telegram proxy enabled (%s)", _proxy_log_view(proxy_url))
+        try:
+            bot_session = AiohttpSession(proxy=proxy_url)
+            bot = Bot(
+                token=get_bot_token(),
+                default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+                session=bot_session,
+            )
+        except RuntimeError as e:
+            log.warning(
+                "startup: proxy init failed, fallback to direct connection: %s", e
+            )
+            bot = Bot(
+                token=get_bot_token(),
+                default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+            )
+    else:
+        bot = Bot(
+            token=get_bot_token(),
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        )
     install_tg_error_logging(bot=bot, chat_id=830091750)
 
     dp = Dispatcher(storage=MemoryStorage())
