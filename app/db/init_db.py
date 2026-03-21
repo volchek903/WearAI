@@ -85,6 +85,25 @@ async def _ensure_sqlite_columns() -> None:
                 )
             )
 
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_users_free_generations_day "
+                "ON users(free_generations_day)"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_payments_user_tg_status_id "
+                "ON payments(user_tg_id, status, id)"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_payments_status_id "
+                "ON payments(status, id)"
+            )
+        )
+
 
 async def init_db() -> None:
     async with engine.begin() as conn:
