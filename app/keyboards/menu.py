@@ -22,6 +22,7 @@ class MenuCallbacks:
     PHOTO_OTHER = "menu:photo:other"
     PHOTO_ARCHIVE = "menu:photo:archive"
     VIDEO = "menu:video"
+    MUSIC = "menu:music"
     LOVE_IS = "menu:love_is"
     FEB23 = "menu:feb23"
     MAIN_DEFENDER = "menu:main_defender"
@@ -35,6 +36,7 @@ class MenuCallbacks:
     REAR_VIEW_MIRROR = "menu:rear_view_mirror"
     GTA_STYLE = "menu:gta_style"
     LEGO_STYLE = "menu:lego_style"
+    SIMS_STYLE = "menu:sims_style"
     GLAM_COLLAGE = "menu:glam_collage"
     FAQ = "menu:faq"
     SETTINGS = "menu:settings"
@@ -56,6 +58,7 @@ def main_menu_kb() -> InlineKeyboardMarkup:
 
     add_button(kb, text="🖼 Работа с фото", callback_data=MenuCallbacks.PHOTO)
     add_button(kb, text="🎬 Работа с видео", callback_data=MenuCallbacks.VIDEO)
+    add_button(kb, text="🎵 Работа с музыкой (СКОРО)", callback_data=MenuCallbacks.MUSIC)
     add_button(kb, text="✨ Доп. возможности", callback_data=MenuCallbacks.EXTRA)
     add_button(kb, text="❓ Вопросы (FAQ)", callback_data=MenuCallbacks.FAQ)
 
@@ -147,6 +150,7 @@ def photo_one_kb() -> InlineKeyboardMarkup:
     add_button(kb, text="🧥 Примерить одежду", callback_data=MenuCallbacks.TRYON)
     add_button(kb, text="🕶 GTA STYLE", callback_data=MenuCallbacks.GTA_STYLE)
     add_button(kb, text="🧱 LEGO Style", callback_data=MenuCallbacks.LEGO_STYLE)
+    add_button(kb, text="🎮 Sims стиль", callback_data=MenuCallbacks.SIMS_STYLE)
     add_button(kb, text="✨ Шикарный коллаж", callback_data=MenuCallbacks.GLAM_COLLAGE)
     add_button(kb, text="⬅️ Назад", callback_data=MenuCallbacks.PHOTO, style="danger")
     kb.adjust(1)

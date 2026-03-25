@@ -41,6 +41,7 @@ from app.handlers.cinema_bw import router as cinema_bw_router
 from app.handlers.second_life import router as second_life_router
 from app.handlers.gta_style import router as gta_style_router
 from app.handlers.lego_style import router as lego_style_router
+from app.handlers.sims_style import router as sims_style_router
 from app.handlers.glam_collage import router as glam_collage_router
 from app.handlers.feedback_offer_video import router as feedback_offer_video_router
 from app.handlers.admin_panel import router as admin_panel_router
@@ -142,6 +143,7 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(radar_router)
     dp.include_router(gta_style_router)
     dp.include_router(lego_style_router)
+    dp.include_router(sims_style_router)
     dp.include_router(glam_collage_router)
     dp.include_router(animate_router)
     dp.include_router(faq_router)

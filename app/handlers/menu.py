@@ -102,6 +102,16 @@ async def open_video_menu(call: CallbackQuery) -> None:
     await call.answer()
 
 
+@router.callback_query(F.data == MenuCallbacks.MUSIC)
+async def open_music_menu(call: CallbackQuery) -> None:
+    await edit_text_safe(
+        call,
+        "🎵 Работа с музыкой\n\nЭтот раздел уже в разработке.",
+        reply_markup=main_menu_kb(),
+    )
+    await call.answer()
+
+
 @router.callback_query(F.data == MenuCallbacks.BACK)
 async def back_to_main_menu(call: CallbackQuery) -> None:
     await edit_text_safe(call, "Главное меню 👇", reply_markup=main_menu_kb())
