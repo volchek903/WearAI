@@ -14,6 +14,7 @@ from app.keyboards.menu import (
     photo_other_kb,
     photo_archive_kb,
     video_menu_kb,
+    music_menu_kb,
 )
 from app.utils.tg_edit import edit_text_safe
 
@@ -106,8 +107,8 @@ async def open_video_menu(call: CallbackQuery) -> None:
 async def open_music_menu(call: CallbackQuery) -> None:
     await edit_text_safe(
         call,
-        "🎵 Работа с музыкой\n\nЭтот раздел уже в разработке.",
-        reply_markup=main_menu_kb(),
+        "🎵 Работа с музыкой\n\nТут будут находиться шаблоны для изготовления музыки 👇",
+        reply_markup=music_menu_kb(),
     )
     await call.answer()
 

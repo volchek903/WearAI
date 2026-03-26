@@ -23,6 +23,7 @@ class MenuCallbacks:
     PHOTO_ARCHIVE = "menu:photo:archive"
     VIDEO = "menu:video"
     MUSIC = "menu:music"
+    MUSIC_ACE_STEP = "menu:music:ace_step"
     LOVE_IS = "menu:love_is"
     FEB23 = "menu:feb23"
     MAIN_DEFENDER = "menu:main_defender"
@@ -165,6 +166,14 @@ def video_menu_kb() -> InlineKeyboardMarkup:
         text="🎞 Оживить фото по видео",
         callback_data=MenuCallbacks.MOTION_CONTROL,
     )
+    add_button(kb, text="⬅️ В меню", callback_data=MenuCallbacks.BACK, style="danger")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def music_menu_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    add_button(kb, text="🎼 Создать музыку (ace-step)", callback_data=MenuCallbacks.MUSIC_ACE_STEP)
     add_button(kb, text="⬅️ В меню", callback_data=MenuCallbacks.BACK, style="danger")
     kb.adjust(1)
     return kb.as_markup()

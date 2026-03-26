@@ -12,6 +12,7 @@ from app.models.app_setting import AppSetting
 MODEL_PRICE_NANO_BANANA_KEY = "model_price_nano_banana_2_photo"
 MODEL_PRICE_KLING_I2V_KEY = "model_price_kling_v30_std_i2v"
 MODEL_PRICE_KLING_MOTION_KEY = "model_price_kling_v26_std_motion"
+MODEL_PRICE_ACE_STEP_KEY = "model_price_ace_step_1_5_music_per_second"
 PRICING_MARKUP_MULTIPLIER_KEY = "pricing_markup_multiplier_pct"
 USD_TO_RUB_RATE_KEY = "pricing_usd_to_rub_rate"
 
@@ -23,6 +24,7 @@ DEFAULT_PROVIDER_COST_USD = {
     MODEL_PRICE_NANO_BANANA_KEY: Decimal("0.08"),
     MODEL_PRICE_KLING_I2V_KEY: Decimal("0.42"),
     MODEL_PRICE_KLING_MOTION_KEY: Decimal("0.21"),
+    MODEL_PRICE_ACE_STEP_KEY: Decimal("0.0003"),
 }
 
 
@@ -38,6 +40,7 @@ MODEL_TITLES = {
     MODEL_PRICE_NANO_BANANA_KEY: "Фото: Nano Banana 2",
     MODEL_PRICE_KLING_I2V_KEY: "Видео: Kling 3.0 Std I2V",
     MODEL_PRICE_KLING_MOTION_KEY: "Видео: Kling 2.6 Std Motion",
+    MODEL_PRICE_ACE_STEP_KEY: "Музыка: ACE-Step 1.5 (за 1 сек.)",
 }
 
 LAUNCH_DAILY_LIMIT_KEY = "launch_daily_limit"

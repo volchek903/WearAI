@@ -125,3 +125,15 @@ async def increment_generated_videos(
     if delta > 0 and section:
         await log_generation_event(session, tg_id=tg_id, section=section, kind="video")
     await finalize_video_generation(session, tg_id)
+
+
+async def increment_generated_music(
+    session: AsyncSession, tg_id: int, delta: int = 1, section: str | None = None
+) -> None:
+    from app.repository.analytics import log_generation_event
+    from app.repository.generations import finalize_video_generation
+
+    if delta > 0 and section:
+        for _ in range(int(delta)):
+            await log_generation_event(session, tg_id=tg_id, section=section, kind="music")
+    await finalize_video_generation(session, tg_id)

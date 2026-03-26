@@ -23,6 +23,7 @@ def create_engine():
     )
 
     if db_url.startswith("sqlite+aiosqlite://"):
+
         @event.listens_for(engine.sync_engine, "connect")
         def _set_sqlite_pragmas(dbapi_conn, _record) -> None:
             cur = dbapi_conn.cursor()

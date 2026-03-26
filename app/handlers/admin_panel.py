@@ -100,7 +100,7 @@ async def admin_restart(message: Message, session: AsyncSession) -> None:
 async def admin_stats(call: CallbackQuery, session: AsyncSession) -> None:
     if not await _ensure_admin(call, session, "admin_panel.stats"):
         return
-    total_users, active_subs, total_photos, total_videos = await get_users_stats(
+    total_users, active_subs, total_photos, total_videos, total_music = await get_users_stats(
         session
     )
     payments_count, revenue_rub = await get_revenue_stats(session)
@@ -117,7 +117,8 @@ async def admin_stats(call: CallbackQuery, session: AsyncSession) -> None:
         f"👥 Всего пользователей в БД: <code>{total_users}</code>\n"
         f"✅ Активных подписок: <code>{active_subs}</code>\n"
         f"🖼️ Сгенерировано фото: <code>{total_photos}</code>\n"
-        f"🎬 Сгенерировано видео: <code>{total_videos}</code>"
+        f"🎬 Сгенерировано видео: <code>{total_videos}</code>\n"
+        f"🎵 Сгенерировано музыки: <code>{total_music}</code>"
     )
 
     await edit_text_safe(call, text, reply_markup=admin_menu_kb())
@@ -230,8 +231,9 @@ async def _render_model_pricing(call: CallbackQuery, session: AsyncSession) -> N
         margin_rub = (Decimal(item.user_price_credits) - cost_rub).quantize(
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
+        unit = "кр./сек" if "per_second" in item.model_key else "кр."
         lines.append(
-            f"• <b>{item.title}</b>: {item.user_price_credits} кр. "
+            f"• <b>{item.title}</b>: {item.user_price_credits} {unit} "
             f"(себестоимость {item.provider_cost_usd}$ / {cost_rub} ₽, +{margin_rub} ₽)"
         )
     await edit_text_safe(
@@ -261,9 +263,10 @@ async def admin_model_price_edit(
         return
     await state.set_state(AdminModelPricingFSM.waiting_value)
     await state.update_data(model_key=model_key)
+    unit_hint = " в кредитах за 1 секунду" if "per_second" in model_key else " в кредитах"
     if call.message:
         await call.message.answer(
-            f"Введите новую цену в кредитах для «{MODEL_TITLES[model_key]}» ✍️"
+            f"Введите новую цену{unit_hint} для «{MODEL_TITLES[model_key]}» ✍️"
         )
     await call.answer()
 
@@ -288,8 +291,9 @@ async def admin_model_price_value(
         return
     await set_model_price_credits(session, model_key, value)
     await state.clear()
+    unit_hint = " кр./сек." if "per_second" in model_key else " кр."
     await message.answer(
-        f"Сохранено: {MODEL_TITLES[model_key]} = {value} кр.",
+        f"Сохранено: {MODEL_TITLES[model_key]} = {value}{unit_hint}",
         reply_markup=admin_menu_kb(),
     )
 

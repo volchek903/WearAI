@@ -253,9 +253,10 @@ def admin_package_fields_kb(plan_id: int) -> InlineKeyboardMarkup:
 def admin_model_pricing_kb(pricing) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for item in pricing:
+        unit = "кр./сек." if "per_second" in item.model_key else "кр."
         add_button(
             kb,
-            text=f"✏️ {item.title}: {item.user_price_credits} кр.",
+            text=f"✏️ {item.title}: {item.user_price_credits} {unit}",
             callback_data=AdminCallbacks.model_price_edit(item.model_key),
         )
     add_button(kb, text="⬅️ Назад", callback_data=AdminCallbacks.BACK, style="danger")

@@ -18,7 +18,9 @@ async def is_admin(session: AsyncSession, tg_id: int) -> bool:
     return (await session.scalar(stmt)) is not None
 
 
-async def get_users_stats(session: AsyncSession) -> tuple[int, int, int, int]:
+async def get_users_stats(session: AsyncSession) -> tuple[int, int, int, int, int]:
+    from app.models.generation_analytics import GenerationAnalytics
+
     total_users = await session.scalar(select(func.count(User.id)))
 
     active_subs = await session.scalar(
@@ -30,12 +32,16 @@ async def get_users_stats(session: AsyncSession) -> tuple[int, int, int, int]:
 
     total_photos = await session.scalar(select(func.sum(User.generated_photos)))
     total_videos = await session.scalar(select(func.sum(User.generated_videos)))
+    total_music = await session.scalar(
+        select(func.count(GenerationAnalytics.id)).where(GenerationAnalytics.kind == "music")
+    )
 
     return (
         int(total_users or 0),
         int(active_subs or 0),
         int(total_photos or 0),
         int(total_videos or 0),
+        int(total_music or 0),
     )
 
 
