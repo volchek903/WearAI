@@ -30,6 +30,7 @@ from app.utils.support_text import with_support
 from app.utils.tg_callback import safe_answer
 from app.utils.tg_edit import edit_text_safe
 from app.utils.tg_files import tg_file_id_to_bytes
+from app.utils.content_media import get_content_file
 from app.utils.wavespeed_kling_client import WaveSpeedKlingClient
 
 router = Router()
@@ -115,11 +116,15 @@ async def motion_control_entry(
     credits_per_second = await _credits_per_second(session)
     await safe_answer(call)
     if call.message:
-        await edit_text_safe(
-            call,
-            _build_intro_text(credits_per_second=credits_per_second),
-            reply_markup=None,
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
+        await call.message.answer_video(
+            get_content_file("kling_motion.mp4"),
+            caption=_build_intro_text(credits_per_second=credits_per_second),
             parse_mode="HTML",
+            request_timeout=20,
         )
 
 
