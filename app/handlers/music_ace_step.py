@@ -45,6 +45,7 @@ from app.utils.progress_bar import progress_initial_text, progress_loop, stop_pr
 from app.utils.support_text import launch_limits_message, with_support
 from app.utils.tg_callback import safe_answer
 from app.utils.tg_edit import edit_text_safe
+from app.utils.content_media import get_content_file
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -160,21 +161,30 @@ async def _render_tags_screen(
     *,
     credits_per_second: int,
 ) -> None:
+    text = await _build_tags_screen_text(state, credits_per_second=credits_per_second)
     data = await state.get_data()
     selected = set(data.get("selected_tags", []))
+    markup = tags_keyboard(categories=TAG_CATEGORIES, selected_values=selected)
+    if isinstance(target, CallbackQuery):
+        await edit_text_safe(target, text, reply_markup=markup, parse_mode="HTML")
+    else:
+        await target.answer(text, reply_markup=markup, parse_mode="HTML")
+
+
+async def _build_tags_screen_text(
+    state: FSMContext,
+    *,
+    credits_per_second: int,
+) -> str:
+    data = await state.get_data()
     selected_line = ", ".join(_selected_tag_labels(data.get("selected_tags", []))) or "ничего"
-    text = (
+    return (
         "Создадим песню. Сначала выбери стиль и теги.\n\n"
         f"Можно выбрать до {MAX_TAGS} тегов.\n"
         f"Сейчас выбрано: {selected_line}\n\n"
         f"Стоимость: <b>{credits_per_second} кр.</b> за 1 секунду музыки.\n"
         "Минимальная длительность трека — <b>30 секунд</b>."
     )
-    markup = tags_keyboard(categories=TAG_CATEGORIES, selected_values=selected)
-    if isinstance(target, CallbackQuery):
-        await edit_text_safe(target, text, reply_markup=markup, parse_mode="HTML")
-    else:
-        await target.answer(text, reply_markup=markup, parse_mode="HTML")
 
 
 async def _render_structure_screen(target: CallbackQuery | Message, state: FSMContext) -> None:
@@ -280,6 +290,13 @@ def _back_to_music_menu_text() -> str:
     return "🎵 Работа с музыкой\n\nТут будут находиться шаблоны для изготовления музыки 👇"
 
 
+async def _send_intro_audio(message: Message) -> None:
+    await message.answer_voice(
+        get_content_file("ace_music.mp3"),
+        caption="",
+    )
+
+
 async def _start_song_flow(
     target: CallbackQuery | Message,
     state: FSMContext,
@@ -326,7 +343,32 @@ async def create_song_from_menu(
     if await block_launch_for_call(call, session):
         return
     credits_per_second = await get_model_price_credits(session, MODEL_PRICE_ACE_STEP_KEY)
-    await _start_song_flow(call, state, credits_per_second=credits_per_second)
+    await state.clear()
+    await state.update_data(
+        selected_tags=[],
+        custom_sections=[],
+        sections=[],
+        section_texts={},
+        duration=None,
+        seed=DEFAULT_SEED,
+        instrumental=False,
+        credits_per_second=credits_per_second,
+    )
+    await state.set_state(MusicAceStepFlow.tags)
+    if call.message:
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
+        text = await _build_tags_screen_text(state, credits_per_second=credits_per_second)
+        data = await state.get_data()
+        selected = set(data.get("selected_tags", []))
+        await call.message.answer_voice(
+            get_content_file("ace_music.mp3"),
+            caption=text,
+            parse_mode="HTML",
+            reply_markup=tags_keyboard(categories=TAG_CATEGORIES, selected_values=selected),
+        )
 
 
 @router.callback_query(F.data == "music:noop")
