@@ -13,6 +13,11 @@ class MenuCallbacks:
     ANIMATE = "menu:animate"
     MOTION_CONTROL = "menu:motion_control"
     PHOTO = "menu:photo"
+    PHOTO_MODELS = "menu:photo:models"
+    NANO_BANANA_PRO = "menu:nano_banana_pro"
+    SEEDREAM_LITE = "menu:seedream_lite"
+    SEEDREAM_45 = "menu:seedream_45"
+    WAN_27 = "menu:wan_27"
     PHOTO_CARS = "menu:photo:cars"
     PHOTO_TWO = "menu:photo:two"
     DISNEY_STYLE = "menu:disney_style"
@@ -69,7 +74,7 @@ def main_menu_kb() -> InlineKeyboardMarkup:
 
 def photo_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    add_button(kb, text="🍌 Nano Banana 2", callback_data=MenuCallbacks.NANO_BANANA)
+    add_button(kb, text="Выбрать модель", callback_data=MenuCallbacks.PHOTO_MODELS)
     add_button(kb, text="🚗 Шаблоны с машинами", callback_data=MenuCallbacks.PHOTO_CARS)
     add_button(
         kb,
@@ -80,6 +85,18 @@ def photo_menu_kb() -> InlineKeyboardMarkup:
     add_button(kb, text="🧩 Другое", callback_data=MenuCallbacks.PHOTO_OTHER)
     add_button(kb, text="🗂 Архив", callback_data=MenuCallbacks.PHOTO_ARCHIVE)
     add_button(kb, text="⬅️ В меню", callback_data=MenuCallbacks.BACK, style="danger")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def photo_models_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    add_button(kb, text="🍌 Nano Banana 2", callback_data=MenuCallbacks.NANO_BANANA)
+    add_button(kb, text="🍌 Nano Banana Pro", callback_data=MenuCallbacks.NANO_BANANA_PRO)
+    add_button(kb, text="🌱 Seedream 5 Lite", callback_data=MenuCallbacks.SEEDREAM_LITE)
+    add_button(kb, text="🪧 Seedream 4.5", callback_data=MenuCallbacks.SEEDREAM_45)
+    add_button(kb, text="🌊 Wan 2.7", callback_data=MenuCallbacks.WAN_27)
+    add_button(kb, text="⬅️ Назад", callback_data=MenuCallbacks.PHOTO, style="danger")
     kb.adjust(1)
     return kb.as_markup()
 

@@ -86,7 +86,7 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
     add_button(kb, text="🏆 Топ рефералов", callback_data=AdminCallbacks.TOP_REFERRALS)
     add_button(kb, text="📦 Пакеты", callback_data=AdminCallbacks.PACKAGES)
     add_button(kb, text="💸 Настройка цен моделей", callback_data=AdminCallbacks.MODEL_PRICING)
-    add_button(kb, text="📈 Аналитика шаблонов", callback_data=AdminCallbacks.ANALYTICS)
+    add_button(kb, text="📈 Аналитика шаблонов и моделей", callback_data=AdminCallbacks.ANALYTICS)
     add_button(kb, text="🎟 Промокоды", callback_data=AdminCallbacks.PROMO)
     add_button(
         kb,

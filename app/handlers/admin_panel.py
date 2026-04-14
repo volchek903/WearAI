@@ -31,6 +31,7 @@ from app.keyboards.utils import add_button
 from app.repository.admin import is_admin, get_users_page, get_users_stats
 from app.repository.admin_actions import log_admin_action
 from app.repository.analytics import (
+    get_model_breakdown,
     get_revenue_stats,
     get_section_breakdown,
     get_top_sections,
@@ -132,8 +133,9 @@ async def admin_analytics(call: CallbackQuery, session: AsyncSession) -> None:
 
     top_sections = await get_top_sections(session, limit=5)
     breakdown = await get_section_breakdown(session)
+    model_breakdown = await get_model_breakdown(session)
 
-    lines = ["📈 <b>Аналитика шаблонов</b>", ""]
+    lines = ["📈 <b>Аналитика шаблонов и моделей</b>", ""]
     lines.append("🏆 Топ 5 шаблонов / разделов:")
     if not top_sections:
         lines.append("Пока нет данных.")
@@ -150,6 +152,11 @@ async def admin_analytics(call: CallbackQuery, session: AsyncSession) -> None:
             lines.append(
                 f"• <b>{section}</b> — всего {total_cnt}, фото {photo_cnt}, видео {video_cnt}"
             )
+
+    lines.append("")
+    lines.append("🤖 По моделям:")
+    for model_title, total_cnt in model_breakdown:
+        lines.append(f"• <b>{model_title}</b> — {total_cnt}")
 
     await edit_text_safe(call, "\n".join(lines), reply_markup=admin_menu_kb())
     await call.answer()

@@ -22,6 +22,9 @@ from app.handlers.feedback import router as feedback_router
 from app.handlers.start import router as start_router
 from app.handlers.scenario_model import router as model_router
 from app.handlers.nano_banana import router as nano_banana_router
+from app.handlers.seedream_45 import router as seedream_45_router
+from app.handlers.seedream_lite import router as seedream_lite_router
+from app.handlers.wan_27 import router as wan_27_router
 from app.handlers.drift_heart import router as drift_heart_router
 from app.handlers.rear_view_mirror import router as rear_view_mirror_router
 from app.handlers.motion_control import router as motion_control_router
@@ -128,6 +131,9 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(menu_router)
     dp.include_router(model_router)
     dp.include_router(nano_banana_router)
+    dp.include_router(seedream_45_router)
+    dp.include_router(seedream_lite_router)
+    dp.include_router(wan_27_router)
     dp.include_router(drift_heart_router)
     dp.include_router(rear_view_mirror_router)
     dp.include_router(motion_control_router)

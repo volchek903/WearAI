@@ -83,6 +83,22 @@ def _to_wavespeed_output(v: str) -> str:
     return "jpeg" if fmt == "jpg" else "png"
 
 
+def _seedream_size_from_aspect_ratio(v: str) -> str:
+    sizes = {
+        "1:1": "2048*2048",
+        "2:3": "1536*2304",
+        "3:2": "2304*1536",
+        "3:4": "1536*2048",
+        "4:3": "2048*1536",
+        "4:5": "1792*2240",
+        "5:4": "2240*1792",
+        "9:16": "1728*3072",
+        "16:9": "3072*1728",
+        "21:9": "3360*1440",
+    }
+    return sizes.get(_norm_aspect_ratio(v), "2048*2048")
+
+
 async def _load_photo_settings_from_db(
     session: AsyncSession, tg_id: int
 ) -> PhotoSettingsDTO:
@@ -261,6 +277,227 @@ class WaveSpeedClient:
             raise WaveSpeedError("WaveSpeed task requires at least one image URL")
 
         url = f"{self.api_base}/api/v3/google/nano-banana-2/edit"
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            resp = await client.post(
+                url,
+                headers={**self._headers(), "Content-Type": "application/json"},
+                json=body,
+            )
+            if resp.status_code != 200:
+                raise WaveSpeedError(
+                    f"WaveSpeed create task failed [HTTP {resp.status_code}]: {resp.text}"
+                )
+
+            payload = resp.json()
+            if int(payload.get("code", 0)) != 200:
+                raise WaveSpeedError(f"WaveSpeed create task failed: {payload}")
+
+            task_id = self._extract_task_id(payload)
+            if not task_id:
+                raise WaveSpeedError(f"WaveSpeed create task response has no id: {payload}")
+
+            return task_id
+
+    async def create_nano_banana_pro_edit_task(
+        self,
+        *,
+        prompt: str,
+        image_input_urls: Sequence[str],
+        settings: PhotoSettingsDTO | None = None,
+        session: AsyncSession | None = None,
+        tg_id: int | None = None,
+        callback_url: str | None = None,
+    ) -> str:
+        del callback_url
+
+        if session is not None and tg_id is not None:
+            try:
+                settings = await _load_photo_settings_from_db(
+                    session=session,
+                    tg_id=tg_id,
+                )
+            except Exception:
+                settings = settings or DEFAULT_PHOTO_SETTINGS
+
+        if settings is None:
+            settings = DEFAULT_PHOTO_SETTINGS
+
+        body: dict[str, Any] = {
+            "images": [str(u) for u in image_input_urls if isinstance(u, str) and u.strip()],
+            "prompt": prompt,
+            "aspect_ratio": _norm_aspect_ratio(settings.aspect_ratio),
+            "resolution": "1k",
+            "output_format": _to_wavespeed_output(settings.output_format),
+            "enable_sync_mode": False,
+            "enable_base64_output": False,
+        }
+
+        if not body["images"]:
+            raise WaveSpeedError("WaveSpeed task requires at least one image URL")
+
+        url = f"{self.api_base}/api/v3/google/nano-banana-pro/edit"
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            resp = await client.post(
+                url,
+                headers={**self._headers(), "Content-Type": "application/json"},
+                json=body,
+            )
+            if resp.status_code != 200:
+                raise WaveSpeedError(
+                    f"WaveSpeed create task failed [HTTP {resp.status_code}]: {resp.text}"
+                )
+
+            payload = resp.json()
+            if int(payload.get("code", 0)) != 200:
+                raise WaveSpeedError(f"WaveSpeed create task failed: {payload}")
+
+            task_id = self._extract_task_id(payload)
+            if not task_id:
+                raise WaveSpeedError(f"WaveSpeed create task response has no id: {payload}")
+
+            return task_id
+
+    async def create_seedream_v5_lite_task(
+        self,
+        *,
+        prompt: str,
+        reference_image_urls: Sequence[str] | None = None,
+        size: str | None = None,
+        output_format: str | None = None,
+        settings: PhotoSettingsDTO | None = None,
+        session: AsyncSession | None = None,
+        tg_id: int | None = None,
+        callback_url: str | None = None,
+    ) -> str:
+        del callback_url
+
+        if session is not None and tg_id is not None:
+            try:
+                settings = await _load_photo_settings_from_db(
+                    session=session,
+                    tg_id=tg_id,
+                )
+            except Exception:
+                settings = settings or DEFAULT_PHOTO_SETTINGS
+
+        if settings is None:
+            settings = DEFAULT_PHOTO_SETTINGS
+
+        ref_urls = [
+            str(url)
+            for url in (reference_image_urls or [])
+            if isinstance(url, str) and url.strip()
+        ]
+        body: dict[str, Any] = {
+            "prompt": prompt,
+            "enable_sync_mode": False,
+            "enable_base64_output": False,
+        }
+        if size:
+            body["size"] = str(size)
+        elif not ref_urls:
+            body["size"] = _seedream_size_from_aspect_ratio(settings.aspect_ratio)
+
+        body["output_format"] = _to_wavespeed_output(output_format or settings.output_format)
+
+        if ref_urls:
+            body["images"] = ref_urls
+            url = f"{self.api_base}/api/v3/bytedance/seedream-v5.0-lite/edit"
+        else:
+            url = f"{self.api_base}/api/v3/bytedance/seedream-v5.0-lite"
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            resp = await client.post(
+                url,
+                headers={**self._headers(), "Content-Type": "application/json"},
+                json=body,
+            )
+            if resp.status_code != 200:
+                raise WaveSpeedError(
+                    f"WaveSpeed create task failed [HTTP {resp.status_code}]: {resp.text}"
+                )
+
+            payload = resp.json()
+            if int(payload.get("code", 0)) != 200:
+                raise WaveSpeedError(f"WaveSpeed create task failed: {payload}")
+
+            task_id = self._extract_task_id(payload)
+            if not task_id:
+                raise WaveSpeedError(f"WaveSpeed create task response has no id: {payload}")
+
+            return task_id
+
+    async def create_wan_27_text_to_image_task(
+        self,
+        *,
+        prompt: str,
+        size: str | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        thinking_mode: bool | None = None,
+        seed: int | None = None,
+        callback_url: str | None = None,
+    ) -> str:
+        del callback_url
+
+        body: dict[str, Any] = {
+            "prompt": prompt,
+            "enable_sync_mode": False,
+            "enable_base64_output": False,
+        }
+        if width is not None and height is not None:
+            body["width"] = int(width)
+            body["height"] = int(height)
+        elif size:
+            body["size"] = str(size)
+        if thinking_mode is not None:
+            body["thinking_mode"] = bool(thinking_mode)
+        if seed is not None:
+            body["seed"] = int(seed)
+
+        url = f"{self.api_base}/api/v3/alibaba/wan-2.7/text-to-image"
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            resp = await client.post(
+                url,
+                headers={**self._headers(), "Content-Type": "application/json"},
+                json=body,
+            )
+            if resp.status_code != 200:
+                raise WaveSpeedError(
+                    f"WaveSpeed create task failed [HTTP {resp.status_code}]: {resp.text}"
+                )
+
+            payload = resp.json()
+            if int(payload.get("code", 0)) != 200:
+                raise WaveSpeedError(f"WaveSpeed create task failed: {payload}")
+
+            task_id = self._extract_task_id(payload)
+            if not task_id:
+                raise WaveSpeedError(f"WaveSpeed create task response has no id: {payload}")
+
+            return task_id
+
+    async def create_seedream_v45_task(
+        self,
+        *,
+        prompt: str,
+        size: str | None = None,
+        callback_url: str | None = None,
+    ) -> str:
+        del callback_url
+
+        body: dict[str, Any] = {
+            "prompt": prompt,
+            "enable_sync_mode": False,
+            "enable_base64_output": False,
+        }
+        if size:
+            body["size"] = str(size)
+
+        url = f"{self.api_base}/api/v3/bytedance/seedream-v4.5"
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.post(

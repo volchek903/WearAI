@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from urllib.parse import urlsplit
 from typing import Sequence
 
 from aiogram import Bot
@@ -45,6 +46,16 @@ def _normalize_aspect_ratio(v: str) -> str:
     if v == "auto" or v not in allowed:
         return "9:16"
     return v
+
+
+def _guess_image_extension(url: str) -> str:
+    path = urlsplit(url).path
+    ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+    if ext == "jpeg":
+        return "jpg"
+    if ext not in {"jpg", "png", "webp"}:
+        return "png"
+    return ext
 
 
 async def get_user_photo_settings(
@@ -108,6 +119,7 @@ async def generate_image_wavespeed_from_telegram(
     resolution: str | None = None,
     output_format: str | None = None,
     max_images: int = 5,
+    model_variant: str = "nano_banana_2",
 ) -> list[tuple[str, bytes]]:
     """
     Returns list of (filename, bytes) of generated images.
@@ -127,7 +139,7 @@ async def generate_image_wavespeed_from_telegram(
     wavespeed = WaveSpeedClient(api_key=get_wavespeed_api_key_from_env())
 
     # 1) TG -> bytes (до max_images)
-    safe_max = max(1, min(int(max_images or 0), 8))
+    safe_max = max(1, min(int(max_images or 0), 10))
     file_ids = list(telegram_photo_file_ids)[:safe_max]
     images_bytes: list[bytes] = []
     for fid in file_ids:
@@ -149,11 +161,18 @@ async def generate_image_wavespeed_from_telegram(
         uploaded_urls.append(url)
 
     # 3) createTask (nano-banana-2) — settings уже из БД
-    task_id = await wavespeed.create_nano_banana_2_task(
-        prompt=prompt,
-        image_input_urls=uploaded_urls,
-        settings=settings,
-    )
+    if model_variant == "nano_banana_pro":
+        task_id = await wavespeed.create_nano_banana_pro_edit_task(
+            prompt=prompt,
+            image_input_urls=uploaded_urls,
+            settings=settings,
+        )
+    else:
+        task_id = await wavespeed.create_nano_banana_2_task(
+            prompt=prompt,
+            image_input_urls=uploaded_urls,
+            settings=settings,
+        )
 
     # 4) wait -> result urls
     result_urls = await wavespeed.wait_result_urls(task_id)
@@ -163,6 +182,131 @@ async def generate_image_wavespeed_from_telegram(
     for idx, url in enumerate(result_urls, start=1):
         img_bytes = await wavespeed.download_bytes(url)
         out.append((f"result_{idx}.{settings.output_format}", img_bytes))
+
+    return out
+
+
+async def _upload_tg_reference_images(
+    *,
+    bot: Bot,
+    wavespeed: WaveSpeedClient,
+    tg_id: int,
+    telegram_photo_file_ids: Sequence[str],
+    output_format: str,
+    max_images: int,
+) -> list[str]:
+    safe_max = max(0, min(int(max_images or 0), 10))
+    file_ids = list(telegram_photo_file_ids)[:safe_max]
+    uploaded_urls: list[str] = []
+
+    for idx, fid in enumerate(file_ids, start=1):
+        data = await tg_file_id_to_bytes(bot, fid, tg_id=tg_id)
+        filename = f"{tg_id}_seedream_{idx}.{output_format}"
+        url = await wavespeed.upload_image_bytes(
+            data=data,
+            filename=filename,
+            upload_path=f"wearai/{tg_id}/seedream",
+        )
+        uploaded_urls.append(url)
+
+    return uploaded_urls
+
+
+async def generate_seedream_v5_lite(
+    *,
+    bot: Bot,
+    session: AsyncSession,
+    tg_id: int,
+    prompt: str,
+    telegram_photo_file_ids: Sequence[str] = (),
+    size: str | None = None,
+    output_format: str | None = None,
+) -> list[tuple[str, bytes]]:
+    settings = await get_user_photo_settings(session, tg_id)
+    result_format = _normalize_output_format(output_format or settings.output_format)
+    wavespeed = WaveSpeedClient(api_key=get_wavespeed_api_key_from_env())
+
+    uploaded_urls = await _upload_tg_reference_images(
+        bot=bot,
+        wavespeed=wavespeed,
+        tg_id=tg_id,
+        telegram_photo_file_ids=telegram_photo_file_ids,
+        output_format=result_format,
+        max_images=10,
+    )
+
+    task_id = await wavespeed.create_seedream_v5_lite_task(
+        prompt=prompt,
+        reference_image_urls=uploaded_urls,
+        size=size,
+        output_format=result_format,
+        settings=PhotoSettingsDTO(
+            aspect_ratio=settings.aspect_ratio,
+            resolution=settings.resolution,
+            output_format=result_format,
+        ),
+    )
+    result_urls = await wavespeed.wait_result_urls(task_id)
+
+    out: list[tuple[str, bytes]] = []
+    for idx, url in enumerate(result_urls, start=1):
+        img_bytes = await wavespeed.download_bytes(url)
+        out.append((f"result_{idx}.{result_format}", img_bytes))
+
+    return out
+
+
+async def generate_wan_27_image(
+    *,
+    session: AsyncSession,
+    tg_id: int,
+    prompt: str,
+    size: str | None = None,
+    width: int | None = None,
+    height: int | None = None,
+    thinking_mode: bool | None = None,
+    seed: int | None = None,
+) -> list[tuple[str, bytes]]:
+    del session, tg_id
+    wavespeed = WaveSpeedClient(api_key=get_wavespeed_api_key_from_env())
+
+    task_id = await wavespeed.create_wan_27_text_to_image_task(
+        prompt=prompt,
+        size=size,
+        width=width,
+        height=height,
+        thinking_mode=thinking_mode,
+        seed=seed,
+    )
+    result_urls = await wavespeed.wait_result_urls(task_id)
+
+    out: list[tuple[str, bytes]] = []
+    for idx, url in enumerate(result_urls, start=1):
+        img_bytes = await wavespeed.download_bytes(url)
+        ext = _guess_image_extension(url)
+        out.append((f"result_{idx}.{ext}", img_bytes))
+
+    return out
+
+
+async def generate_seedream_v45_image(
+    *,
+    prompt: str,
+    size: str | None = None,
+) -> list[tuple[str, bytes]]:
+    wavespeed = WaveSpeedClient(api_key=get_wavespeed_api_key_from_env())
+
+    task_id = await wavespeed.create_seedream_v45_task(
+        prompt=prompt,
+        size=size,
+    )
+    result_urls = await wavespeed.wait_result_urls(task_id)
+
+    out: list[tuple[str, bytes]] = []
+    for idx, url in enumerate(result_urls, start=1):
+        img_bytes = await wavespeed.download_bytes(url)
+        ext = _guess_image_extension(url)
+        out.append((f"result_{idx}.{ext}", img_bytes))
 
     return out
 

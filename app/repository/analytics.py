@@ -9,6 +9,14 @@ from app.models.generation_analytics import GenerationAnalytics
 from app.models.payment import Payment, PaymentStatus
 from app.models.user import User
 
+MODEL_SECTION_TITLES = {
+    "nano_banana": "Nano Banana 2",
+    "nano_banana_pro": "Nano Banana Pro",
+    "seedream_v5_lite": "Seedream 5 Lite",
+    "seedream_v45": "Seedream 4.5",
+    "wan_27": "Wan 2.7",
+}
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -98,4 +106,20 @@ async def get_section_breakdown(
     return [
         (str(section), int(photo_cnt or 0), int(video_cnt or 0), int(total_cnt or 0))
         for section, photo_cnt, video_cnt, total_cnt in rows.all()
+    ]
+
+
+async def get_model_breakdown(session: AsyncSession) -> list[tuple[str, int]]:
+    rows = await session.execute(
+        select(
+            GenerationAnalytics.section,
+            func.count(GenerationAnalytics.id).label("cnt"),
+        )
+        .where(GenerationAnalytics.section.in_(tuple(MODEL_SECTION_TITLES)))
+        .group_by(GenerationAnalytics.section)
+    )
+    counts = {str(section): int(cnt or 0) for section, cnt in rows.all()}
+    return [
+        (title, counts.get(section, 0))
+        for section, title in MODEL_SECTION_TITLES.items()
     ]
