@@ -9,6 +9,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# 3
 from app.keyboards.confirm import ConfirmCallbacks, yes_no_kb
 from app.keyboards.extra import buy_generations_kb
 from app.keyboards.menu import MenuCallbacks, photo_menu_kb
