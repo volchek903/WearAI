@@ -311,6 +311,73 @@ async def generate_seedream_v45_image(
     return out
 
 
+async def generate_gpt_image_2_text_to_image(
+    *,
+    prompt: str,
+    aspect_ratio: str | None = None,
+    resolution: str | None = None,
+    quality: str | None = None,
+) -> list[tuple[str, bytes]]:
+    wavespeed = WaveSpeedClient(api_key=get_wavespeed_api_key_from_env())
+
+    task_id = await wavespeed.create_gpt_image_2_text_to_image_task(
+        prompt=prompt,
+        aspect_ratio=aspect_ratio,
+        resolution=resolution,
+        quality=quality,
+    )
+    result_urls = await wavespeed.wait_result_urls(task_id)
+
+    out: list[tuple[str, bytes]] = []
+    for idx, url in enumerate(result_urls, start=1):
+        img_bytes = await wavespeed.download_bytes(url)
+        ext = _guess_image_extension(url)
+        out.append((f"result_{idx}.{ext}", img_bytes))
+
+    return out
+
+
+async def generate_gpt_image_2_edit_from_telegram(
+    *,
+    bot: Bot,
+    session: AsyncSession,
+    tg_id: int,
+    prompt: str,
+    telegram_photo_file_ids: Sequence[str],
+    aspect_ratio: str | None = None,
+    resolution: str | None = None,
+    quality: str | None = None,
+    max_images: int = 5,
+) -> list[tuple[str, bytes]]:
+    del session
+    wavespeed = WaveSpeedClient(api_key=get_wavespeed_api_key_from_env())
+
+    uploaded_urls = await _upload_tg_reference_images(
+        bot=bot,
+        wavespeed=wavespeed,
+        tg_id=tg_id,
+        telegram_photo_file_ids=telegram_photo_file_ids,
+        output_format="png",
+        max_images=max_images,
+    )
+    task_id = await wavespeed.create_gpt_image_2_edit_task(
+        prompt=prompt,
+        image_input_urls=uploaded_urls,
+        aspect_ratio=aspect_ratio,
+        resolution=resolution,
+        quality=quality,
+    )
+    result_urls = await wavespeed.wait_result_urls(task_id)
+
+    out: list[tuple[str, bytes]] = []
+    for idx, url in enumerate(result_urls, start=1):
+        img_bytes = await wavespeed.download_bytes(url)
+        ext = _guess_image_extension(url)
+        out.append((f"result_{idx}.{ext}", img_bytes))
+
+    return out
+
+
 async def generate_image_wavespeed_from_telegram_with_extra(
     *,
     bot: Bot,

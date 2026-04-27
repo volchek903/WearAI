@@ -18,6 +18,8 @@ class MenuCallbacks:
     SEEDREAM_LITE = "menu:seedream_lite"
     SEEDREAM_45 = "menu:seedream_45"
     WAN_27 = "menu:wan_27"
+    GPT_IMAGE_2_EDIT = "menu:gpt_image_2_edit"
+    GPT_IMAGE_2_TEXT_TO_IMAGE = "menu:gpt_image_2_text_to_image"
     PHOTO_CARS = "menu:photo:cars"
     PHOTO_TWO = "menu:photo:two"
     DISNEY_STYLE = "menu:disney_style"
@@ -96,6 +98,12 @@ def photo_models_kb() -> InlineKeyboardMarkup:
     add_button(kb, text="🌱 Seedream 5 Lite", callback_data=MenuCallbacks.SEEDREAM_LITE)
     add_button(kb, text="🪧 Seedream 4.5", callback_data=MenuCallbacks.SEEDREAM_45)
     add_button(kb, text="🌊 Wan 2.7", callback_data=MenuCallbacks.WAN_27)
+    add_button(kb, text="🖌 GPT Image 2 / Edit", callback_data=MenuCallbacks.GPT_IMAGE_2_EDIT)
+    add_button(
+        kb,
+        text="🎨 GPT Image 2 / Text to Image",
+        callback_data=MenuCallbacks.GPT_IMAGE_2_TEXT_TO_IMAGE,
+    )
     add_button(kb, text="⬅️ Назад", callback_data=MenuCallbacks.PHOTO, style="danger")
     kb.adjust(1)
     return kb.as_markup()

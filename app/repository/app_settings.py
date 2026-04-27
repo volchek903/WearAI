@@ -14,6 +14,8 @@ MODEL_PRICE_NANO_BANANA_PRO_KEY = "model_price_nano_banana_pro_photo"
 MODEL_PRICE_SEEDREAM_V5_LITE_KEY = "model_price_seedream_v5_lite_photo"
 MODEL_PRICE_SEEDREAM_V45_KEY = "model_price_seedream_v45_text_to_image"
 MODEL_PRICE_WAN_27_KEY = "model_price_wan_27_text_to_image"
+MODEL_PRICE_GPT_IMAGE_2_EDIT_KEY = "model_price_gpt_image_2_edit"
+MODEL_PRICE_GPT_IMAGE_2_TEXT_TO_IMAGE_KEY = "model_price_gpt_image_2_text_to_image"
 MODEL_PRICE_KLING_I2V_KEY = "model_price_kling_v30_std_i2v"
 MODEL_PRICE_KLING_MOTION_KEY = "model_price_kling_v26_std_motion"
 MODEL_PRICE_ACE_STEP_KEY = "model_price_ace_step_1_5_music_per_second"
@@ -30,6 +32,8 @@ DEFAULT_PROVIDER_COST_USD = {
     MODEL_PRICE_SEEDREAM_V5_LITE_KEY: Decimal("0.035"),
     MODEL_PRICE_SEEDREAM_V45_KEY: Decimal("0.04"),
     MODEL_PRICE_WAN_27_KEY: Decimal("0.03"),
+    MODEL_PRICE_GPT_IMAGE_2_EDIT_KEY: Decimal("0.06"),
+    MODEL_PRICE_GPT_IMAGE_2_TEXT_TO_IMAGE_KEY: Decimal("0.06"),
     MODEL_PRICE_KLING_I2V_KEY: Decimal("0.42"),
     MODEL_PRICE_KLING_MOTION_KEY: Decimal("0.21"),
     MODEL_PRICE_ACE_STEP_KEY: Decimal("0.0003"),
@@ -50,6 +54,8 @@ MODEL_TITLES = {
     MODEL_PRICE_SEEDREAM_V5_LITE_KEY: "Фото: Seedream 5 Lite",
     MODEL_PRICE_SEEDREAM_V45_KEY: "Фото: Seedream 4.5",
     MODEL_PRICE_WAN_27_KEY: "Фото: Wan 2.7",
+    MODEL_PRICE_GPT_IMAGE_2_EDIT_KEY: "Фото: GPT Image 2 Edit (base 1K medium)",
+    MODEL_PRICE_GPT_IMAGE_2_TEXT_TO_IMAGE_KEY: "Фото: GPT Image 2 Text-to-Image (base 1K medium)",
     MODEL_PRICE_KLING_I2V_KEY: "Видео: Kling 3.0 Std I2V",
     MODEL_PRICE_KLING_MOTION_KEY: "Видео: Kling 2.6 Std Motion",
     MODEL_PRICE_ACE_STEP_KEY: "Музыка: ACE-Step 1.5 (за 1 сек.)",
@@ -143,6 +149,25 @@ async def get_model_price_credits(session: AsyncSession, model_key: str) -> int:
         raise KeyError(f"Unknown pricing model key: {model_key}")
     await ensure_model_pricing_settings(session)
     return await _get_int_setting(session, model_key, 0)
+
+
+async def get_scaled_model_price_credits(
+    session: AsyncSession,
+    model_key: str,
+    provider_cost_usd: Decimal,
+) -> int:
+    if model_key not in DEFAULT_PROVIDER_COST_USD:
+        raise KeyError(f"Unknown pricing model key: {model_key}")
+
+    base_cost = DEFAULT_PROVIDER_COST_USD[model_key]
+    if base_cost <= 0 or provider_cost_usd <= 0:
+        return await get_model_price_credits(session, model_key)
+
+    base_price = await get_model_price_credits(session, model_key)
+    scaled_price = (
+        Decimal(base_price) * (provider_cost_usd / base_cost)
+    ).quantize(Decimal("1"), rounding=ROUND_UP)
+    return max(1, int(scaled_price))
 
 
 async def set_model_price_credits(

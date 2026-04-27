@@ -22,6 +22,7 @@ from app.handlers.feedback import router as feedback_router
 from app.handlers.start import router as start_router
 from app.handlers.scenario_model import router as model_router
 from app.handlers.nano_banana import router as nano_banana_router
+from app.handlers.gpt_image_2 import router as gpt_image_2_router
 from app.handlers.seedream_45 import router as seedream_45_router
 from app.handlers.seedream_lite import router as seedream_lite_router
 from app.handlers.wan_27 import router as wan_27_router
@@ -64,6 +65,8 @@ from app.utils.tg_logging import install_tg_error_logging
 from app.services.admin_seed import ensure_root_admin
 from app.repository.app_settings import ensure_model_pricing_settings
 
+DEFAULT_BOT_PROXY = "181.177.87.34:9028:124kwv:JSSmg1"
+
 
 def setup_logging() -> None:
     logging.basicConfig(
@@ -90,12 +93,18 @@ def _secret_fingerprint(value: str) -> str:
 
 def _build_proxy_url() -> str | None:
     # Preferred: full URL, e.g. http://user:pass@host:port or socks5://...
-    raw_url = (os.getenv("PROXY_URL") or "").strip()
+    raw_url = (
+        os.getenv("PROXY_URL")
+        or os.getenv("ALL_PROXY")
+        or os.getenv("HTTPS_PROXY")
+        or os.getenv("HTTP_PROXY")
+        or ""
+    ).strip()
     if raw_url:
         return raw_url
 
     # Legacy compact format: host:port:user:password
-    compact = (os.getenv("BOT_PROXY") or "").strip()
+    compact = (os.getenv("BOT_PROXY") or DEFAULT_BOT_PROXY).strip()
     if not compact:
         return None
     parts = compact.split(":")
@@ -108,6 +117,25 @@ def _build_proxy_url() -> str | None:
         host, port = parts
         return f"http://{host}:{port}"
     return None
+
+
+def _apply_proxy_env_defaults() -> str | None:
+    proxy_url = _build_proxy_url()
+    if not proxy_url:
+        return None
+
+    os.environ.setdefault("BOT_PROXY", DEFAULT_BOT_PROXY)
+    for key in (
+        "PROXY_URL",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+    ):
+        os.environ.setdefault(key, proxy_url)
+    return proxy_url
 
 
 def _proxy_log_view(proxy_url: str) -> str:
@@ -131,6 +159,7 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(menu_router)
     dp.include_router(model_router)
     dp.include_router(nano_banana_router)
+    dp.include_router(gpt_image_2_router)
     dp.include_router(seedream_45_router)
     dp.include_router(seedream_lite_router)
     dp.include_router(wan_27_router)
@@ -177,7 +206,7 @@ async def main() -> None:
     wavespeed_key = os.getenv("WAVESPEED_API_KEY", "").strip() or os.getenv("KIE_API_KEY", "").strip()
     log.info("startup: wavespeed_api_key_fingerprint=%s", _secret_fingerprint(wavespeed_key))
 
-    proxy_url = _build_proxy_url()
+    proxy_url = _apply_proxy_env_defaults()
     if proxy_url:
         log.info("startup: telegram proxy enabled (%s)", _proxy_log_view(proxy_url))
         try:

@@ -15,6 +15,8 @@ MODEL_SECTION_TITLES = {
     "seedream_v5_lite": "Seedream 5 Lite",
     "seedream_v45": "Seedream 4.5",
     "wan_27": "Wan 2.7",
+    "gpt_image_2_edit": "GPT Image 2 Edit",
+    "gpt_image_2_text_to_image": "GPT Image 2 Text-to-Image",
 }
 
 

@@ -40,6 +40,7 @@ _ALLOWED_ASPECTS = {
 }
 _ALLOWED_RESOLUTIONS = {"1K", "2K", "4K"}
 _ALLOWED_FORMATS = {"png", "jpg", "jpeg"}
+_ALLOWED_QUALITIES = {"low", "medium", "high"}
 _SUCCESS_STATES = {"completed", "succeeded", "success", "done", "finished"}
 _FAILED_STATES = {
     "failed",
@@ -81,6 +82,19 @@ def _to_wavespeed_resolution(v: str) -> str:
 def _to_wavespeed_output(v: str) -> str:
     fmt = _norm_output_format(v)
     return "jpeg" if fmt == "jpg" else "png"
+
+
+def _norm_gpt_image_2_resolution(v: str, *, allow_4k: bool) -> str:
+    raw = str(v or "").strip().lower()
+    allowed = {"1k", "2k", "4k"} if allow_4k else {"1k", "2k"}
+    if raw not in allowed:
+        return "1k"
+    return raw
+
+
+def _norm_quality(v: str) -> str:
+    raw = str(v or "").strip().lower()
+    return raw if raw in _ALLOWED_QUALITIES else "medium"
 
 
 def _seedream_size_from_aspect_ratio(v: str) -> str:
@@ -238,6 +252,37 @@ class WaveSpeedClient:
                 )
 
             return str(download_url)
+
+    async def _create_prediction_task(
+        self,
+        *,
+        endpoint: str,
+        body: dict[str, Any],
+    ) -> str:
+        url = f"{self.api_base}/api/v3/{endpoint.lstrip('/')}"
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            resp = await client.post(
+                url,
+                headers={**self._headers(), "Content-Type": "application/json"},
+                json=body,
+            )
+            if resp.status_code != 200:
+                raise WaveSpeedError(
+                    f"WaveSpeed create task failed [HTTP {resp.status_code}]: {resp.text}"
+                )
+
+            payload = resp.json()
+            if int(payload.get("code", 0)) != 200:
+                raise WaveSpeedError(f"WaveSpeed create task failed: {payload}")
+
+            task_id = self._extract_task_id(payload)
+            if not task_id:
+                raise WaveSpeedError(
+                    f"WaveSpeed create task response has no id: {payload}"
+                )
+
+            return task_id
 
     async def create_nano_banana_2_task(
         self,
@@ -519,6 +564,72 @@ class WaveSpeedClient:
                 raise WaveSpeedError(f"WaveSpeed create task response has no id: {payload}")
 
             return task_id
+
+    async def create_gpt_image_2_text_to_image_task(
+        self,
+        *,
+        prompt: str,
+        aspect_ratio: str | None = None,
+        resolution: str | None = None,
+        quality: str | None = None,
+        callback_url: str | None = None,
+    ) -> str:
+        del callback_url
+
+        body: dict[str, Any] = {
+            "prompt": prompt,
+            "resolution": _norm_gpt_image_2_resolution(
+                resolution or "1k",
+                allow_4k=True,
+            ),
+            "quality": _norm_quality(quality or "medium"),
+            "enable_sync_mode": False,
+            "enable_base64_output": False,
+        }
+        if aspect_ratio:
+            body["aspect_ratio"] = _norm_aspect_ratio(aspect_ratio)
+
+        return await self._create_prediction_task(
+            endpoint="openai/gpt-image-2/text-to-image",
+            body=body,
+        )
+
+    async def create_gpt_image_2_edit_task(
+        self,
+        *,
+        prompt: str,
+        image_input_urls: Sequence[str],
+        aspect_ratio: str | None = None,
+        resolution: str | None = None,
+        quality: str | None = None,
+        callback_url: str | None = None,
+    ) -> str:
+        del callback_url
+
+        body: dict[str, Any] = {
+            "images": [
+                str(url)
+                for url in image_input_urls
+                if isinstance(url, str) and url.strip()
+            ],
+            "prompt": prompt,
+            "resolution": _norm_gpt_image_2_resolution(
+                resolution or "1k",
+                allow_4k=False,
+            ),
+            "quality": _norm_quality(quality or "medium"),
+            "enable_sync_mode": False,
+            "enable_base64_output": False,
+        }
+        if not body["images"]:
+            raise WaveSpeedError("WaveSpeed task requires at least one image URL")
+        if aspect_ratio and aspect_ratio != "auto":
+            body["aspect_ratio"] = _norm_aspect_ratio(aspect_ratio)
+
+        return await self._create_prediction_task(
+            endpoint="openai/gpt-image-2/edit",
+            body=body,
+        )
 
     async def get_task(self, task_id: str) -> dict[str, Any]:
         url = f"{self.api_base}/api/v3/predictions/{task_id}/result"

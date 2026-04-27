@@ -204,9 +204,16 @@ async def _finalize_pending_charge(
 
 
 async def charge_photo_generation(
-    session: AsyncSession, tg_id: int, model_key: str = PHOTO_MODEL_KEY
+    session: AsyncSession,
+    tg_id: int,
+    model_key: str = PHOTO_MODEL_KEY,
+    credits_override: int | None = None,
 ) -> ChargeResult:
-    credits = await get_model_price_credits(session, model_key)
+    credits = (
+        int(credits_override)
+        if credits_override is not None
+        else await get_model_price_credits(session, model_key)
+    )
     return await _charge_credits(
         session,
         tg_id=tg_id,
