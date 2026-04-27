@@ -62,6 +62,7 @@ from app.services.payment_poller import run_payment_poller  # NEW
 from app.services.admin_log_cleanup import run_admin_log_cleanup
 from app.services.platega_callback import run_platega_callback_server
 from app.utils.tg_logging import install_tg_error_logging
+from app.utils.retrying_bot import RetryingBot
 from app.services.admin_seed import ensure_root_admin
 from app.repository.app_settings import ensure_model_pricing_settings
 
@@ -211,7 +212,7 @@ async def main() -> None:
         log.info("startup: telegram proxy enabled (%s)", _proxy_log_view(proxy_url))
         try:
             bot_session = AiohttpSession(proxy=proxy_url)
-            bot = Bot(
+            bot = RetryingBot(
                 token=get_bot_token(),
                 default=DefaultBotProperties(parse_mode=ParseMode.HTML),
                 session=bot_session,
@@ -220,12 +221,12 @@ async def main() -> None:
             log.warning(
                 "startup: proxy init failed, fallback to direct connection: %s", e
             )
-            bot = Bot(
+            bot = RetryingBot(
                 token=get_bot_token(),
                 default=DefaultBotProperties(parse_mode=ParseMode.HTML),
             )
     else:
-        bot = Bot(
+        bot = RetryingBot(
             token=get_bot_token(),
             default=DefaultBotProperties(parse_mode=ParseMode.HTML),
         )

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from aiogram import Router
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.types import CallbackQuery, Message
 
 from app.keyboards.menu import main_menu_kb
@@ -16,6 +16,14 @@ logger = logging.getLogger(__name__)
 
 @router.error()
 async def global_error_handler(event, exception: Exception | None = None, **kwargs):
+    if isinstance(exception, TelegramRetryAfter):
+        retry_after = float(getattr(exception, "retry_after", 0) or 0)
+        logger.warning(
+            "global_error_handler: suppressed TelegramRetryAfter retry_after=%ss",
+            retry_after,
+        )
+        return True
+
     try:
         update = getattr(event, "update", None)
         if update and getattr(update, "callback_query", None):
@@ -31,7 +39,7 @@ async def global_error_handler(event, exception: Exception | None = None, **kwar
             )
             try:
                 await call.answer()
-            except TelegramBadRequest:
+            except (TelegramBadRequest, TelegramRetryAfter):
                 pass
             return True
         if update and getattr(update, "message", None):
@@ -45,6 +53,11 @@ async def global_error_handler(event, exception: Exception | None = None, **kwar
                 reply_markup=main_menu_kb(),
             )
             return True
+    except TelegramRetryAfter as e:
+        logger.warning(
+            "global_error_handler: reply hit TelegramRetryAfter retry_after=%ss",
+            float(getattr(e, "retry_after", 0) or 0),
+        )
     except Exception:
         logger.exception("global_error_handler failed")
     return True
