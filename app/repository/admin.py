@@ -72,7 +72,10 @@ async def get_users_page(
     session: AsyncSession,
     limit: int,
     offset: int,
-) -> tuple[list[tuple[int, int, str | None, object, int, int]], int]:
+) -> tuple[
+    list[tuple[int, int, str | None, object, int, int, int, int]],
+    int,
+]:
     total_users = await session.scalar(select(func.count(User.id)))
     result = await session.execute(
         select(
@@ -80,6 +83,8 @@ async def get_users_page(
             User.tg_id,
             User.username,
             User.created_at,
+            User.credit_balance,
+            User.free_credit_balance,
             User.generated_photos,
             User.generated_videos,
         )
