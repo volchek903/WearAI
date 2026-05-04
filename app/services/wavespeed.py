@@ -24,6 +24,21 @@ _FAILED_STATES = {
     "aborted",
     "timeout",
 }
+_RETRYABLE_HTTP_GET_ERRORS = (
+    httpx.TimeoutException,
+    httpx.ConnectError,
+    httpx.ReadError,
+    httpx.RemoteProtocolError,
+)
+
+
+def _format_transport_error(exc: Exception | None) -> str:
+    if exc is None:
+        return "unknown transport error"
+    text = str(exc).strip()
+    if not text:
+        return exc.__class__.__name__
+    return f"{exc.__class__.__name__}: {text}"
 
 
 class WaveSpeedAceStepClient:
@@ -119,16 +134,41 @@ class WaveSpeedAceStepClient:
 
     async def get_task_result(self, task_id: str) -> dict[str, Any]:
         url = f"{self.api_base}/api/v3/predictions/{task_id}/result"
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.get(url, headers=self._headers())
-            if resp.status_code != 200:
-                raise WaveSpeedError(
-                    f"WaveSpeed ACE-Step result failed [HTTP {resp.status_code}]: {resp.text}"
+        max_attempts = 5
+        last_exc: Exception | None = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    resp = await client.get(url, headers=self._headers())
+                if resp.status_code != 200:
+                    raise WaveSpeedError(
+                        f"WaveSpeed ACE-Step result failed [HTTP {resp.status_code}]: {resp.text}"
+                    )
+                payload = resp.json()
+                if int(payload.get("code", 0)) != 200:
+                    raise WaveSpeedError(f"WaveSpeed ACE-Step result failed: {payload}")
+                return payload
+            except _RETRYABLE_HTTP_GET_ERRORS as e:
+                last_exc = e
+                if attempt >= max_attempts:
+                    break
+                backoff = min(10.0, 1.5 * attempt)
+                logger.warning(
+                    "wavespeed ace-step: transient get_task_result error task_id=%s "
+                    "attempt=%s/%s error=%s retry_in=%.1fs",
+                    task_id,
+                    attempt,
+                    max_attempts,
+                    e.__class__.__name__,
+                    backoff,
                 )
-            payload = resp.json()
-            if int(payload.get("code", 0)) != 200:
-                raise WaveSpeedError(f"WaveSpeed ACE-Step result failed: {payload}")
-            return payload
+                await asyncio.sleep(backoff)
+
+        raise WaveSpeedError(
+            "WaveSpeed ACE-Step result failed after "
+            f"{max_attempts} attempts: {_format_transport_error(last_exc)}"
+        )
 
     async def wait_audio_url(
         self,
@@ -137,10 +177,12 @@ class WaveSpeedAceStepClient:
         max_wait_s: int = 30 * 60,
         poll_interval_s: int = 5,
     ) -> str:
-        elapsed = 0
+        loop = asyncio.get_running_loop()
+        started_at = loop.time()
+        deadline = started_at + max_wait_s
         last_state = ""
 
-        while elapsed < max_wait_s:
+        while loop.time() < deadline:
             payload = await self.get_task_result(task_id)
             state = self._extract_status(payload)
             if state and state != last_state:
@@ -158,17 +200,45 @@ class WaveSpeedAceStepClient:
                 fail_msg = data.get("error") or payload.get("message") or "WaveSpeed task failed"
                 raise WaveSpeedError(str(fail_msg))
 
-            await asyncio.sleep(poll_interval_s)
-            elapsed += poll_interval_s
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                break
+            await asyncio.sleep(min(float(poll_interval_s), remaining))
 
         raise WaveSpeedError(f"ACE-Step timeout after {max_wait_s}s (taskId={task_id})")
 
     async def download_audio_bytes(self, url: str) -> tuple[str, bytes]:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(180.0)) as client:
-            resp = await client.get(url, headers=self._headers())
-            if resp.status_code >= 400:
-                resp = await client.get(url)
-            if resp.status_code >= 400:
-                raise WaveSpeedError(f"ACE-Step audio download failed [HTTP {resp.status_code}]")
-            filename = Path(urlparse(str(resp.url)).path).name or "ace-step-output.mp3"
-            return filename, resp.content
+        last_exc: Exception | None = None
+        max_attempts = 8
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(180.0)) as client:
+                    resp = await client.get(url, headers=self._headers())
+                    if resp.status_code >= 400:
+                        resp = await client.get(url)
+                if resp.status_code >= 400:
+                    raise WaveSpeedError(
+                        f"ACE-Step audio download failed [HTTP {resp.status_code}]"
+                    )
+                filename = Path(urlparse(str(resp.url)).path).name or "ace-step-output.mp3"
+                return filename, resp.content
+            except _RETRYABLE_HTTP_GET_ERRORS as e:
+                last_exc = e
+                if attempt >= max_attempts:
+                    break
+                backoff = min(15.0, 2.0 * attempt)
+                logger.warning(
+                    "wavespeed ace-step: transient download error attempt=%s/%s "
+                    "error=%s retry_in=%.1fs url=%s",
+                    attempt,
+                    max_attempts,
+                    e.__class__.__name__,
+                    backoff,
+                    url,
+                )
+                await asyncio.sleep(backoff)
+
+        raise WaveSpeedError(
+            f"ACE-Step audio download failed: {_format_transport_error(last_exc)}"
+        )

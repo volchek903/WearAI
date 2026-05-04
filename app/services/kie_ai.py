@@ -53,6 +53,21 @@ _FAILED_STATES = {
     "aborted",
     "timeout",
 }
+_RETRYABLE_HTTP_GET_ERRORS = (
+    httpx.TimeoutException,
+    httpx.ConnectError,
+    httpx.ReadError,
+    httpx.RemoteProtocolError,
+)
+
+
+def _format_transport_error(exc: Exception | None) -> str:
+    if exc is None:
+        return "unknown transport error"
+    text = str(exc).strip()
+    if not text:
+        return exc.__class__.__name__
+    return f"{exc.__class__.__name__}: {text}"
 
 
 def _norm_aspect_ratio(v: str) -> str:
@@ -633,18 +648,43 @@ class WaveSpeedClient:
 
     async def get_task(self, task_id: str) -> dict[str, Any]:
         url = f"{self.api_base}/api/v3/predictions/{task_id}/result"
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.get(url, headers=self._headers())
-            if resp.status_code != 200:
-                raise WaveSpeedError(
-                    f"WaveSpeed get result failed [HTTP {resp.status_code}]: {resp.text}"
+        max_attempts = 5
+        last_exc: Exception | None = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    resp = await client.get(url, headers=self._headers())
+                if resp.status_code != 200:
+                    raise WaveSpeedError(
+                        f"WaveSpeed get result failed [HTTP {resp.status_code}]: {resp.text}"
+                    )
+
+                payload = resp.json()
+                if int(payload.get("code", 0)) != 200:
+                    raise WaveSpeedError(f"WaveSpeed get result failed: {payload}")
+
+                return payload
+            except _RETRYABLE_HTTP_GET_ERRORS as e:
+                last_exc = e
+                if attempt >= max_attempts:
+                    break
+                backoff = min(10.0, 1.5 * attempt)
+                logger.warning(
+                    "wavespeed: transient get_task error task_id=%s attempt=%s/%s "
+                    "error=%s retry_in=%.1fs",
+                    task_id,
+                    attempt,
+                    max_attempts,
+                    e.__class__.__name__,
+                    backoff,
                 )
+                await asyncio.sleep(backoff)
 
-            payload = resp.json()
-            if int(payload.get("code", 0)) != 200:
-                raise WaveSpeedError(f"WaveSpeed get result failed: {payload}")
-
-            return payload
+        raise WaveSpeedError(
+            "WaveSpeed get result failed after "
+            f"{max_attempts} attempts: {_format_transport_error(last_exc)}"
+        )
 
     async def wait_result_urls(
         self,
@@ -652,14 +692,17 @@ class WaveSpeedClient:
         *,
         max_wait_s: int = 30 * 60,
     ) -> list[str]:
-        elapsed = 0
+        loop = asyncio.get_running_loop()
+        started_at = loop.time()
+        deadline = started_at + max_wait_s
         sleep_s = 2
         last_state = ""
 
-        while elapsed < max_wait_s:
+        while loop.time() < deadline:
             payload = await self.get_task(task_id)
             data = payload.get("data") or {}
             state = self._extract_status(data)
+            elapsed = int(loop.time() - started_at)
             if state and state != last_state:
                 logger.info(
                     "wavespeed: task_id=%s status=%s elapsed=%ss",
@@ -679,9 +722,11 @@ class WaveSpeedClient:
                 fail_msg = data.get("error") or payload.get("message") or "WaveSpeed task failed"
                 raise WaveSpeedError(str(fail_msg))
 
-            await asyncio.sleep(sleep_s)
-            elapsed += sleep_s
-            if elapsed > 30:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                break
+            await asyncio.sleep(min(float(sleep_s), remaining))
+            if loop.time() - started_at > 30:
                 sleep_s = min(10, sleep_s + 3)
 
         raise WaveSpeedError(f"Task timeout after {max_wait_s}s (taskId={task_id})")
@@ -694,7 +739,7 @@ class WaveSpeedClient:
 
         last_exc: Exception | None = None
         max_attempts = 8
-        for attempt in range(max_attempts):
+        for attempt in range(1, max_attempts + 1):
             try:
                 resp = await _do()
                 if resp.status_code != 200:
@@ -702,19 +747,26 @@ class WaveSpeedClient:
                         f"Download failed [HTTP {resp.status_code}]: {resp.text[:1000]}"
                     )
                 return resp.content
-            except (
-                httpx.TimeoutException,
-                httpx.ConnectError,
-                httpx.RemoteProtocolError,
-            ) as e:
+            except _RETRYABLE_HTTP_GET_ERRORS as e:
                 last_exc = e
-                backoff = min(15.0, 2.0 * (attempt + 1))
+                if attempt >= max_attempts:
+                    break
+                backoff = min(15.0, 2.0 * attempt)
+                logger.warning(
+                    "wavespeed: transient download error attempt=%s/%s error=%s "
+                    "retry_in=%.1fs url=%s",
+                    attempt,
+                    max_attempts,
+                    e.__class__.__name__,
+                    backoff,
+                    url,
+                )
                 await asyncio.sleep(backoff)
             except httpx.HTTPError as e:
                 last_exc = e
                 break
 
-        raise WaveSpeedError(f"Download failed: {last_exc}")
+        raise WaveSpeedError(f"Download failed: {_format_transport_error(last_exc)}")
 
 
 def get_kie_api_key_from_env() -> str:
