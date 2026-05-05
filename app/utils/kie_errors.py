@@ -93,6 +93,21 @@ def kie_error_to_user_text(err: Exception) -> str:
             "• Держать входы в пределах: фото до 5 МБ, видео до 10 минут"
         )
 
+    if (
+        "readerror" in raw_l
+        or "connecterror" in raw_l
+        or "remoteprotocolerror" in raw_l
+        or "transport failed" in raw_l
+    ):
+        return with_support(
+            f"{header}\n\n"
+            "Проблема на стороне сети или внешнего сервиса.\n\n"
+            "Что попробовать:\n"
+            "• Повторить попытку через 30–60 секунд\n"
+            "• Если ошибка повторяется, попробовать позже\n"
+            "• Если сбой постоянный — нажать «Сообщить об ошибке»"
+        )
+
     # Фильтр/политики провайдера (например, Google)
     if "prohibited use" in raw_l or "filtered out" in raw_l or "no images found" in raw_l:
         return with_support(

@@ -19,13 +19,13 @@ from app.repository.referrals import parse_referrer_tg_id, process_referral_for_
 from app.repository.photo_settings import ensure_photo_settings
 from app.repository.generations import ensure_default_subscription
 from app.services.free_channel_bonus import free_channel_kb
-from app.repository.extra import get_plan
 from app.repository.payments import (
-    apply_credit_amount_to_user,
+    PaymentAlreadyProcessedError,
+    PaymentPlanNotFoundError,
+    PaymentUserNotFoundError,
+    confirm_payment_and_apply_credits,
     get_latest_pending_payment,
     mark_payment_status,
-    apply_plan_to_user,
-    parse_custom_plan_credits,
 )
 from app.models.payment import PaymentStatus
 from app.services.platega import normalize_payment_status
@@ -211,26 +211,38 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) 
         status = await _platega_get_status(pending.platega_transaction_id)
 
         if status == "CONFIRMED":
-            custom_credits = parse_custom_plan_credits(pending.plan_name)
-            credited_amount = 0
-            if custom_credits:
-                await apply_credit_amount_to_user(
-                    session, message.from_user.id, custom_credits
+            try:
+                credited_amount = await confirm_payment_and_apply_credits(
+                    session, pending
                 )
-                credited_amount = custom_credits
-            else:
-                plan = await get_plan(session, pending.plan_name)
-                if not plan:
-                    logger.error(
-                        "start.cmd_start: plan not found in DB plan_name=%s payment_id=%s",
-                        pending.plan_name,
-                        pending.id,
-                    )
-                else:
-                    await apply_plan_to_user(session, message.from_user.id, plan)
-                    credited_amount = int(getattr(plan, "credit_amount", 0) or 0)
-
-            await mark_payment_status(session, pending, PaymentStatus.CONFIRMED)
+            except PaymentAlreadyProcessedError:
+                await message.answer(
+                    "✅ Этот платёж уже был обработан.",
+                    reply_markup=main_menu_kb(),
+                )
+                return
+            except PaymentPlanNotFoundError:
+                logger.exception(
+                    "start.cmd_start: plan not found in DB plan_name=%s payment_id=%s",
+                    pending.plan_name,
+                    pending.id,
+                )
+                await message.answer(
+                    "Оплата найдена, но пакет настроен некорректно. Напиши в поддержку 💬",
+                    reply_markup=main_menu_kb(),
+                )
+                return
+            except PaymentUserNotFoundError:
+                logger.exception(
+                    "start.cmd_start: user not found for payment_id=%s tg_id=%s",
+                    pending.id,
+                    message.from_user.id,
+                )
+                await message.answer(
+                    "Оплата найдена, но не удалось активировать пакет. Напиши в поддержку 💬",
+                    reply_markup=main_menu_kb(),
+                )
+                return
 
             await message.answer(
                 f"✅ Оплата подтверждена! Начислено {credited_amount} кредитов 🎉",

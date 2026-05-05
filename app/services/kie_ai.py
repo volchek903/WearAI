@@ -53,7 +53,7 @@ _FAILED_STATES = {
     "aborted",
     "timeout",
 }
-_RETRYABLE_HTTP_GET_ERRORS = (
+_RETRYABLE_TRANSPORT_ERRORS = (
     httpx.TimeoutException,
     httpx.ConnectError,
     httpx.ReadError,
@@ -196,6 +196,83 @@ class WaveSpeedClient:
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.api_key}"}
 
+    async def _request(
+        self,
+        *,
+        method: str,
+        url: str,
+        operation: str,
+        max_attempts: int = 1,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        last_exc: Exception | None = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    return await client.request(method, url, **kwargs)
+            except _RETRYABLE_TRANSPORT_ERRORS as e:
+                last_exc = e
+                if attempt >= max_attempts:
+                    break
+                backoff = min(10.0, 1.5 * attempt)
+                logger.warning(
+                    "wavespeed: transient %s transport error attempt=%s/%s "
+                    "error=%s retry_in=%.1fs url=%s",
+                    operation,
+                    attempt,
+                    max_attempts,
+                    e.__class__.__name__,
+                    backoff,
+                    url,
+                )
+                await asyncio.sleep(backoff)
+            except httpx.HTTPError as e:
+                raise WaveSpeedError(
+                    f"WaveSpeed {operation} failed: {_format_transport_error(e)}"
+                ) from e
+
+        attempts_text = (
+            f" after {max_attempts} attempts" if max_attempts > 1 else ""
+        )
+        raise WaveSpeedError(
+            "WaveSpeed "
+            f"{operation} failed{attempts_text}: {_format_transport_error(last_exc)}"
+        )
+
+    @staticmethod
+    def _parse_json_payload(
+        resp: httpx.Response, *, operation: str
+    ) -> dict[str, Any]:
+        try:
+            payload = resp.json()
+        except ValueError as e:
+            raise WaveSpeedError(
+                f"WaveSpeed {operation} failed: invalid JSON response"
+            ) from e
+        if not isinstance(payload, dict):
+            raise WaveSpeedError(
+                f"WaveSpeed {operation} failed: unexpected response payload"
+            )
+        return payload
+
+    def _parse_create_task_response(self, resp: httpx.Response) -> str:
+        if resp.status_code != 200:
+            raise WaveSpeedError(
+                f"WaveSpeed create task failed [HTTP {resp.status_code}]: {resp.text}"
+            )
+
+        payload = self._parse_json_payload(resp, operation="create task")
+        if int(payload.get("code", 0)) != 200:
+            raise WaveSpeedError(f"WaveSpeed create task failed: {payload}")
+
+        task_id = self._extract_task_id(payload)
+        if not task_id:
+            raise WaveSpeedError(
+                f"WaveSpeed create task response has no id: {payload}"
+            )
+        return task_id
+
     @staticmethod
     def _extract_task_id(payload: dict[str, Any]) -> str | None:
         data = payload.get("data") or {}
@@ -247,26 +324,31 @@ class WaveSpeedClient:
         _debug_save_upload_image(data, filename)
 
         files = {"file": (filename or "image.png", data, "application/octet-stream")}
+        resp = await self._request(
+            method="POST",
+            url=url,
+            operation="upload",
+            max_attempts=3,
+            headers=self._headers(),
+            files=files,
+        )
+        if resp.status_code != 200:
+            raise WaveSpeedError(
+                f"WaveSpeed upload failed [HTTP {resp.status_code}]: {resp.text}"
+            )
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.post(url, headers=self._headers(), files=files)
-            if resp.status_code != 200:
-                raise WaveSpeedError(
-                    f"WaveSpeed upload failed [HTTP {resp.status_code}]: {resp.text}"
-                )
+        payload = self._parse_json_payload(resp, operation="upload")
+        if int(payload.get("code", 0)) != 200:
+            raise WaveSpeedError(f"WaveSpeed upload failed: {payload}")
 
-            payload = resp.json()
-            if int(payload.get("code", 0)) != 200:
-                raise WaveSpeedError(f"WaveSpeed upload failed: {payload}")
+        data_obj = payload.get("data") or {}
+        download_url = data_obj.get("download_url") or data_obj.get("downloadUrl")
+        if not download_url:
+            raise WaveSpeedError(
+                f"WaveSpeed upload response has no download_url: {payload}"
+            )
 
-            data_obj = payload.get("data") or {}
-            download_url = data_obj.get("download_url") or data_obj.get("downloadUrl")
-            if not download_url:
-                raise WaveSpeedError(
-                    f"WaveSpeed upload response has no download_url: {payload}"
-                )
-
-            return str(download_url)
+        return str(download_url)
 
     async def _create_prediction_task(
         self,
@@ -275,29 +357,14 @@ class WaveSpeedClient:
         body: dict[str, Any],
     ) -> str:
         url = f"{self.api_base}/api/v3/{endpoint.lstrip('/')}"
-
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.post(
-                url,
-                headers={**self._headers(), "Content-Type": "application/json"},
-                json=body,
-            )
-            if resp.status_code != 200:
-                raise WaveSpeedError(
-                    f"WaveSpeed create task failed [HTTP {resp.status_code}]: {resp.text}"
-                )
-
-            payload = resp.json()
-            if int(payload.get("code", 0)) != 200:
-                raise WaveSpeedError(f"WaveSpeed create task failed: {payload}")
-
-            task_id = self._extract_task_id(payload)
-            if not task_id:
-                raise WaveSpeedError(
-                    f"WaveSpeed create task response has no id: {payload}"
-                )
-
-            return task_id
+        resp = await self._request(
+            method="POST",
+            url=url,
+            operation="create task",
+            headers={**self._headers(), "Content-Type": "application/json"},
+            json=body,
+        )
+        return self._parse_create_task_response(resp)
 
     async def create_nano_banana_2_task(
         self,
@@ -336,28 +403,10 @@ class WaveSpeedClient:
         if not body["images"]:
             raise WaveSpeedError("WaveSpeed task requires at least one image URL")
 
-        url = f"{self.api_base}/api/v3/google/nano-banana-2/edit"
-
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.post(
-                url,
-                headers={**self._headers(), "Content-Type": "application/json"},
-                json=body,
-            )
-            if resp.status_code != 200:
-                raise WaveSpeedError(
-                    f"WaveSpeed create task failed [HTTP {resp.status_code}]: {resp.text}"
-                )
-
-            payload = resp.json()
-            if int(payload.get("code", 0)) != 200:
-                raise WaveSpeedError(f"WaveSpeed create task failed: {payload}")
-
-            task_id = self._extract_task_id(payload)
-            if not task_id:
-                raise WaveSpeedError(f"WaveSpeed create task response has no id: {payload}")
-
-            return task_id
+        return await self._create_prediction_task(
+            endpoint="google/nano-banana-2/edit",
+            body=body,
+        )
 
     async def create_nano_banana_pro_edit_task(
         self,
@@ -396,28 +445,10 @@ class WaveSpeedClient:
         if not body["images"]:
             raise WaveSpeedError("WaveSpeed task requires at least one image URL")
 
-        url = f"{self.api_base}/api/v3/google/nano-banana-pro/edit"
-
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.post(
-                url,
-                headers={**self._headers(), "Content-Type": "application/json"},
-                json=body,
-            )
-            if resp.status_code != 200:
-                raise WaveSpeedError(
-                    f"WaveSpeed create task failed [HTTP {resp.status_code}]: {resp.text}"
-                )
-
-            payload = resp.json()
-            if int(payload.get("code", 0)) != 200:
-                raise WaveSpeedError(f"WaveSpeed create task failed: {payload}")
-
-            task_id = self._extract_task_id(payload)
-            if not task_id:
-                raise WaveSpeedError(f"WaveSpeed create task response has no id: {payload}")
-
-            return task_id
+        return await self._create_prediction_task(
+            endpoint="google/nano-banana-pro/edit",
+            body=body,
+        )
 
     async def create_seedream_v5_lite_task(
         self,
@@ -464,30 +495,11 @@ class WaveSpeedClient:
 
         if ref_urls:
             body["images"] = ref_urls
-            url = f"{self.api_base}/api/v3/bytedance/seedream-v5.0-lite/edit"
+            endpoint = "bytedance/seedream-v5.0-lite/edit"
         else:
-            url = f"{self.api_base}/api/v3/bytedance/seedream-v5.0-lite"
+            endpoint = "bytedance/seedream-v5.0-lite"
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.post(
-                url,
-                headers={**self._headers(), "Content-Type": "application/json"},
-                json=body,
-            )
-            if resp.status_code != 200:
-                raise WaveSpeedError(
-                    f"WaveSpeed create task failed [HTTP {resp.status_code}]: {resp.text}"
-                )
-
-            payload = resp.json()
-            if int(payload.get("code", 0)) != 200:
-                raise WaveSpeedError(f"WaveSpeed create task failed: {payload}")
-
-            task_id = self._extract_task_id(payload)
-            if not task_id:
-                raise WaveSpeedError(f"WaveSpeed create task response has no id: {payload}")
-
-            return task_id
+        return await self._create_prediction_task(endpoint=endpoint, body=body)
 
     async def create_wan_27_text_to_image_task(
         self,
@@ -517,28 +529,10 @@ class WaveSpeedClient:
         if seed is not None:
             body["seed"] = int(seed)
 
-        url = f"{self.api_base}/api/v3/alibaba/wan-2.7/text-to-image"
-
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.post(
-                url,
-                headers={**self._headers(), "Content-Type": "application/json"},
-                json=body,
-            )
-            if resp.status_code != 200:
-                raise WaveSpeedError(
-                    f"WaveSpeed create task failed [HTTP {resp.status_code}]: {resp.text}"
-                )
-
-            payload = resp.json()
-            if int(payload.get("code", 0)) != 200:
-                raise WaveSpeedError(f"WaveSpeed create task failed: {payload}")
-
-            task_id = self._extract_task_id(payload)
-            if not task_id:
-                raise WaveSpeedError(f"WaveSpeed create task response has no id: {payload}")
-
-            return task_id
+        return await self._create_prediction_task(
+            endpoint="alibaba/wan-2.7/text-to-image",
+            body=body,
+        )
 
     async def create_seedream_v45_task(
         self,
@@ -557,28 +551,10 @@ class WaveSpeedClient:
         if size:
             body["size"] = str(size)
 
-        url = f"{self.api_base}/api/v3/bytedance/seedream-v4.5"
-
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.post(
-                url,
-                headers={**self._headers(), "Content-Type": "application/json"},
-                json=body,
-            )
-            if resp.status_code != 200:
-                raise WaveSpeedError(
-                    f"WaveSpeed create task failed [HTTP {resp.status_code}]: {resp.text}"
-                )
-
-            payload = resp.json()
-            if int(payload.get("code", 0)) != 200:
-                raise WaveSpeedError(f"WaveSpeed create task failed: {payload}")
-
-            task_id = self._extract_task_id(payload)
-            if not task_id:
-                raise WaveSpeedError(f"WaveSpeed create task response has no id: {payload}")
-
-            return task_id
+        return await self._create_prediction_task(
+            endpoint="bytedance/seedream-v4.5",
+            body=body,
+        )
 
     async def create_gpt_image_2_text_to_image_task(
         self,
@@ -665,7 +641,7 @@ class WaveSpeedClient:
                     raise WaveSpeedError(f"WaveSpeed get result failed: {payload}")
 
                 return payload
-            except _RETRYABLE_HTTP_GET_ERRORS as e:
+            except _RETRYABLE_TRANSPORT_ERRORS as e:
                 last_exc = e
                 if attempt >= max_attempts:
                     break
@@ -747,7 +723,7 @@ class WaveSpeedClient:
                         f"Download failed [HTTP {resp.status_code}]: {resp.text[:1000]}"
                     )
                 return resp.content
-            except _RETRYABLE_HTTP_GET_ERRORS as e:
+            except _RETRYABLE_TRANSPORT_ERRORS as e:
                 last_exc = e
                 if attempt >= max_attempts:
                     break

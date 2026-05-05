@@ -10,13 +10,13 @@ from aiohttp import web
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.payment import PaymentStatus
-from app.repository.extra import get_plan
 from app.repository.payments import (
-    apply_credit_amount_to_user,
-    apply_plan_to_user,
+    PaymentAlreadyProcessedError,
+    PaymentPlanNotFoundError,
+    PaymentUserNotFoundError,
+    confirm_payment_and_apply_credits,
     get_payment_by_tx_id,
     mark_payment_status,
-    parse_custom_plan_credits,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,7 +70,7 @@ async def _handle_platega_callback(
             return web.json_response({"ok": True, "ignored": "payment_not_found"})
 
         if status == "CANCELED":
-            if payment.status != PaymentStatus.CANCELED:
+            if payment.status == PaymentStatus.PENDING:
                 await mark_payment_status(session, payment, PaymentStatus.CANCELED)
             return web.json_response({"ok": True})
 
@@ -79,24 +79,25 @@ async def _handle_platega_callback(
             return web.json_response({"ok": True, "already": True})
 
         tg_id = int(payment.tg_user_id)
-        custom_credits = parse_custom_plan_credits(payment.plan_name)
-        credited_amount = 0
-        if custom_credits:
-            await apply_credit_amount_to_user(session, tg_id, custom_credits)
-            credited_amount = custom_credits
-        else:
-            plan = await get_plan(session, payment.plan_name)
-            if not plan:
-                logger.error(
-                    "platega_callback: plan not found plan_name=%s payment_id=%s tx_id=%s",
-                    payment.plan_name,
-                    payment.id,
-                    tx_id,
-                )
-                return web.json_response({"ok": False, "error": "plan not found"}, status=500)
-            await apply_plan_to_user(session, tg_id, plan)
-            credited_amount = int(getattr(plan, "credit_amount", 0) or 0)
-        await mark_payment_status(session, payment, PaymentStatus.CONFIRMED)
+        try:
+            credited_amount = await confirm_payment_and_apply_credits(session, payment)
+        except PaymentAlreadyProcessedError:
+            return web.json_response({"ok": True, "already": True})
+        except PaymentPlanNotFoundError:
+            logger.exception(
+                "platega_callback: plan not found plan_name=%s payment_id=%s tx_id=%s",
+                payment.plan_name,
+                payment.id,
+                tx_id,
+            )
+            return web.json_response({"ok": False, "error": "plan not found"}, status=500)
+        except PaymentUserNotFoundError:
+            logger.exception(
+                "platega_callback: user not found payment_id=%s tx_id=%s",
+                payment.id,
+                tx_id,
+            )
+            return web.json_response({"ok": False, "error": "user not found"}, status=500)
 
     # notify user outside db transaction
     with suppress(Exception):

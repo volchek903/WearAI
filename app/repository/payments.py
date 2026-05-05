@@ -17,6 +17,18 @@ logger = logging.getLogger(__name__)
 CUSTOM_PLAN_PREFIX = "__custom__:"
 
 
+class PaymentAlreadyProcessedError(RuntimeError):
+    pass
+
+
+class PaymentPlanNotFoundError(RuntimeError):
+    pass
+
+
+class PaymentUserNotFoundError(RuntimeError):
+    pass
+
+
 def make_custom_plan_name(credits: int) -> str:
     return f"{CUSTOM_PLAN_PREFIX}{int(credits)}"
 
@@ -142,6 +154,64 @@ async def mark_payment_status(
         payment.status,
         payment.confirmed_at,
     )
+
+
+async def confirm_payment_and_apply_credits(
+    session: AsyncSession,
+    payment: Payment,
+) -> int:
+    payment_id = int(payment.id)
+    tx_id = str(payment.platega_transaction_id)
+    tg_user_id = int(payment.tg_user_id)
+    custom_credits = parse_custom_plan_credits(payment.plan_name)
+    if custom_credits is not None:
+        credits = int(custom_credits)
+    else:
+        plan = await session.scalar(
+            select(Subscription).where(Subscription.name == payment.plan_name)
+        )
+        if plan is None:
+            raise PaymentPlanNotFoundError(
+                f"payment plan not found: {payment.plan_name}"
+            )
+        credits = int(getattr(plan, "credit_amount", 0) or 0)
+
+    now = datetime.now(timezone.utc)
+    result = await session.execute(
+        update(Payment)
+        .where(Payment.id == payment_id)
+        .where(Payment.status == PaymentStatus.PENDING)
+        .values(status=PaymentStatus.CONFIRMED, confirmed_at=now)
+    )
+    if result.rowcount == 0:
+        await session.rollback()
+        raise PaymentAlreadyProcessedError(
+            f"payment already processed: payment_id={payment_id}"
+        )
+
+    user_result = await session.execute(
+        update(User)
+        .where(User.tg_id == tg_user_id)
+        .values(credit_balance=User.credit_balance + credits)
+    )
+    if user_result.rowcount == 0:
+        await session.rollback()
+        raise PaymentUserNotFoundError(
+            f"user not found for payment: tg_user_id={tg_user_id}"
+        )
+
+    await session.commit()
+    payment.status = PaymentStatus.CONFIRMED
+    payment.confirmed_at = now
+
+    logger.info(
+        "payments.confirm_payment_and_apply_credits: payment_id=%s tx_id=%s tg_user_id=%s credits=%s",
+        payment_id,
+        tx_id,
+        tg_user_id,
+        credits,
+    )
+    return credits
 
 
 async def apply_plan_to_user(

@@ -15,13 +15,16 @@ from app.models.payment import PaymentStatus
 from app.models.subscription import Subscription
 from app.repository.extra import get_plan
 from app.repository.payments import (
+    PaymentAlreadyProcessedError,
+    PaymentPlanNotFoundError,
+    PaymentUserNotFoundError,
     apply_credit_amount_to_user,
     apply_plan_to_user,
+    confirm_payment_and_apply_credits,
     create_pending_payment,
     get_payment_by_id,
     make_custom_plan_name,
     mark_payment_status,
-    parse_custom_plan_credits,
 )
 from app.services.platega import (
     build_platega_client,
@@ -405,17 +408,33 @@ async def extra_check_payment(call: CallbackQuery, session: AsyncSession) -> Non
     )
 
     if status == "CONFIRMED":
-        custom_credits = parse_custom_plan_credits(payment.plan_name)
-        credited_amount = 0
-        if custom_credits:
-            await apply_credit_amount_to_user(session, call.from_user.id, custom_credits)
-            credited_amount = custom_credits
-        else:
-            plan = await get_plan(session, payment.plan_name)
-            if plan:
-                await apply_plan_to_user(session, call.from_user.id, plan)
-                credited_amount = int(getattr(plan, "credit_amount", 0) or 0)
-        await mark_payment_status(session, payment, PaymentStatus.CONFIRMED)
+        try:
+            credited_amount = await confirm_payment_and_apply_credits(session, payment)
+        except PaymentAlreadyProcessedError:
+            await call.answer("✅ Уже подтверждено — пакет активирован", show_alert=True)
+            return
+        except PaymentPlanNotFoundError:
+            logger.exception(
+                "extra_check_payment: plan not found plan_name=%s payment_id=%s",
+                payment.plan_name,
+                payment.id,
+            )
+            await call.answer(
+                "Платёж найден, но пакет настроен некорректно. Напиши в поддержку 💬",
+                show_alert=True,
+            )
+            return
+        except PaymentUserNotFoundError:
+            logger.exception(
+                "extra_check_payment: user not found payment_id=%s tg_id=%s",
+                payment.id,
+                call.from_user.id,
+            )
+            await call.answer(
+                "Платёж найден, но не удалось активировать пакет. Напиши в поддержку 💬",
+                show_alert=True,
+            )
+            return
 
         if call.message:
             await edit_text_safe(

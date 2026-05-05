@@ -8,13 +8,13 @@ from aiogram import Bot
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.payment import PaymentStatus
-from app.repository.extra import get_plan
 from app.repository.payments import (
-    apply_credit_amount_to_user,
+    PaymentAlreadyProcessedError,
+    PaymentPlanNotFoundError,
+    PaymentUserNotFoundError,
+    confirm_payment_and_apply_credits,
     get_pending_payments_batch,
     mark_payment_status,
-    apply_plan_to_user,
-    parse_custom_plan_credits,
 )
 import httpx
 from app.services.platega import build_platega_client, normalize_payment_status
@@ -103,30 +103,27 @@ async def run_payment_poller(
                         )
 
                         if status == "CONFIRMED":
-                            custom_credits = parse_custom_plan_credits(p.plan_name)
-                            credited_amount = 0
-                            if custom_credits:
-                                await apply_credit_amount_to_user(
-                                    session, tg_id, custom_credits
+                            try:
+                                credited_amount = await confirm_payment_and_apply_credits(
+                                    session, p
                                 )
-                                credited_amount = custom_credits
-                            else:
-                                plan = await get_plan(session, p.plan_name)
-                                if plan:
-                                    await apply_plan_to_user(session, tg_id, plan)
-                                    credited_amount = int(
-                                        getattr(plan, "credit_amount", 0) or 0
-                                    )
-                                else:
-                                    logger.error(
-                                        "payment_poller: plan not found plan_name=%s payment_id=%s",
-                                        p.plan_name,
-                                        p.id,
-                                    )
-
-                            await mark_payment_status(
-                                session, p, PaymentStatus.CONFIRMED
-                            )
+                            except PaymentAlreadyProcessedError:
+                                logger.info(
+                                    "payment_poller: payment already processed payment_id=%s tx_id=%s",
+                                    p.id,
+                                    p.platega_transaction_id,
+                                )
+                                continue
+                            except (
+                                PaymentPlanNotFoundError,
+                                PaymentUserNotFoundError,
+                            ):
+                                logger.exception(
+                                    "payment_poller: payment confirmation blocked payment_id=%s tx_id=%s",
+                                    p.id,
+                                    p.platega_transaction_id,
+                                )
+                                continue
 
                             try:
                                 await bot.send_message(

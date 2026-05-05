@@ -14,9 +14,11 @@ logs/
 *.db
 *.sqlite
 *.sqlite3
-__pycache__
-.pyc
-_kie_debug_uploads
+__pycache__/
+*.pyc
+.DS_Store
+_kie_debug_uploads/
+_wavespeed_debug_uploads/
 .vscode
 wearai.db
 .png
