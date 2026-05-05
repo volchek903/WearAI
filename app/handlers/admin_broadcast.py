@@ -205,7 +205,7 @@ async def broadcast_receive_content(
 
     await _send_payload(message.bot, message.chat.id, payload)
     await message.answer(
-        "Отправить это всем пользователям?", reply_markup=yes_no_kb()
+        "Отправить это всем пользователям? 📣", reply_markup=yes_no_kb()
     )
 
 

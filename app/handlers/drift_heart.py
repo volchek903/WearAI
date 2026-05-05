@@ -90,7 +90,7 @@ async def drift_heart_photo_in(message: Message, state: FSMContext) -> None:
 
     await message.answer_photo(
         file_id,
-        caption="Генерировать с этой машиной?",
+        caption="Генерировать с этой машиной? ✅",
         reply_markup=yes_no_kb(
             yes_text="✅ Да, всё верно",
             no_text="❌ Нет",
@@ -179,7 +179,7 @@ async def drift_heart_confirm(
         await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="drift_heart")
         await state.clear()
         await call.message.answer(
-            "Хотите ли что-то ещё сгенерировать?",
+            "Хочешь сгенерировать ещё что-нибудь? ✨",
             reply_markup=photo_menu_kb(),
         )
         await safe_answer(call)

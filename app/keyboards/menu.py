@@ -76,7 +76,7 @@ def main_menu_kb() -> InlineKeyboardMarkup:
 
 def photo_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    add_button(kb, text="Выбрать модель", callback_data=MenuCallbacks.PHOTO_MODELS)
+    add_button(kb, text="🤖 Выбрать модель", callback_data=MenuCallbacks.PHOTO_MODELS)
     add_button(kb, text="🚗 Шаблоны с машинами", callback_data=MenuCallbacks.PHOTO_CARS)
     add_button(
         kb,

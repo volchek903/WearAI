@@ -140,7 +140,7 @@ async def march8_text_in(message: Message, state: FSMContext) -> None:
         await message.answer_media_group(media=media)
 
     await message.answer(
-        f"Текст под фото:\n<b>{text}</b>\n\nВсе верно?",
+        f"Текст под фото:\n<b>{text}</b>\n\nВсё верно? ✅",
         parse_mode="HTML",
         reply_markup=yes_no_kb(
             yes_text="✅ Да",
@@ -227,7 +227,7 @@ async def march8_confirm_yes(
         await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="march8")
         await state.clear()
         await call.message.answer(
-            "Хотите ли что-то ещё сгенерировать?",
+            "Хочешь сгенерировать ещё что-нибудь? ✨",
             reply_markup=photo_menu_kb(),
         )
         await safe_answer(call)

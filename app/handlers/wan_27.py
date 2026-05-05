@@ -395,7 +395,7 @@ async def wan_27_generate(
         )
         await state.clear()
         await call.message.answer(
-            "Можно сгенерировать ещё что-нибудь.",
+            "Можно сгенерировать ещё что-нибудь ✨",
             reply_markup=photo_models_kb(),
         )
         return

@@ -99,9 +99,10 @@ async def start_glam_collage(
             call.message,
             filename="collage.jpeg",
             caption=(
-                "Шикарный коллаж\n\n"
+                "✨ <b>Шикарный коллаж</b>\n\n"
                 "Пришли фотку мужчины или женщины, и я подготовлю гламурный editorial-коллаж в формате 3:4 📸"
             ),
+            parse_mode="HTML",
         )
 
 
@@ -119,7 +120,7 @@ async def glam_collage_photo_in(message: Message, state: FSMContext) -> None:
     await state.set_state(GlamCollageFlow.confirm)
     await message.answer_photo(
         photo_id,
-        caption="Точно эту фотку хочешь использовать?",
+        caption="Точно эту фотку хочешь использовать? ✨",
         reply_markup=yes_no_kb(
             yes_text="✅ Начать генерацию",
             no_text="🔁 Отправить другую",
@@ -205,7 +206,7 @@ async def glam_collage_confirm_yes(
         await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="glam_collage")
         await state.clear()
         await call.message.answer(
-            "Хотите ли что-то ещё сгенерировать?",
+            "Хочешь сгенерировать ещё что-нибудь? ✨",
             reply_markup=photo_menu_kb(),
         )
         return

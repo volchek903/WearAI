@@ -96,7 +96,7 @@ async def feb23_photos_in(message: Message, state: FSMContext) -> None:
         await state.set_state(Feb23Flow.confirm)
         await message.answer_photo(
             file_id,
-            caption="Сгенерировать поздравление на основе этой фотографии?",
+            caption="Сгенерировать поздравление на основе этой фотографии? ✨",
             reply_markup=yes_no_kb(
                 yes_text="✅ Да",
                 no_text="❌ Нет",
@@ -124,7 +124,7 @@ async def feb23_photos_in(message: Message, state: FSMContext) -> None:
     if len(result.file_ids) == 1:
         await message.answer_photo(
             result.file_ids[0],
-            caption="Сгенерировать поздравление на основе этой фотографии?",
+            caption="Сгенерировать поздравление на основе этой фотографии? ✨",
             reply_markup=yes_no_kb(
                 yes_text="✅ Да",
                 no_text="❌ Нет",
@@ -136,7 +136,7 @@ async def feb23_photos_in(message: Message, state: FSMContext) -> None:
     media = [InputMediaPhoto(media=fid) for fid in result.file_ids]
     await message.answer_media_group(media=media)
     await message.answer(
-        "Сгенерировать поздравление на основе этих фотографий?",
+        "Сгенерировать поздравление на основе этих фотографий? ✨",
         reply_markup=yes_no_kb(
             yes_text="✅ Да",
             no_text="❌ Нет",
@@ -221,7 +221,7 @@ async def feb23_confirm_yes(
         await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="feb23")
         await state.clear()
         await call.message.answer(
-            "Хотите ли что-то ещё сгенерировать?",
+            "Хочешь сгенерировать ещё что-нибудь? ✨",
             reply_markup=photo_menu_kb(),
         )
         await safe_answer(call)

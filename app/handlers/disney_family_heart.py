@@ -105,7 +105,7 @@ async def disney_family_heart_photos_in(message: Message, state: FSMContext) -> 
         await state.set_state(DisneyFamilyHeartFlow.confirm)
         await message.answer_photo(
             file_id,
-            caption="Проверь фото. Всё в норме?",
+            caption="Проверь фото. Всё в норме? ✅",
             reply_markup=yes_no_kb(
                 yes_text="✅ Всё в норме",
                 no_text="🔁 Отправить заново",
@@ -131,7 +131,7 @@ async def disney_family_heart_photos_in(message: Message, state: FSMContext) -> 
     if len(result.file_ids) == 1:
         await message.answer_photo(
             result.file_ids[0],
-            caption="Проверь фото. Всё в норме?",
+            caption="Проверь фото. Всё в норме? ✅",
             reply_markup=yes_no_kb(
                 yes_text="✅ Всё в норме",
                 no_text="🔁 Отправить заново",
@@ -143,7 +143,7 @@ async def disney_family_heart_photos_in(message: Message, state: FSMContext) -> 
     media = [InputMediaPhoto(media=fid) for fid in result.file_ids]
     await message.answer_media_group(media=media)
     await message.answer(
-        f"Получил {len(result.file_ids)} фото. Всё в норме?",
+        f"Получил {len(result.file_ids)} фото. Всё в норме? ✅",
         reply_markup=yes_no_kb(
             yes_text="✅ Всё в норме",
             no_text="🔁 Отправить заново",
@@ -238,7 +238,7 @@ async def disney_family_heart_confirm_yes(
         )
         await state.clear()
         await call.message.answer(
-            "Хотите ли что-то ещё сгенерировать?",
+            "Хочешь сгенерировать ещё что-нибудь? ✨",
             reply_markup=photo_two_kb(),
         )
         await safe_answer(call)

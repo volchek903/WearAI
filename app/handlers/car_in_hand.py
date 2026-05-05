@@ -45,13 +45,13 @@ HAND_OPTIONS = {
 
 def _hand_kb() -> InlineKeyboardBuilder:
     kb = InlineKeyboardBuilder()
-    add_button(kb, text="Мужская, в перчатке", callback_data="carhand:hand:male_glove")
+    add_button(kb, text="🧤 Мужская, в перчатке", callback_data="carhand:hand:male_glove")
     add_button(
-        kb, text="Мужская, без перчатки", callback_data="carhand:hand:male_no_glove"
+        kb, text="✋ Мужская, без перчатки", callback_data="carhand:hand:male_no_glove"
     )
-    add_button(kb, text="Женская, в перчатке", callback_data="carhand:hand:female_glove")
+    add_button(kb, text="🧤 Женская, в перчатке", callback_data="carhand:hand:female_glove")
     add_button(
-        kb, text="Женская, без перчатки", callback_data="carhand:hand:female_no_glove"
+        kb, text="✋ Женская, без перчатки", callback_data="carhand:hand:female_no_glove"
     )
     kb.adjust(1)
     return kb
@@ -202,7 +202,7 @@ async def car_in_hand_hand(
         await increment_generated_photos(session=session, tg_id=call.from_user.id, delta=1, section="car_in_hand")
         await state.clear()
         await call.message.answer(
-            "Хотите ли что-то ещё сгенерировать?",
+            "Хочешь сгенерировать ещё что-нибудь? ✨",
             reply_markup=photo_menu_kb(),
         )
         await safe_answer(call)

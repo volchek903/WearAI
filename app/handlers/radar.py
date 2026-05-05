@@ -348,7 +348,7 @@ async def radar_review_confirm(
         await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="radar")
         await state.clear()
         await call.message.answer(
-            "Хотите ли что-то ещё сгенерировать?",
+            "Хочешь сгенерировать ещё что-нибудь? ✨",
             reply_markup=photo_menu_kb(),
         )
         return

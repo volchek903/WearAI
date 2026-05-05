@@ -225,7 +225,7 @@ async def _run_video_job(
         await increment_generated_videos(session=session, tg_id=tg_id, delta=1, section="animate_photo")
         await bot.send_message(
             chat_id=chat_id,
-            text="Хотите ли что-то ещё сгенерировать?",
+            text="Хочешь сгенерировать ещё что-нибудь? ✨",
             reply_markup=video_menu_kb(),
         )
 

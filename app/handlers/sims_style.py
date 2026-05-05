@@ -115,7 +115,7 @@ async def sims_style_photo_in(message: Message, state: FSMContext) -> None:
     await state.set_state(SimsStyleFlow.confirm)
     await message.answer_photo(
         photo_id,
-        caption="Это фото используем? Если да, запускаю генерацию.",
+        caption="Это фото используем? Запускаю генерацию? ✅",
         reply_markup=yes_no_kb(
             yes_text="✅ Да, это оно",
             no_text="🔁 Отправить заново",
@@ -210,7 +210,7 @@ async def sims_style_confirm_yes(
         )
         await state.clear()
         await call.message.answer(
-            "Хотите ли что-то ещё сгенерировать?",
+            "Хочешь сгенерировать ещё что-нибудь? ✨",
             reply_markup=photo_menu_kb(),
         )
         return

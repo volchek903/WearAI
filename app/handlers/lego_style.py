@@ -92,7 +92,7 @@ async def lego_style_photo_in(message: Message, state: FSMContext) -> None:
     await state.set_state(LegoStyleFlow.confirm)
     await message.answer_photo(
         photo_id,
-        caption="Все верно? Если да — запускаю генерацию.",
+        caption="Всё верно? Запускаю генерацию? ✅",
         reply_markup=yes_no_kb(
             yes_text="✅ Всё верно",
             no_text="🔁 Отправить заново",
@@ -181,7 +181,7 @@ async def lego_style_confirm_yes(
         await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="lego_style")
         await state.clear()
         await call.message.answer(
-            "Хотите ли что-то ещё сгенерировать?",
+            "Хочешь сгенерировать ещё что-нибудь? ✨",
             reply_markup=photo_menu_kb(),
         )
         return

@@ -73,7 +73,7 @@ def new_plan_preview(data: dict) -> str:
         f"Кредиты: <b>{credits}</b>\n"
         f"Цена: <b>{price_text}</b>\n"
         f"Цена в ⭐: <b>{stars_text}</b>\n\n"
-        "Все верно?"
+        "Всё верно? ✅"
     )
 
 

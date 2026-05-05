@@ -179,11 +179,11 @@ async def _build_tags_screen_text(
     data = await state.get_data()
     selected_line = ", ".join(_selected_tag_labels(data.get("selected_tags", []))) or "ничего"
     return (
-        "Создадим песню. Сначала выбери стиль и теги.\n\n"
-        f"Можно выбрать до {MAX_TAGS} тегов.\n"
+        "🎵 Создадим песню. Сначала выбери стиль и теги.\n\n"
+        f"🏷 Можно выбрать до {MAX_TAGS} тегов.\n"
         f"Сейчас выбрано: {selected_line}\n\n"
-        f"Стоимость: <b>{credits_per_second} кр.</b> за 1 секунду музыки.\n"
-        "Минимальная длительность трека — <b>30 секунд</b>."
+        f"💳 Стоимость: <b>{credits_per_second} кр.</b> за 1 секунду музыки.\n"
+        "⏱ Минимальная длительность трека — <b>30 секунд</b>."
     )
 
 
@@ -191,8 +191,8 @@ async def _render_structure_screen(target: CallbackQuery | Message, state: FSMCo
     data = await state.get_data()
     selected_line = ", ".join(_selected_tag_labels(data.get("selected_tags", []))) or "—"
     text = (
-        "Теперь выбери структуру песни.\n\n"
-        f"Tags: {selected_line}"
+        "🧱 Теперь выбери структуру песни.\n\n"
+        f"🏷 Теги: {selected_line}"
     )
     markup = structure_keyboard(presets=PRESET_STRUCTURES)
     if isinstance(target, CallbackQuery):
@@ -207,7 +207,7 @@ async def _render_custom_structure_screen(
     data = await state.get_data()
     custom_sections = data.get("custom_sections", [])
     structure_preview = " → ".join(SECTION_LABELS.get(s, s.title()) for s in custom_sections) or "пока пусто"
-    text = "Собери свою структуру песни.\n\n"
+    text = "🧩 Собери свою структуру песни.\n\n"
     if notice:
         text += f"{notice}\n\n"
     text += (
@@ -234,7 +234,7 @@ async def _render_section_prompt(
     existing = (section_texts.get(section["key"]) or "").strip()
     hint = f"\n\nТекущий текст:\n{existing}" if existing else ""
     text = (
-        f"Шаг {index + 1} из {len(sections)}.\n"
+        f"✍️ Шаг {index + 1} из {len(sections)}.\n"
         f"Введите текст для {section['label']}.\n"
         "Отправь текст одним сообщением."
         f"{hint}"
@@ -250,8 +250,8 @@ async def _render_duration_screen(target: CallbackQuery | Message, state: FSMCon
     data = await state.get_data()
     selected_duration = data.get("duration")
     text = (
-        "Выбери длительность трека.\n\n"
-        f"Seed будет использован по умолчанию: {data.get('seed', DEFAULT_SEED)}"
+        "⏱ Выбери длительность трека.\n\n"
+        f"🎲 Seed будет использован по умолчанию: {data.get('seed', DEFAULT_SEED)}"
     )
     markup = duration_keyboard(
         durations=DURATION_OPTIONS,
@@ -287,7 +287,7 @@ async def _render_confirm_screen(target: CallbackQuery | Message, state: FSMCont
 
 
 def _back_to_music_menu_text() -> str:
-    return "🎵 Работа с музыкой\n\nТут будут находиться шаблоны для изготовления музыки 👇"
+    return "🎵 Работа с музыкой\n\nСоздай трек по стилю, структуре и тексту 👇"
 
 
 async def _send_intro_audio(message: Message) -> None:
@@ -630,7 +630,7 @@ async def music_confirm_back(call: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data == MusicCallbacks.CANCEL)
 async def music_cancel(call: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    await edit_text_safe(call, "Создание песни отменено.", reply_markup=music_menu_kb())
+    await edit_text_safe(call, "Создание песни отменено 🛑", reply_markup=music_menu_kb())
     await safe_answer(call)
 
 
@@ -690,7 +690,7 @@ async def music_confirm_submit(
             duration=duration,
             seed=seed,
         )
-        await progress_msg.edit_text("Генерация запущена. Жду результат…")
+        await progress_msg.edit_text("⏳ Генерация запущена. Жду результат…")
         audio_url = await client.wait_audio_url(task_id)
         filename, audio_bytes = await client.download_audio_bytes(audio_url)
 
@@ -713,7 +713,7 @@ async def music_confirm_submit(
         )
         await state.clear()
         await call.message.answer(
-            "Можно создать ещё один трек или вернуться в раздел музыки.",
+            "Можно создать ещё один трек или вернуться в раздел музыки 🎵",
             reply_markup=music_done_keyboard(),
         )
         await safe_answer(call)

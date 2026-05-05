@@ -119,7 +119,7 @@ async def open_video_menu(call: CallbackQuery) -> None:
 async def open_music_menu(call: CallbackQuery) -> None:
     await edit_text_safe(
         call,
-        "🎵 Работа с музыкой\n\nТут будут находиться шаблоны для изготовления музыки 👇",
+        "🎵 Работа с музыкой\n\nСоздай трек по стилю, структуре и тексту 👇",
         reply_markup=music_menu_kb(),
     )
     await safe_answer(call)

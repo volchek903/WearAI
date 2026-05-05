@@ -94,7 +94,7 @@ async def rear_view_mirror_photo_in(
 
     await message.answer_photo(
         file_id,
-        caption="Генерировать с этой машиной?",
+        caption="Генерировать с этой машиной? ✅",
         reply_markup=yes_no_kb(
             yes_text="✅ Да, всё верно",
             no_text="❌ Нет",
@@ -183,7 +183,7 @@ async def rear_view_mirror_confirm(
         await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="rear_view_mirror")
         await state.clear()
         await call.message.answer(
-            "Хотите ли что-то ещё сгенерировать?",
+            "Хочешь сгенерировать ещё что-нибудь? ✨",
             reply_markup=photo_menu_kb(),
         )
         await safe_answer(call)

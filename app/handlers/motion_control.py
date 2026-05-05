@@ -385,7 +385,7 @@ async def motion_control_confirm(
         )
         await call.bot.send_message(
             chat_id=call.message.chat.id,
-            text="Хотите ли что-то ещё сгенерировать?",
+            text="Хочешь сгенерировать ещё что-нибудь? ✨",
             reply_markup=video_menu_kb(),
         )
         await state.clear()

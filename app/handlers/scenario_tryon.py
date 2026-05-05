@@ -313,7 +313,7 @@ async def tryon_desc_in(
             reply_markup=feedback_kb(),
         )
         await message.answer(
-            "Хотите ли что-то ещё сгенерировать?",
+            "Хочешь сгенерировать ещё что-нибудь? ✨",
             reply_markup=photo_menu_kb(),
         )
         return

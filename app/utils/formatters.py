@@ -77,5 +77,5 @@ def format_song_summary(
         f"{lyrics_block}\n\n"
         f"⏱ <b>Длительность:</b>\n{duration} сек\n\n"
         f"🎙 <b>Режим:</b>\n{vocals_mode}\n\n"
-        "Все верно? 👇"
+        "Всё верно? 👇"
     )

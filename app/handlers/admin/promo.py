@@ -66,7 +66,7 @@ async def admin_promo_code_in(message: Message, state: FSMContext) -> None:
         return
     await state.update_data(code=code)
     await state.set_state(AdminPromoFSM.credit_amount)
-    await message.answer("Сколько кредитов выдаёт промокод?")
+    await message.answer("Сколько кредитов выдаёт промокод? 💠")
 
 
 @router.message(AdminPromoFSM.credit_amount)
@@ -81,7 +81,7 @@ async def admin_promo_credit_amount(message: Message, state: FSMContext) -> None
         return
     await state.update_data(credit_amount=count)
     await state.set_state(AdminPromoFSM.max_uses)
-    await message.answer("Сколько пользователей может активировать промокод?")
+    await message.answer("Сколько пользователей может активировать промокод? 👥")
 
 
 @router.message(AdminPromoFSM.max_uses)
@@ -106,7 +106,7 @@ async def admin_promo_max_uses(message: Message, state: FSMContext) -> None:
         f"Код: <b>{code}</b>\n"
         f"Кредитов: <b>{credit_amount}</b>\n"
         f"Лимит активаций: <b>{count}</b>\n\n"
-        "Всё верно?",
+        "Всё верно? ✅",
         reply_markup=yes_no_kb(
             yes_text="✅ Создать",
             no_text="❌ Отменить",

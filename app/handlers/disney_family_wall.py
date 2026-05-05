@@ -111,7 +111,7 @@ async def disney_family_wall_photos_in(message: Message, state: FSMContext) -> N
         await state.set_state(DisneyFamilyWallFlow.confirm)
         await message.answer_photo(
             file_id,
-            caption="Проверь фото. Всё верно?",
+            caption="Проверь фото. Всё верно? ✅",
             reply_markup=yes_no_kb(
                 yes_text="✅ Всё верно",
                 no_text="🔁 Отправить заново",
@@ -137,7 +137,7 @@ async def disney_family_wall_photos_in(message: Message, state: FSMContext) -> N
     if len(result.file_ids) == 1:
         await message.answer_photo(
             result.file_ids[0],
-            caption="Проверь фото. Всё верно?",
+            caption="Проверь фото. Всё верно? ✅",
             reply_markup=yes_no_kb(
                 yes_text="✅ Всё верно",
                 no_text="🔁 Отправить заново",
@@ -149,7 +149,7 @@ async def disney_family_wall_photos_in(message: Message, state: FSMContext) -> N
     media = [InputMediaPhoto(media=fid) for fid in result.file_ids]
     await message.answer_media_group(media=media)
     await message.answer(
-        f"Получил {len(result.file_ids)} фото. Всё верно?",
+        f"Получил {len(result.file_ids)} фото. Всё верно? ✅",
         reply_markup=yes_no_kb(
             yes_text="✅ Всё верно",
             no_text="🔁 Отправить заново",
@@ -244,7 +244,7 @@ async def disney_family_wall_confirm_yes(
         )
         await state.clear()
         await call.message.answer(
-            "Хотите ли что-то ещё сгенерировать?",
+            "Хочешь сгенерировать ещё что-нибудь? ✨",
             reply_markup=photo_two_kb(),
         )
         await safe_answer(call)

@@ -228,7 +228,7 @@ async def love_is_text_in(
                 reply_markup=love_is_post_kb(),
             )
             await message.answer(
-                "Хотите ли что-то ещё сгенерировать?",
+                "Хочешь сгенерировать ещё что-нибудь? ✨",
                 reply_markup=photo_menu_kb(),
             )
 
@@ -373,7 +373,7 @@ async def love_is_animate(
         )
         await increment_generated_videos(session=session, tg_id=tg_id, delta=1, section="love_is_video")
         await call.message.answer(
-            "Хотите ли что-то ещё сгенерировать?",
+            "Хочешь сгенерировать ещё что-нибудь? ✨",
             reply_markup=photo_menu_kb(),
         )
     except Exception as e:

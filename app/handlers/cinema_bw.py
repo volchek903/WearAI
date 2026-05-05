@@ -130,7 +130,7 @@ async def cinema_bw_male_in(message: Message, state: FSMContext) -> None:
     await message.answer_photo(female_id, caption="Фото девушки")
     await message.answer_photo(male_id, caption="Фото мужчины")
     await message.answer(
-        "Все верно? Если да — запускаю генерацию.",
+        "Всё верно? Запускаю генерацию? ✅",
         reply_markup=yes_no_kb(
             yes_text="✅ Всё верно",
             no_text="🔁 Отправить заново",
@@ -221,7 +221,7 @@ async def cinema_bw_confirm_yes(
         await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="cinema_bw")
         await state.clear()
         await call.message.answer(
-            "Хотите ли что-то ещё сгенерировать?",
+            "Хочешь сгенерировать ещё что-нибудь? ✨",
             reply_markup=photo_menu_kb(),
         )
         return

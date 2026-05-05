@@ -47,7 +47,7 @@ def extra_menu_kb(plans, current_plan_name: str | None) -> InlineKeyboardMarkup:
 
     add_button(
         kb,
-        text="Как получить бесплатно",
+        text="🎁 Как получить бесплатно",
         callback_data=ExtraCallbacks.FREE_INFO,
         style="success",
     )

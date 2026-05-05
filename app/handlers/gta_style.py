@@ -153,7 +153,7 @@ async def gta_style_photo_in(
         await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="gta_style")
         await state.clear()
         await message.answer(
-            "Хотите ли что-то ещё сгенерировать?",
+            "Хочешь сгенерировать ещё что-нибудь? ✨",
             reply_markup=photo_menu_kb(),
         )
         return
