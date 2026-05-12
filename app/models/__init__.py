@@ -10,6 +10,7 @@ from .admin_action_log import AdminActionLog
 from .generation_log import GenerationLog
 from .generation_analytics import GenerationAnalytics
 from .app_setting import AppSetting
+from .user_subscription import UserSubscription
 
 __all__ = [
     "Base",
@@ -24,4 +25,5 @@ __all__ = [
     "GenerationLog",
     "GenerationAnalytics",
     "AppSetting",
+    "UserSubscription",
 ]

@@ -38,6 +38,7 @@ from app.handlers.seedream_lite import router as seedream_lite_router
 from app.handlers.settings import router as settings_router
 from app.handlers.sims_style import router as sims_style_router
 from app.handlers.start import router as start_router
+from app.handlers.video_models import router as video_models_router
 from app.handlers.wan_27 import router as wan_27_router
 from app.handlers.drift_heart import router as drift_heart_router
 
@@ -49,6 +50,7 @@ def setup_routers(dp: Dispatcher) -> None:
     ordered_routers = [
         start_router,
         menu_router,
+        video_models_router,
         model_router,
         nano_banana_router,
         gpt_image_2_router,

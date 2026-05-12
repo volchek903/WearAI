@@ -29,6 +29,7 @@ from app.repository.payments import (
 )
 from app.models.payment import PaymentStatus
 from app.services.platega import normalize_payment_status
+from app.utils.http_client import external_httpx_client
 from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_photo
 
@@ -62,7 +63,7 @@ async def _platega_get_status(tx_id: str) -> str | None:
     headers = {"X-MerchantId": merchant_id, "X-Secret": secret}
 
     try:
-        async with httpx.AsyncClient(timeout=20) as client:
+        async with external_httpx_client(timeout=20) as client:
             r = await client.get(url, headers=headers)
     except Exception:
         logger.exception("start._platega_get_status: request failed tx_id=%s", tx_id)

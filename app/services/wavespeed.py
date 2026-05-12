@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import httpx
 
 from app.services.wavespeed_ai import WaveSpeedError, get_wavespeed_api_key_from_env
+from app.utils.http_client import external_httpx_client
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,7 @@ class WaveSpeedAceStepClient:
         url = f"{self.api_base}/api/v3/wavespeed-ai/ace-step-1.5"
 
         logger.info("wavespeed ace-step create: duration=%s tags=%s", duration, tags)
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with external_httpx_client(timeout=self.timeout) as client:
             resp = await client.post(
                 url,
                 headers={**self._headers(), "Content-Type": "application/json"},
@@ -139,7 +140,7 @@ class WaveSpeedAceStepClient:
 
         for attempt in range(1, max_attempts + 1):
             try:
-                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                async with external_httpx_client(timeout=self.timeout) as client:
                     resp = await client.get(url, headers=self._headers())
                 if resp.status_code != 200:
                     raise WaveSpeedError(
@@ -213,7 +214,7 @@ class WaveSpeedAceStepClient:
 
         for attempt in range(1, max_attempts + 1):
             try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(180.0)) as client:
+                async with external_httpx_client(timeout=httpx.Timeout(180.0)) as client:
                     resp = await client.get(url, headers=self._headers())
                     if resp.status_code >= 400:
                         resp = await client.get(url)

@@ -4,6 +4,7 @@ from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.models.user_photo_settings import UserPhotoSettings
+from app.keyboards.video_models import video_models_menu_kb
 from app.keyboards.utils import add_button
 
 
@@ -184,16 +185,7 @@ def photo_one_kb() -> InlineKeyboardMarkup:
 
 
 def video_menu_kb() -> InlineKeyboardMarkup:
-    kb = InlineKeyboardBuilder()
-    add_button(kb, text="🎬 Оживить видео", callback_data=MenuCallbacks.ANIMATE)
-    add_button(
-        kb,
-        text="🎞 Оживить фото по видео",
-        callback_data=MenuCallbacks.MOTION_CONTROL,
-    )
-    add_button(kb, text="⬅️ В меню", callback_data=MenuCallbacks.BACK, style="danger")
-    kb.adjust(1)
-    return kb.as_markup()
+    return video_models_menu_kb()
 
 
 def music_menu_kb() -> InlineKeyboardMarkup:

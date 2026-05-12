@@ -19,6 +19,15 @@ MODEL_PRICE_GPT_IMAGE_2_TEXT_TO_IMAGE_KEY = "model_price_gpt_image_2_text_to_ima
 MODEL_PRICE_KLING_I2V_KEY = "model_price_kling_v30_std_i2v"
 MODEL_PRICE_KLING_MOTION_KEY = "model_price_kling_v26_std_motion"
 MODEL_PRICE_ACE_STEP_KEY = "model_price_ace_step_1_5_music_per_second"
+MODEL_PRICE_SEEDANCE_20_VIDEO_PER_SECOND_KEY = "model_price_seedance_20_video_per_second"
+MODEL_PRICE_SEEDANCE_20_TURBO_VIDEO_PER_SECOND_KEY = "model_price_seedance_20_turbo_video_per_second"
+MODEL_PRICE_HAPPY_HORSE_10_VIDEO_PER_SECOND_KEY = "model_price_happy_horse_10_video_per_second"
+MODEL_PRICE_WAN_27_VIDEO_PER_SECOND_KEY = "model_price_wan_27_video_per_second"
+MODEL_PRICE_WAN_22_SPICY_VIDEO_PER_SECOND_KEY = "model_price_wan_22_spicy_video_per_second"
+MODEL_PRICE_KLING_30_VIDEO_PER_SECOND_KEY = "model_price_kling_30_video_per_second"
+MODEL_PRICE_KLING_O3_VIDEO_PER_SECOND_KEY = "model_price_kling_o3_video_per_second"
+MODEL_PRICE_VEO_31_LITE_VIDEO_PER_SECOND_KEY = "model_price_veo_31_lite_video_per_second"
+MODEL_PRICE_GROK_IMAGINE_VIDEO_PER_SECOND_KEY = "model_price_grok_imagine_video_per_second"
 PRICING_MARKUP_MULTIPLIER_KEY = "pricing_markup_multiplier_pct"
 USD_TO_RUB_RATE_KEY = "pricing_usd_to_rub_rate"
 
@@ -37,6 +46,15 @@ DEFAULT_PROVIDER_COST_USD = {
     MODEL_PRICE_KLING_I2V_KEY: Decimal("0.42"),
     MODEL_PRICE_KLING_MOTION_KEY: Decimal("0.21"),
     MODEL_PRICE_ACE_STEP_KEY: Decimal("0.0003"),
+    MODEL_PRICE_SEEDANCE_20_VIDEO_PER_SECOND_KEY: Decimal("0.12"),
+    MODEL_PRICE_SEEDANCE_20_TURBO_VIDEO_PER_SECOND_KEY: Decimal("0.14"),
+    MODEL_PRICE_HAPPY_HORSE_10_VIDEO_PER_SECOND_KEY: Decimal("0.14"),
+    MODEL_PRICE_WAN_27_VIDEO_PER_SECOND_KEY: Decimal("0.10"),
+    MODEL_PRICE_WAN_22_SPICY_VIDEO_PER_SECOND_KEY: Decimal("0.03"),
+    MODEL_PRICE_KLING_30_VIDEO_PER_SECOND_KEY: Decimal("0.084"),
+    MODEL_PRICE_KLING_O3_VIDEO_PER_SECOND_KEY: Decimal("0.084"),
+    MODEL_PRICE_VEO_31_LITE_VIDEO_PER_SECOND_KEY: Decimal("0.05"),
+    MODEL_PRICE_GROK_IMAGINE_VIDEO_PER_SECOND_KEY: Decimal("0.05"),
 }
 
 
@@ -59,6 +77,15 @@ MODEL_TITLES = {
     MODEL_PRICE_KLING_I2V_KEY: "Видео: Kling 3.0 Std I2V",
     MODEL_PRICE_KLING_MOTION_KEY: "Видео: Kling 2.6 Std Motion",
     MODEL_PRICE_ACE_STEP_KEY: "Музыка: ACE-Step 1.5 (за 1 сек.)",
+    MODEL_PRICE_SEEDANCE_20_VIDEO_PER_SECOND_KEY: "Видео: Seedance 2.0 (база за 1 сек.)",
+    MODEL_PRICE_SEEDANCE_20_TURBO_VIDEO_PER_SECOND_KEY: "Видео: Seedance 2.0 Turbo (база за 1 сек.)",
+    MODEL_PRICE_HAPPY_HORSE_10_VIDEO_PER_SECOND_KEY: "Видео: Happy Horse 1.0 (база за 1 сек.)",
+    MODEL_PRICE_WAN_27_VIDEO_PER_SECOND_KEY: "Видео: WAN 2.7 (база за 1 сек.)",
+    MODEL_PRICE_WAN_22_SPICY_VIDEO_PER_SECOND_KEY: "Видео: WAN 2.2 Spicy (база за 1 сек.)",
+    MODEL_PRICE_KLING_30_VIDEO_PER_SECOND_KEY: "Видео: Kling 3.0 (база за 1 сек.)",
+    MODEL_PRICE_KLING_O3_VIDEO_PER_SECOND_KEY: "Видео: Kling O3 (база за 1 сек.)",
+    MODEL_PRICE_VEO_31_LITE_VIDEO_PER_SECOND_KEY: "Видео: Veo 3.1 Lite (база за 1 сек.)",
+    MODEL_PRICE_GROK_IMAGINE_VIDEO_PER_SECOND_KEY: "Видео: Grok Imagine (база за 1 сек.)",
 }
 
 LAUNCH_DAILY_LIMIT_KEY = "launch_daily_limit"

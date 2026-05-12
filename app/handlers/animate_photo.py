@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
+from typing import Final
 
 import aiohttp
 from aiogram import F, Router
@@ -35,6 +36,15 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 MAX_INPUT_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB
+_IMAGE_DOC_EXTENSIONS: Final[set[str]] = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".bmp",
+    ".heic",
+    ".heif",
+}
 
 # key = tg_id (telegram id) — чтобы не путать с users.id
 _active_jobs: dict[int, asyncio.Task] = {}
@@ -68,6 +78,17 @@ async def _chat_action_loop(bot, chat_id: int, stop: asyncio.Event) -> None:
         await asyncio.sleep(5)
 
 
+def _document_looks_like_image(message: Message) -> bool:
+    doc = message.document
+    if doc is None:
+        return False
+    mime = (doc.mime_type or "").lower()
+    if mime.startswith("image/"):
+        return True
+    ext = Path(doc.file_name or "").suffix.lower()
+    return ext in _IMAGE_DOC_EXTENSIONS
+
+
 @router.callback_query(F.data == MenuCallbacks.ANIMATE)
 async def animate_entry(cb: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
@@ -80,6 +101,7 @@ async def animate_entry(cb: CallbackQuery, state: FSMContext) -> None:
     text = (
         "🎬 <b>Оживить фото</b>\n\n"
         "Пришлите <b>одно фото</b>, которое хотите оживить 📸\n"
+        "Можно отправить как обычное фото или как файл-изображение.\n"
         "<i>(Не альбом / не несколько фото одним сообщением)</i>\n\n"
         "После этого я попрошу промпт и начну генерацию видео на <b>5 секунд</b>.\n\n"
         "💡 <b>Совет</b>: лучше работает фото без смаза, с хорошим светом и лицом в кадре."
@@ -90,6 +112,7 @@ async def animate_entry(cb: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.message(AnimatePhotoStates.waiting_photo, F.photo)
+@router.message(AnimatePhotoStates.waiting_photo, F.document)
 async def animate_got_photo(message: Message, state: FSMContext) -> None:
     if not settings.kie_api_key:
         await message.answer("Не настроен WAVESPEED_API_KEY в .env 😕")
@@ -104,22 +127,43 @@ async def animate_got_photo(message: Message, state: FSMContext) -> None:
         )
         return
 
-    photo = message.photo[-1]
-    if (photo.file_size or 0) > MAX_INPUT_PHOTO_BYTES:
+    file_id = ""
+    file_size = 0
+    filename = "photo.jpg"
+
+    if message.photo:
+        photo = message.photo[-1]
+        file_id = photo.file_id
+        file_size = int(photo.file_size or 0)
+    elif _document_looks_like_image(message):
+        doc = message.document
+        assert doc is not None
+        file_id = doc.file_id
+        file_size = int(doc.file_size or 0)
+        filename = doc.file_name or filename
+    else:
+        await message.answer(
+            "Сейчас нужно <b>изображение</b> 📸\n"
+            "Отправь одно фото сообщением или как файл-изображение.",
+            parse_mode="HTML",
+        )
+        return
+
+    if file_size > MAX_INPUT_PHOTO_BYTES:
         await message.answer(
             "Фото слишком большое 😕\n\n"
             "Пришлите изображение до 5 МБ, чтобы загрузка и генерация проходили стабильно."
         )
         return
 
-    tg_file = await message.bot.get_file(photo.file_id)
+    tg_file = await message.bot.get_file(file_id)
     file_path = tg_file.file_path
     if not file_path:
         await message.answer("Не удалось получить файл из Telegram 😕 Попробуй ещё раз.")
         return
 
     image_bytes = await _download_telegram_file(message.bot.token, file_path)
-    filename = Path(file_path).name or "photo.jpg"
+    filename = filename or Path(file_path).name or "photo.jpg"
 
     client = WaveSpeedKlingClient(settings.kie_api_key)
     try:
@@ -143,7 +187,7 @@ async def animate_got_photo(message: Message, state: FSMContext) -> None:
 @router.message(AnimatePhotoStates.waiting_photo)
 async def animate_waiting_photo_wrong(message: Message) -> None:
     await message.answer(
-        "Сейчас нужно фото 📸 Пришлите <b>одно</b> фото сообщением.",
+        "Сейчас нужно фото 📸 Пришлите <b>одно</b> фото сообщением или как файл-изображение.",
         parse_mode="HTML",
     )
 

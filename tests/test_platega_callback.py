@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from decimal import Decimal
 
+import app.models  # noqa: F401
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.models.base import Base

@@ -9,6 +9,8 @@ from dataclasses import dataclass
 
 import httpx
 
+from app.utils.http_client import external_httpx_client
+
 PAID_STATUSES = {
     "CONFIRMED",
     "PAID",
@@ -68,7 +70,7 @@ class PlategaClient:
         }
 
         async def _do() -> httpx.Response:
-            async with httpx.AsyncClient(timeout=20) as client:
+            async with external_httpx_client(timeout=20) as client:
                 return await client.post(url, headers=self._headers(), json=body)
 
         r = await _with_retries(_do)
@@ -78,7 +80,7 @@ class PlategaClient:
     async def get_transaction_status(self, tx_id: str) -> str | None:
         url = f"{self.cfg.base_url.rstrip('/')}/transaction/{tx_id}"
         async def _do() -> httpx.Response:
-            async with httpx.AsyncClient(timeout=20) as client:
+            async with external_httpx_client(timeout=20) as client:
                 return await client.get(
                     url,
                     headers={
@@ -166,7 +168,7 @@ async def check_platega_health() -> bool:
     base_url = os.getenv("PLATEGA_BASE_URL") or "https://app.platega.io"
     url = base_url.rstrip("/")
     try:
-        async with httpx.AsyncClient(timeout=3) as client:
+        async with external_httpx_client(timeout=3) as client:
             r = await client.get(url)
         _last_health_ok = 200 <= r.status_code < 500
     except Exception:

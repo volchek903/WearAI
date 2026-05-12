@@ -10,6 +10,8 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.utils.http_client import external_httpx_client
+
 logger = logging.getLogger(__name__)
 
 
@@ -209,7 +211,7 @@ class WaveSpeedClient:
 
         for attempt in range(1, max_attempts + 1):
             try:
-                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                async with external_httpx_client(timeout=self.timeout) as client:
                     return await client.request(method, url, **kwargs)
             except _RETRYABLE_TRANSPORT_ERRORS as e:
                 last_exc = e
@@ -622,6 +624,14 @@ class WaveSpeedClient:
             body=body,
         )
 
+    async def create_video_prediction_task(
+        self,
+        *,
+        endpoint: str,
+        body: dict[str, Any],
+    ) -> str:
+        return await self._create_prediction_task(endpoint=endpoint, body=body)
+
     async def get_task(self, task_id: str) -> dict[str, Any]:
         url = f"{self.api_base}/api/v3/predictions/{task_id}/result"
         max_attempts = 5
@@ -629,7 +639,7 @@ class WaveSpeedClient:
 
         for attempt in range(1, max_attempts + 1):
             try:
-                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                async with external_httpx_client(timeout=self.timeout) as client:
                     resp = await client.get(url, headers=self._headers())
                 if resp.status_code != 200:
                     raise WaveSpeedError(
@@ -710,7 +720,7 @@ class WaveSpeedClient:
     async def download_bytes(self, url: str) -> bytes:
         async def _do() -> httpx.Response:
             timeout = httpx.Timeout(120.0)
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with external_httpx_client(timeout=timeout) as client:
                 return await client.get(url)
 
         last_exc: Exception | None = None

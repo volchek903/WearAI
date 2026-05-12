@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from sqlalchemy import select, update
@@ -7,6 +8,8 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 
 async def get_user_by_tg_id(session: AsyncSession, tg_id: int) -> Optional[User]:
@@ -99,15 +102,26 @@ async def increment_generated_photos(
     from app.repository.analytics import log_generation_event
     from app.repository.generations import finalize_photo_generation
 
-    await session.execute(
-        update(User)
-        .where(User.tg_id == tg_id)
-        .values(generated_photos=User.generated_photos + delta)
-    )
-    await session.commit()
-    if delta > 0 and section:
-        await log_generation_event(session, tg_id=tg_id, section=section, kind="photo")
     await finalize_photo_generation(session, tg_id)
+    try:
+        await session.execute(
+            update(User)
+            .where(User.tg_id == tg_id)
+            .values(generated_photos=User.generated_photos + delta)
+        )
+        await session.commit()
+    except Exception:
+        logger.exception("Failed to increment generated_photos for tg_id=%s", tg_id)
+
+    if delta > 0 and section:
+        try:
+            await log_generation_event(session, tg_id=tg_id, section=section, kind="photo")
+        except Exception:
+            logger.exception(
+                "Failed to log photo generation analytics for tg_id=%s section=%s",
+                tg_id,
+                section,
+            )
 
 
 async def increment_generated_videos(
@@ -116,15 +130,26 @@ async def increment_generated_videos(
     from app.repository.analytics import log_generation_event
     from app.repository.generations import finalize_video_generation
 
-    await session.execute(
-        update(User)
-        .where(User.tg_id == tg_id)
-        .values(generated_videos=User.generated_videos + delta)
-    )
-    await session.commit()
-    if delta > 0 and section:
-        await log_generation_event(session, tg_id=tg_id, section=section, kind="video")
     await finalize_video_generation(session, tg_id)
+    try:
+        await session.execute(
+            update(User)
+            .where(User.tg_id == tg_id)
+            .values(generated_videos=User.generated_videos + delta)
+        )
+        await session.commit()
+    except Exception:
+        logger.exception("Failed to increment generated_videos for tg_id=%s", tg_id)
+
+    if delta > 0 and section:
+        try:
+            await log_generation_event(session, tg_id=tg_id, section=section, kind="video")
+        except Exception:
+            logger.exception(
+                "Failed to log video generation analytics for tg_id=%s section=%s",
+                tg_id,
+                section,
+            )
 
 
 async def increment_generated_music(
@@ -133,7 +158,14 @@ async def increment_generated_music(
     from app.repository.analytics import log_generation_event
     from app.repository.generations import finalize_video_generation
 
-    if delta > 0 and section:
-        for _ in range(int(delta)):
-            await log_generation_event(session, tg_id=tg_id, section=section, kind="music")
     await finalize_video_generation(session, tg_id)
+    if delta > 0 and section:
+        try:
+            for _ in range(int(delta)):
+                await log_generation_event(session, tg_id=tg_id, section=section, kind="music")
+        except Exception:
+            logger.exception(
+                "Failed to log music generation analytics for tg_id=%s section=%s",
+                tg_id,
+                section,
+            )

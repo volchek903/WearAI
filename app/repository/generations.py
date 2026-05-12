@@ -26,6 +26,7 @@ VIDEO_MODEL_MOTION_KEY = MODEL_PRICE_KLING_MOTION_KEY
 
 CHARGE_SOURCE_FREE = "free"
 CHARGE_SOURCE_PAID = "paid"
+CHARGE_SOURCE_MIXED = "mixed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,42 +98,42 @@ async def _charge_credits(
     day_key = _msk_today_key()
     free_limit = await get_launch_daily_limit(session)
     current_free_used = _daily_free_count_for_user(user)
+    total_credits = int(credits)
+    free_available = int(user.free_credit_balance or 0)
+    paid_available = int(user.credit_balance or 0)
+    free_allowed = int(free_limit) <= 0 or current_free_used < int(free_limit)
+    free_to_charge = min(free_available, total_credits) if free_allowed else 0
+    paid_to_charge = total_credits - free_to_charge
 
-    can_use_free = (
-        int(user.free_credit_balance or 0) >= int(credits)
-        and (int(free_limit) <= 0 or current_free_used < int(free_limit))
-    )
+    if paid_available < paid_to_charge:
+        raise NoGenerationsLeft()
 
-    if can_use_free:
-        await session.execute(
-            update(User)
-            .where(User.id == user.id, User.free_credit_balance >= int(credits))
-            .values(
-                free_credit_balance=User.free_credit_balance - int(credits),
-                free_generations_day=day_key,
-                free_generations_used_today=current_free_used + 1,
-                pending_charge_kind=kind,
-                pending_charge_source=CHARGE_SOURCE_FREE,
-                pending_charge_amount=int(credits),
-            )
-        )
-        await session.commit()
-        return ChargeResult(
-            kind=kind,
-            source=CHARGE_SOURCE_FREE,
-            amount=int(credits),
-            model_key=model_key,
-        )
+    pending_source = CHARGE_SOURCE_PAID
+    if free_to_charge and paid_to_charge:
+        pending_source = f"{CHARGE_SOURCE_MIXED}:{free_to_charge}"
+    elif free_to_charge:
+        pending_source = CHARGE_SOURCE_FREE
+
+    values: dict[str, object] = {
+        "pending_charge_kind": kind,
+        "pending_charge_source": pending_source,
+        "pending_charge_amount": total_credits,
+    }
+    if free_to_charge:
+        values["free_credit_balance"] = User.free_credit_balance - free_to_charge
+        values["free_generations_day"] = day_key
+        values["free_generations_used_today"] = current_free_used + 1
+    if paid_to_charge:
+        values["credit_balance"] = User.credit_balance - paid_to_charge
 
     updated = await session.execute(
         update(User)
-        .where(User.id == user.id, User.credit_balance >= int(credits))
-        .values(
-            credit_balance=User.credit_balance - int(credits),
-            pending_charge_kind=kind,
-            pending_charge_source=CHARGE_SOURCE_PAID,
-            pending_charge_amount=int(credits),
+        .where(
+            User.id == user.id,
+            User.free_credit_balance >= int(free_to_charge),
+            User.credit_balance >= int(paid_to_charge),
         )
+        .values(**values)
     )
     if updated.rowcount != 1:
         raise NoGenerationsLeft()
@@ -140,8 +141,12 @@ async def _charge_credits(
     await session.commit()
     return ChargeResult(
         kind=kind,
-        source=CHARGE_SOURCE_PAID,
-        amount=int(credits),
+        source=(
+            CHARGE_SOURCE_MIXED
+            if free_to_charge and paid_to_charge
+            else (CHARGE_SOURCE_FREE if free_to_charge else CHARGE_SOURCE_PAID)
+        ),
+        amount=total_credits,
         model_key=model_key,
     )
 
@@ -157,10 +162,19 @@ async def _refund_pending_charge(
         return
 
     pending_kind = (user.pending_charge_kind or "").strip()
-    pending_source = (user.pending_charge_source or "").strip()
+    pending_source_raw = (user.pending_charge_source or "").strip()
     pending_amount = int(user.pending_charge_amount or 0)
     if pending_kind != kind or pending_amount <= 0:
         return
+
+    pending_source = pending_source_raw
+    mixed_free_amount = 0
+    if pending_source_raw.startswith(f"{CHARGE_SOURCE_MIXED}:"):
+        pending_source = CHARGE_SOURCE_MIXED
+        try:
+            mixed_free_amount = int(pending_source_raw.split(":", 1)[1])
+        except Exception:
+            mixed_free_amount = 0
 
     values: dict[str, object] = {
         "pending_charge_kind": None,
@@ -173,6 +187,17 @@ async def _refund_pending_charge(
             values["free_generations_used_today"] = max(
                 0, int(user.free_generations_used_today or 0) - 1
             )
+    elif pending_source == CHARGE_SOURCE_MIXED:
+        free_refund = max(0, min(int(mixed_free_amount), pending_amount))
+        paid_refund = max(0, pending_amount - free_refund)
+        if free_refund:
+            values["free_credit_balance"] = User.free_credit_balance + free_refund
+            if (user.free_generations_day or "") == _msk_today_key():
+                values["free_generations_used_today"] = max(
+                    0, int(user.free_generations_used_today or 0) - 1
+                )
+        if paid_refund:
+            values["credit_balance"] = User.credit_balance + paid_refund
     else:
         values["credit_balance"] = User.credit_balance + pending_amount
 

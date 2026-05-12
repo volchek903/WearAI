@@ -109,7 +109,7 @@ async def open_photo_archive(call: CallbackQuery) -> None:
 async def open_video_menu(call: CallbackQuery) -> None:
     await edit_text_safe(
         call,
-        "Выбери, что сделать с видео 👇",
+        "Выбери модель для генерации видео или режим оживления 👇",
         reply_markup=video_menu_kb(),
     )
     await safe_answer(call)

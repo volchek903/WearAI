@@ -6,6 +6,8 @@ from typing import Any
 
 import httpx
 
+from app.utils.http_client import external_httpx_client
+
 
 class PromptHelperError(RuntimeError):
     pass
@@ -137,7 +139,7 @@ async def generate_nano_banana_prompt_ru(section: str, user_text: str) -> str:
         "max_tokens": 700,
     }
 
-    async with httpx.AsyncClient(timeout=cfg.timeout_s) as client:
+    async with external_httpx_client(timeout=cfg.timeout_s) as client:
         resp = await client.post(url, headers=headers, json=body)
 
     if resp.status_code >= 400:
