@@ -22,6 +22,7 @@ from app.repository.generations import (
     charge_video_generation,
     ensure_default_subscription,
     refund_video_generation,
+    finalize_video_generation,
 )
 from app.repository.users import increment_generated_videos
 from app.states.motion_control_flow import MotionControlFlow
@@ -309,6 +310,7 @@ async def motion_control_confirm(
     )
 
     client = WaveSpeedKlingClient(api_key=settings.kie_api_key)
+    delivered = False
     try:
         photo_bytes = await tg_file_id_to_bytes(call.bot, photo_id, tg_id=call.from_user.id)
         video_bytes = await tg_file_id_to_bytes(call.bot, video_id, tg_id=call.from_user.id)
@@ -376,6 +378,8 @@ async def motion_control_confirm(
             video=video_file,
             supports_streaming=True,
         )
+        delivered = True
+        await finalize_video_generation(session, call.from_user.id)
 
         await increment_generated_videos(
             session=session,
@@ -393,11 +397,12 @@ async def motion_control_confirm(
 
     except Exception as e:
         logger.exception("MOTION_CONTROL failed: %s", e)
-        await refund_video_generation(
-            session,
-            call.from_user.id,
-            model_key=VIDEO_MODEL_MOTION_KEY,
-        )
+        if not delivered:
+            await refund_video_generation(
+                session,
+                call.from_user.id,
+                model_key=VIDEO_MODEL_MOTION_KEY,
+            )
         await stop_progress(stop, progress_task)
         await edit_text_safe(
             progress_msg,

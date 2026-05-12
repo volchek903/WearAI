@@ -35,6 +35,7 @@ class Payment(Base):
     plan_name: Mapped[str] = mapped_column(String(32), nullable=False)
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     currency: Mapped[str] = mapped_column(String(8), nullable=False, default="RUB")
+    credit_amount_snapshot: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     platega_transaction_id: Mapped[str] = mapped_column(
         String(64), nullable=False, unique=True, index=True

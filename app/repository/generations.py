@@ -20,6 +20,10 @@ class NoGenerationsLeft(Exception):
     pass
 
 
+class PendingGenerationInProgressError(NoGenerationsLeft):
+    pass
+
+
 PHOTO_MODEL_KEY = MODEL_PRICE_NANO_BANANA_KEY
 VIDEO_MODEL_I2V_KEY = MODEL_PRICE_KLING_I2V_KEY
 VIDEO_MODEL_MOTION_KEY = MODEL_PRICE_KLING_MOTION_KEY
@@ -27,6 +31,7 @@ VIDEO_MODEL_MOTION_KEY = MODEL_PRICE_KLING_MOTION_KEY
 CHARGE_SOURCE_FREE = "free"
 CHARGE_SOURCE_PAID = "paid"
 CHARGE_SOURCE_MIXED = "mixed"
+PENDING_CHARGE_STALE_AFTER_S = 3 * 60 * 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,11 +55,12 @@ async def _get_user(session: AsyncSession, tg_id: int) -> User | None:
     return await session.scalar(select(User).where(User.tg_id == tg_id))
 
 
-async def get_launch_used_today(session: AsyncSession) -> int:
+async def get_launch_used_today(session: AsyncSession, tg_id: int | None = None) -> int:
     day_key = _msk_today_key()
-    result = await session.execute(
-        select(User.free_generations_used_today).where(User.free_generations_day == day_key)
-    )
+    stmt = select(User.free_generations_used_today).where(User.free_generations_day == day_key)
+    if tg_id is not None:
+        stmt = stmt.where(User.tg_id == tg_id)
+    result = await session.execute(stmt)
     return sum(int(v or 0) for v in result.scalars().all())
 
 
@@ -83,6 +89,26 @@ def _daily_free_count_for_user(user: User) -> int:
     return int(user.free_generations_used_today or 0)
 
 
+def _pending_charge_exists(user: User) -> bool:
+    return bool((user.pending_charge_kind or "").strip()) and int(
+        user.pending_charge_amount or 0
+    ) > 0
+
+
+def _pending_charge_is_stale(user: User, *, now_ts: int) -> bool:
+    created_at = int(getattr(user, "pending_charge_created_at", 0) or 0)
+    if created_at <= 0:
+        return True
+    return max(0, now_ts - created_at) >= PENDING_CHARGE_STALE_AFTER_S
+
+
+async def get_pending_charge_kind(session: AsyncSession, tg_id: int) -> str | None:
+    user = await _get_user(session, tg_id)
+    if not user or not _pending_charge_exists(user):
+        return None
+    return (user.pending_charge_kind or "").strip() or None
+
+
 async def _charge_credits(
     session: AsyncSession,
     *,
@@ -94,6 +120,22 @@ async def _charge_credits(
     user = await _get_user(session, tg_id)
     if not user:
         raise NoGenerationsLeft()
+
+    now_ts = int(_utcnow().timestamp())
+    if _pending_charge_exists(user):
+        if _pending_charge_is_stale(user, now_ts=now_ts):
+            await _refund_pending_charge(
+                session,
+                tg_id=tg_id,
+                kind=(user.pending_charge_kind or "").strip(),
+            )
+            user = await _get_user(session, tg_id)
+            if not user:
+                raise NoGenerationsLeft()
+        else:
+            raise PendingGenerationInProgressError(
+                f"Pending generation already in progress for tg_id={tg_id}"
+            )
 
     day_key = _msk_today_key()
     free_limit = await get_launch_daily_limit(session)
@@ -118,6 +160,7 @@ async def _charge_credits(
         "pending_charge_kind": kind,
         "pending_charge_source": pending_source,
         "pending_charge_amount": total_credits,
+        "pending_charge_created_at": now_ts,
     }
     if free_to_charge:
         values["free_credit_balance"] = User.free_credit_balance - free_to_charge
@@ -180,6 +223,7 @@ async def _refund_pending_charge(
         "pending_charge_kind": None,
         "pending_charge_source": None,
         "pending_charge_amount": 0,
+        "pending_charge_created_at": 0,
     }
     if pending_source == CHARGE_SOURCE_FREE:
         values["free_credit_balance"] = User.free_credit_balance + pending_amount
@@ -223,6 +267,7 @@ async def _finalize_pending_charge(
             pending_charge_kind=None,
             pending_charge_source=None,
             pending_charge_amount=0,
+            pending_charge_created_at=0,
         )
     )
     await session.commit()
@@ -280,6 +325,32 @@ async def refund_video_generation(
 ) -> None:
     del model_key
     await _refund_pending_charge(session, tg_id=tg_id, kind="video")
+
+
+async def settle_photo_generation_outcome(
+    session: AsyncSession,
+    tg_id: int,
+    *,
+    delivered: bool,
+    model_key: str = PHOTO_MODEL_KEY,
+) -> None:
+    if delivered:
+        await finalize_photo_generation(session, tg_id)
+    else:
+        await refund_photo_generation(session, tg_id, model_key=model_key)
+
+
+async def settle_video_generation_outcome(
+    session: AsyncSession,
+    tg_id: int,
+    *,
+    delivered: bool,
+    model_key: str = VIDEO_MODEL_I2V_KEY,
+) -> None:
+    if delivered:
+        await finalize_video_generation(session, tg_id)
+    else:
+        await refund_video_generation(session, tg_id, model_key=model_key)
 
 
 async def grant_photo_generation(session: AsyncSession, tg_id: int, delta: int = 1) -> None:

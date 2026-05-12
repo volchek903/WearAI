@@ -26,7 +26,9 @@ from app.repository.generations import (
     charge_video_generation,
     ensure_default_subscription,
     refund_photo_generation,
+    finalize_photo_generation,
     refund_video_generation,
+    finalize_video_generation,
     is_launch_subscription,
 )
 from app.repository.users import (
@@ -217,6 +219,7 @@ async def love_is_text_in(
                 first_path = local_path
             await send_image_smart(message, img_bytes=img_bytes, filename=filename)
             sent_any = True
+            await finalize_photo_generation(session, tg_id)
 
         await increment_generated_photos(session=session, tg_id=tg_id, delta=1, section="love_is_photo")
 
@@ -309,6 +312,7 @@ async def love_is_animate(
         with open(path, "rb") as f:
             img_bytes = f.read()
     except Exception:
+        await refund_video_generation(session, tg_id)
         await call.message.answer("Не удалось открыть файл открытки 😕")
         await state.clear()
         return
@@ -332,6 +336,7 @@ async def love_is_animate(
 
     progress_task = asyncio.create_task(progress_loop(_update, stop))
 
+    delivered = False
     try:
 
         tag = f"{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}"
@@ -371,6 +376,8 @@ async def love_is_animate(
             caption="Готово! 💞",
             supports_streaming=True,
         )
+        delivered = True
+        await finalize_video_generation(session, tg_id)
         await increment_generated_videos(session=session, tg_id=tg_id, delta=1, section="love_is_video")
         await call.message.answer(
             "Хочешь сгенерировать ещё что-нибудь? ✨",
@@ -378,7 +385,8 @@ async def love_is_animate(
         )
     except Exception as e:
         logger.exception("LOVE_IS animate failed: %s", e)
-        await refund_video_generation(session, tg_id)
+        if not delivered:
+            await refund_video_generation(session, tg_id)
         await stop_progress(stop, progress_task)
         await call.message.answer(
             with_support("Не получилось оживить открытку 😅 Попробуй позже.")

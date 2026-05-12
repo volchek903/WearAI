@@ -29,7 +29,7 @@ async def block_launch_for_call(
         await safe_answer(call)
         return True
 
-    used_today = await get_launch_used_today(session)
+    used_today = await get_launch_used_today(session, call.from_user.id)
     if used_today >= limit:
         await edit_text_safe(
             call,

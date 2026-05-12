@@ -26,6 +26,7 @@ from app.repository.generations import (
     ensure_default_subscription,
     is_launch_subscription,
     refund_photo_generation,
+    finalize_photo_generation,
 )
 from app.repository.users import increment_generated_photos, upsert_user
 from app.services.album_collector import AlbumCollector
@@ -515,6 +516,7 @@ async def gpt_image_2_generate(
         for filename, img_bytes in results:
             await send_image_smart(call.message, img_bytes=img_bytes, filename=filename)
             sent_any = True
+            await finalize_photo_generation(session, tg_id)
 
         await increment_generated_photos(
             session=session,

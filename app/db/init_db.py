@@ -58,6 +58,12 @@ async def _ensure_sqlite_columns() -> None:
                     "ALTER TABLE users ADD COLUMN pending_charge_amount INTEGER NOT NULL DEFAULT 0"
                 )
             )
+        if "pending_charge_created_at" not in user_cols:
+            await conn.execute(
+                text(
+                    "ALTER TABLE users ADD COLUMN pending_charge_created_at INTEGER NOT NULL DEFAULT 0"
+                )
+            )
 
         promo_cols = {
             row[1]
@@ -103,6 +109,19 @@ async def _ensure_sqlite_columns() -> None:
                 "ON payments(status, id)"
             )
         )
+
+        payment_cols = {
+            row[1]
+            for row in (
+                await conn.execute(text("PRAGMA table_info(payments)"))
+            ).fetchall()
+        }
+        if "credit_amount_snapshot" not in payment_cols:
+            await conn.execute(
+                text(
+                    "ALTER TABLE payments ADD COLUMN credit_amount_snapshot INTEGER NOT NULL DEFAULT 0"
+                )
+            )
 
 
 async def init_db() -> None:

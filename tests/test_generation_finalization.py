@@ -10,6 +10,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.models.base import Base
 from app.models.user import User
+from app.repository.generations import (
+    PendingGenerationInProgressError,
+    charge_photo_generation,
+    charge_video_generation,
+)
 from app.repository.users import increment_generated_photos, increment_generated_videos
 
 
@@ -43,6 +48,7 @@ class GenerationFinalizationTests(unittest.IsolatedAsyncioTestCase):
         pending_charge_kind: str,
         pending_charge_source: str,
         pending_charge_amount: int,
+        pending_charge_created_at: int = 0,
         credit_balance: int = 0,
         free_credit_balance: int = 0,
     ) -> None:
@@ -55,6 +61,7 @@ class GenerationFinalizationTests(unittest.IsolatedAsyncioTestCase):
                 pending_charge_kind=pending_charge_kind,
                 pending_charge_source=pending_charge_source,
                 pending_charge_amount=pending_charge_amount,
+                pending_charge_created_at=pending_charge_created_at,
                 generated_photos=0,
                 generated_videos=0,
             )
@@ -126,6 +133,53 @@ class GenerationFinalizationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(int(user.generated_videos), 1)
         self.assertEqual(int(user.credit_balance), 12)
         self.assertEqual(int(user.free_credit_balance), 4)
+
+    async def test_second_generation_charge_is_blocked_while_pending_exists(self) -> None:
+        tg_id = 303
+        await self._create_user(
+            tg_id=tg_id,
+            pending_charge_kind="",
+            pending_charge_source="",
+            pending_charge_amount=0,
+            credit_balance=100,
+        )
+
+        async with self.sessionmaker() as session:
+            await charge_photo_generation(session, tg_id, credits_override=10)
+
+        async with self.sessionmaker() as session:
+            with self.assertRaises(PendingGenerationInProgressError):
+                await charge_video_generation(session, tg_id, credits_override=5)
+
+        async with self.sessionmaker() as session:
+            user = await session.get(User, 1)
+
+        assert user is not None
+        self.assertEqual(user.pending_charge_kind, "photo")
+        self.assertEqual(int(user.pending_charge_amount), 10)
+        self.assertEqual(int(user.credit_balance), 90)
+
+    async def test_stale_pending_charge_is_refunded_before_new_charge(self) -> None:
+        tg_id = 404
+        await self._create_user(
+            tg_id=tg_id,
+            pending_charge_kind="photo",
+            pending_charge_source="paid",
+            pending_charge_amount=10,
+            pending_charge_created_at=0,
+            credit_balance=90,
+        )
+
+        async with self.sessionmaker() as session:
+            await charge_video_generation(session, tg_id, credits_override=5)
+
+        async with self.sessionmaker() as session:
+            user = await session.get(User, 1)
+
+        assert user is not None
+        self.assertEqual(user.pending_charge_kind, "video")
+        self.assertEqual(int(user.pending_charge_amount), 5)
+        self.assertEqual(int(user.credit_balance), 95)
 
 
 if __name__ == "__main__":

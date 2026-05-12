@@ -21,6 +21,7 @@ from app.repository.generations import (
     ensure_default_subscription,  # ✅ NEW
     charge_photo_generation,
     refund_photo_generation,
+    finalize_photo_generation,
     NoGenerationsLeft,
     is_launch_subscription,
 )
@@ -365,6 +366,7 @@ async def review_confirmed(
                 call.message, img_bytes=img_bytes, filename=filename
             )
             sent_any = True
+            await finalize_photo_generation(session, tg_id)
 
             if getattr(sent, "photo", None):
                 output_files.append(

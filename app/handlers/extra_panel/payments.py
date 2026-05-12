@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal, ROUND_HALF_UP
+
 from aiogram import F
 from aiogram.types import CallbackQuery, LabeledPrice, Message, PreCheckoutQuery
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,6 +39,11 @@ from app.utils.tg_edit import edit_text_safe
 from .common import logger, payment_tg_id, router, stars_for_credits
 
 
+def _price_to_rub_int(value: object) -> int:
+    price = Decimal(str(value or "0"))
+    return max(0, int(price.quantize(Decimal("1"), rounding=ROUND_HALF_UP)))
+
+
 @router.callback_query(F.data.startswith(ExtraCallbacks.BUY_PREFIX))
 async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
     await call.answer()
@@ -55,7 +62,7 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
         await extra_buy_stars(call, session, plan)
         return
 
-    amount = int(float(plan.price))
+    amount = _price_to_rub_int(plan.price)
     platega_ok = await check_platega_health()
     if not platega_ok:
         if call.message:
@@ -135,6 +142,7 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
         amount=amount,
         currency="RUB",
         tx_id=tx_id,
+        credit_amount_snapshot=int(getattr(plan, "credit_amount", 0) or 0),
     )
 
     if call.message:
@@ -247,6 +255,7 @@ async def extra_custom_buy(call: CallbackQuery, session: AsyncSession) -> None:
         amount=credits,
         currency="RUB",
         tx_id=tx_id,
+        credit_amount_snapshot=credits,
     )
 
     if call.message:
@@ -295,7 +304,9 @@ async def extra_buy_stars(
         await call.answer("Оплата Stars недоступна для этого пакета", show_alert=True)
         return
 
-    payload = f"stars:{plan.name}:{call.from_user.id}"
+    payload = (
+        f"stars:{plan.name}:{int(getattr(plan, 'credit_amount', 0) or 0)}:{call.from_user.id}"
+    )
     title = f"Кредиты {plan.name}"
     description = f"{int(getattr(plan, 'credit_amount', 0) or 0)} кредитов"
 
@@ -336,8 +347,15 @@ async def stars_success(message: Message, session: AsyncSession) -> None:
 
     mode = parts[0]
     plan_name = parts[1]
-    payload_tg_id = parts[2]
     tg_id = message.from_user.id
+
+    payload_tg_id = parts[2]
+    snapshot_credits = 0
+    if mode == "stars" and len(parts) >= 4:
+        snapshot_raw = parts[2]
+        payload_tg_id = parts[3]
+        if snapshot_raw.isdigit():
+            snapshot_credits = int(snapshot_raw)
 
     if payload_tg_id.isdigit() and int(payload_tg_id) != tg_id:
         return
@@ -350,6 +368,14 @@ async def stars_success(message: Message, session: AsyncSession) -> None:
         await apply_credit_amount_to_user(session, tg_id, credits)
         await message.answer(
             f"✅ Оплата Stars подтверждена! Начислено {credits} кредитов 🎉",
+            reply_markup=main_menu_kb(),
+        )
+        return
+
+    if snapshot_credits > 0:
+        await apply_credit_amount_to_user(session, tg_id, snapshot_credits)
+        await message.answer(
+            f"✅ Оплата Stars подтверждена! Начислено {snapshot_credits} кредитов 🎉",
             reply_markup=main_menu_kb(),
         )
         return

@@ -28,6 +28,7 @@ from app.repository.generations import (
     charge_video_generation,
     ensure_default_subscription,
     refund_video_generation,
+    finalize_video_generation,
 )
 from app.repository.users import (
     get_user_by_tg_id,
@@ -887,12 +888,13 @@ async def video_confirm(
             caption="🎉 Видео готово!",
             supports_streaming=True,
         )
+        sent_any = True
+        await finalize_video_generation(session, call.from_user.id)
         await call.message.answer_document(
             document=BufferedInputFile(video_bytes, filename=filename),
             caption="Исходный файл результата",
         )
         await call.message.answer(CONTACT_TEXT)
-        sent_any = True
 
         await increment_generated_videos(
             session=session,

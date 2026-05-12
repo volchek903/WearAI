@@ -23,6 +23,7 @@ from app.models.user_subscription import UserSubscription
 from app.repository.generations import (
     charge_video_generation,
     refund_video_generation,
+    finalize_video_generation,
     NoGenerationsLeft,
 )
 from app.repository.users import increment_generated_videos
@@ -216,6 +217,7 @@ async def _run_video_job(
     action_task = asyncio.create_task(_chat_action_loop(bot, chat_id, stop))
 
     client = WaveSpeedKlingClient(settings.kie_api_key)
+    delivered = False
 
     try:
         res = await client.wait_for_success(task_id, poll_interval_s=10, max_wait_s=30 * 60)
@@ -266,6 +268,8 @@ async def _run_video_job(
             caption="Готово! Если нужно — дай следующий промпт ✍️",
             supports_streaming=True,
         )
+        delivered = True
+        await finalize_video_generation(session, tg_id)
         await increment_generated_videos(session=session, tg_id=tg_id, delta=1, section="animate_photo")
         await bot.send_message(
             chat_id=chat_id,
@@ -275,7 +279,8 @@ async def _run_video_job(
 
     except Exception as e:
         logger.exception("User %s error in job: task_id=%s", tg_id, task_id)
-        await refund_video_generation(session, tg_id)
+        if not delivered:
+            await refund_video_generation(session, tg_id)
         await stop_progress(stop, progress_task)
         try:
             await bot.edit_message_text(

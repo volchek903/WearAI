@@ -67,13 +67,20 @@ class PaymentConfirmationTests(unittest.IsolatedAsyncioTestCase):
             await session.refresh(plan)
             return plan
 
-    async def _create_payment(self, *, tg_id: int = 101, plan_name: str = "Pulse") -> Payment:
+    async def _create_payment(
+        self,
+        *,
+        tg_id: int = 101,
+        plan_name: str = "Pulse",
+        credit_amount_snapshot: int = 0,
+    ) -> Payment:
         async with self.sessionmaker() as session:
             payment = Payment(
                 tg_user_id=tg_id,
                 plan_name=plan_name,
                 amount=200,
                 currency="RUB",
+                credit_amount_snapshot=credit_amount_snapshot,
                 platega_transaction_id=f"tx-{tg_id}-{plan_name}",
                 status=PaymentStatus.PENDING,
             )
@@ -100,6 +107,29 @@ class PaymentConfirmationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNotNone(stored_payment)
         self.assertEqual(stored_payment.status, PaymentStatus.CONFIRMED)
+        self.assertEqual(int(user.credit_balance), 220)
+
+    async def test_confirm_payment_uses_snapshot_even_if_plan_changed(self) -> None:
+        await self._create_user()
+        plan = await self._create_plan(credits=220)
+        payment = await self._create_payment(credit_amount_snapshot=220)
+
+        async with self.sessionmaker() as session:
+            db_plan = await session.get(Subscription, plan.id)
+            assert db_plan is not None
+            db_plan.credit_amount = 999
+            await session.commit()
+
+        async with self.sessionmaker() as session:
+            db_payment = await get_payment_by_id(session, payment.id)
+            assert db_payment is not None
+            credited = await confirm_payment_and_apply_credits(session, db_payment)
+
+        self.assertEqual(credited, 220)
+
+        async with self.sessionmaker() as session:
+            user = await session.get(User, 1)
+
         self.assertEqual(int(user.credit_balance), 220)
 
     async def test_confirm_payment_with_missing_plan_keeps_payment_pending(self) -> None:

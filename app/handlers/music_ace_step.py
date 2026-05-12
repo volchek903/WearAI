@@ -29,6 +29,7 @@ from app.repository.generations import (
     ensure_default_subscription,
     is_launch_subscription,
     refund_video_generation,
+    finalize_video_generation,
 )
 from app.repository.users import increment_generated_music, upsert_user
 from app.services.wavespeed import WaveSpeedAceStepClient
@@ -682,6 +683,7 @@ async def music_confirm_submit(
             )
         return
 
+    delivered = False
     try:
         client = WaveSpeedAceStepClient()
         task_id = await client.create_ace_step_task(
@@ -705,6 +707,11 @@ async def music_confirm_submit(
                 f"Структура: {_structure_line(sections)}"
             ),
         )
+        delivered = True
+        await finalize_video_generation(
+            session,
+            call.from_user.id,
+        )
         await increment_generated_music(
             session=session,
             tg_id=call.from_user.id,
@@ -721,12 +728,14 @@ async def music_confirm_submit(
 
     except WaveSpeedError as e:
         logger.warning("music ace-step failed: %s", e)
-        await refund_video_generation(session, call.from_user.id, model_key=MODEL_PRICE_ACE_STEP_KEY)
+        if not delivered:
+            await refund_video_generation(session, call.from_user.id, model_key=MODEL_PRICE_ACE_STEP_KEY)
         await stop_progress(stop, progress_task)
         await progress_msg.edit_text(with_support(f"Не удалось сгенерировать трек 😕\n{e}"))
     except Exception as e:
         logger.exception("music ace-step failed: %s", e)
-        await refund_video_generation(session, call.from_user.id, model_key=MODEL_PRICE_ACE_STEP_KEY)
+        if not delivered:
+            await refund_video_generation(session, call.from_user.id, model_key=MODEL_PRICE_ACE_STEP_KEY)
         await stop_progress(stop, progress_task)
         await progress_msg.edit_text(
             with_support("Не получилось сгенерировать музыку 😕 Попробуй ещё раз позже.")

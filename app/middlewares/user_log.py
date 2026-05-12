@@ -16,6 +16,13 @@ def _short(text: str, limit: int = 300) -> str:
     return t[: limit - 3] + "..."
 
 
+def _callback_scope(data: str) -> str:
+    raw = (data or "").strip()
+    if not raw:
+        return ""
+    return raw.split(":", 1)[0]
+
+
 class UserActionLogMiddleware(BaseMiddleware):
     async def __call__(
         self,
@@ -47,12 +54,12 @@ class UserActionLogMiddleware(BaseMiddleware):
         text = message.text or message.caption or ""
 
         log.info(
-            "MSG | tg_id=%s | username=%s | chat_id=%s | has_photo=%s | text=%s",
+            "MSG | tg_id=%s | username=%s | chat_id=%s | has_photo=%s | text_len=%s",
             user.id,
             user.username,
             message.chat.id if message.chat else None,
             has_photo,
-            _short(text),
+            len((text or "").strip()),
         )
 
     def _log_callback(self, call: CallbackQuery) -> None:
@@ -61,9 +68,9 @@ class UserActionLogMiddleware(BaseMiddleware):
         msg_id: Optional[int] = call.message.message_id if call.message else None
 
         log.info(
-            "CBQ | tg_id=%s | username=%s | msg_id=%s | data=%s",
+            "CBQ | tg_id=%s | username=%s | msg_id=%s | scope=%s",
             user.id,
             user.username,
             msg_id,
-            _short(data, 200),
+            _callback_scope(_short(data, 200)),
         )

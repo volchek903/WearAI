@@ -53,6 +53,7 @@ async def create_pending_payment(
     amount: int,
     currency: str,
     tx_id: str,
+    credit_amount_snapshot: int = 0,
 ) -> Payment:
     logger.info(
         "payments.create_pending_payment: tg_user_id=%s plan=%s amount=%s %s tx_id=%s",
@@ -68,6 +69,7 @@ async def create_pending_payment(
         plan_name=plan_name,
         amount=amount,
         currency=currency,
+        credit_amount_snapshot=max(0, int(credit_amount_snapshot)),
         platega_transaction_id=tx_id,
         status=PaymentStatus.PENDING,
     )
@@ -163,18 +165,22 @@ async def confirm_payment_and_apply_credits(
     payment_id = int(payment.id)
     tx_id = str(payment.platega_transaction_id)
     tg_user_id = int(payment.tg_user_id)
-    custom_credits = parse_custom_plan_credits(payment.plan_name)
-    if custom_credits is not None:
-        credits = int(custom_credits)
+    snapshot_credits = int(getattr(payment, "credit_amount_snapshot", 0) or 0)
+    if snapshot_credits > 0:
+        credits = snapshot_credits
     else:
-        plan = await session.scalar(
-            select(Subscription).where(Subscription.name == payment.plan_name)
-        )
-        if plan is None:
-            raise PaymentPlanNotFoundError(
-                f"payment plan not found: {payment.plan_name}"
+        custom_credits = parse_custom_plan_credits(payment.plan_name)
+        if custom_credits is not None:
+            credits = int(custom_credits)
+        else:
+            plan = await session.scalar(
+                select(Subscription).where(Subscription.name == payment.plan_name)
             )
-        credits = int(getattr(plan, "credit_amount", 0) or 0)
+            if plan is None:
+                raise PaymentPlanNotFoundError(
+                    f"payment plan not found: {payment.plan_name}"
+                )
+            credits = int(getattr(plan, "credit_amount", 0) or 0)
 
     now = datetime.now(timezone.utc)
     result = await session.execute(

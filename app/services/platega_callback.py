@@ -18,6 +18,7 @@ from app.repository.payments import (
     get_payment_by_tx_id,
     mark_payment_status,
 )
+from app.services.platega import build_platega_client, normalize_payment_status
 
 logger = logging.getLogger(__name__)
 
@@ -42,26 +43,54 @@ async def _handle_platega_callback(
     sessionmaker: async_sessionmaker[AsyncSession],
     bot,
 ) -> web.Response:
+    expected_merchant_id = (os.getenv("PLATEGA_MERCHANT_ID") or "").strip()
+    expected_secret = (os.getenv("PLATEGA_SECRET") or "").strip()
+    header_merchant_id = (request.headers.get("X-MerchantId") or "").strip()
+    header_secret = (request.headers.get("X-Secret") or "").strip()
+
+    if expected_merchant_id and header_merchant_id != expected_merchant_id:
+        return web.json_response({"ok": False, "error": "invalid merchant"}, status=401)
+    if expected_secret and header_secret != expected_secret:
+        return web.json_response({"ok": False, "error": "invalid secret"}, status=401)
+
     try:
         data = await request.json()
     except Exception:
         return web.json_response({"ok": False, "error": "invalid json"}, status=400)
 
     tx_id = str(data.get("id") or "").strip()
-    status = str(data.get("status") or "").strip().upper()
-    payload_raw = data.get("payload")
+    status = normalize_payment_status(data.get("status"))
     payment_method = data.get("paymentMethod")
 
-    if not tx_id or status not in {"CONFIRMED", "CANCELED"}:
+    if not tx_id or status not in {"CONFIRMED", "CANCELED", "CHARGEBACK"}:
         return web.json_response({"ok": False, "error": "invalid body"}, status=400)
 
     logger.info(
-        "platega_callback: tx_id=%s status=%s method=%s payload=%s",
+        "platega_callback: tx_id=%s status=%s method=%s",
         tx_id,
         status,
         payment_method,
-        payload_raw,
     )
+
+    try:
+        client = build_platega_client()
+        provider_status_raw = await client.get_transaction_status(tx_id)
+    except Exception:
+        logger.exception("platega_callback: failed to verify provider status tx_id=%s", tx_id)
+        return web.json_response({"ok": False, "error": "provider unavailable"}, status=503)
+
+    provider_status = normalize_payment_status(provider_status_raw)
+    if provider_status is None:
+        logger.warning("platega_callback: provider returned empty status tx_id=%s", tx_id)
+        return web.json_response({"ok": False, "error": "unknown provider status"}, status=503)
+    if provider_status != status:
+        logger.warning(
+            "platega_callback: status mismatch tx_id=%s callback=%s provider=%s",
+            tx_id,
+            status,
+            provider_status,
+        )
+    status = provider_status
 
     async with sessionmaker() as session:
         payment = await get_payment_by_tx_id(session, tx_id)
@@ -69,9 +98,9 @@ async def _handle_platega_callback(
             logger.warning("platega_callback: payment not found tx_id=%s", tx_id)
             return web.json_response({"ok": True, "ignored": "payment_not_found"})
 
-        if status == "CANCELED":
+        if status in {"CANCELED", "CHARGEBACK"}:
             if payment.status == PaymentStatus.PENDING:
-                await mark_payment_status(session, payment, PaymentStatus.CANCELED)
+                await mark_payment_status(session, payment, PaymentStatus(status))
             return web.json_response({"ok": True})
 
         # CONFIRMED

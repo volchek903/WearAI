@@ -17,6 +17,7 @@ from app.repository.generations import (
     charge_photo_generation,
     ensure_default_subscription,
     refund_photo_generation,
+    finalize_photo_generation,
     is_launch_subscription,
 )
 from app.repository.users import increment_generated_photos, upsert_user
@@ -198,6 +199,7 @@ async def car_in_hand_hand(
         for filename, img_bytes in results:
             await send_image_smart(call.message, img_bytes=img_bytes, filename=filename)
             sent_any = True
+            await finalize_photo_generation(session, call.from_user.id)
 
         await increment_generated_photos(session=session, tg_id=call.from_user.id, delta=1, section="car_in_hand")
         await state.clear()
