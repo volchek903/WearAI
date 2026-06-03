@@ -18,7 +18,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.models.agent_document import AgentDocument
+    from app.models.agent_message import AgentMessage
     from app.models.user_photo_settings import UserPhotoSettings
+    from app.models.user_agent_settings import UserAgentSettings
     from app.models.admin import Admin
     from app.models.user_subscription import UserSubscription
 
@@ -27,6 +30,7 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         Index("ix_users_free_generations_day", "free_generations_day"),
+        Index("ix_users_free_agent_requests_day", "free_agent_requests_day"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -42,6 +46,12 @@ class User(Base):
         Integer, nullable=False, default=0
     )
     free_generations_day: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    free_agent_requests_used_today: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    free_agent_requests_day: Mapped[str | None] = mapped_column(
+        String(10), nullable=True
+    )
     pending_charge_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
     pending_charge_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
     pending_charge_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -73,6 +83,22 @@ class User(Base):
         "UserPhotoSettings",
         back_populates="user",
         uselist=False,
+        cascade="all, delete-orphan",
+    )
+    agent_settings: Mapped["UserAgentSettings | None"] = relationship(
+        "UserAgentSettings",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    agent_messages: Mapped[list["AgentMessage"]] = relationship(
+        "AgentMessage",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    agent_documents: Mapped[list["AgentDocument"]] = relationship(
+        "AgentDocument",
+        back_populates="user",
         cascade="all, delete-orphan",
     )
 

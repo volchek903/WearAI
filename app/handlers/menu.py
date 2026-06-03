@@ -27,7 +27,8 @@ router = Router()
 async def open_photo_menu(call: CallbackQuery) -> None:
     await edit_text_safe(
         call,
-        "Выбери раздел для генерации фото 👇",
+        "🖼 Модели для фото\n\n"
+        "Выберите, какие модели вы хотите использовать и для каких целей 👇",
         reply_markup=photo_menu_kb(),
     )
     await safe_answer(call)
@@ -109,7 +110,8 @@ async def open_photo_archive(call: CallbackQuery) -> None:
 async def open_video_menu(call: CallbackQuery) -> None:
     await edit_text_safe(
         call,
-        "Выбери модель для генерации видео или режим оживления 👇",
+        "🎬 Модели для видео\n\n"
+        "Выберите, какие модели вы хотите использовать и для каких целей 👇",
         reply_markup=video_menu_kb(),
     )
     await safe_answer(call)
@@ -119,7 +121,8 @@ async def open_video_menu(call: CallbackQuery) -> None:
 async def open_music_menu(call: CallbackQuery) -> None:
     await edit_text_safe(
         call,
-        "🎵 Работа с музыкой\n\nСоздай трек по стилю, структуре и тексту 👇",
+        "🎵 Модели для музыки\n\n"
+        "Выберите, какие модели вы хотите использовать и для каких целей 👇",
         reply_markup=music_menu_kb(),
     )
     await safe_answer(call)

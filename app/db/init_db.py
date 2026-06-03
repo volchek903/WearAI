@@ -40,6 +40,18 @@ async def _ensure_sqlite_columns() -> None:
                     "ALTER TABLE users ADD COLUMN free_generations_day VARCHAR(10)"
                 )
             )
+        if "free_agent_requests_used_today" not in user_cols:
+            await conn.execute(
+                text(
+                    "ALTER TABLE users ADD COLUMN free_agent_requests_used_today INTEGER NOT NULL DEFAULT 0"
+                )
+            )
+        if "free_agent_requests_day" not in user_cols:
+            await conn.execute(
+                text(
+                    "ALTER TABLE users ADD COLUMN free_agent_requests_day VARCHAR(10)"
+                )
+            )
         if "pending_charge_kind" not in user_cols:
             await conn.execute(
                 text(
@@ -95,6 +107,12 @@ async def _ensure_sqlite_columns() -> None:
             text(
                 "CREATE INDEX IF NOT EXISTS ix_users_free_generations_day "
                 "ON users(free_generations_day)"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_users_free_agent_requests_day "
+                "ON users(free_agent_requests_day)"
             )
         )
         await conn.execute(

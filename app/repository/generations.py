@@ -8,9 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.repository.app_settings import (
+    MODEL_PRICE_WEARAI_AGENT_KEY,
     MODEL_PRICE_KLING_I2V_KEY,
     MODEL_PRICE_KLING_MOTION_KEY,
     MODEL_PRICE_NANO_BANANA_KEY,
+    get_agent_daily_free_limit,
     get_launch_daily_limit,
     get_model_price_credits,
 )
@@ -27,10 +29,12 @@ class PendingGenerationInProgressError(NoGenerationsLeft):
 PHOTO_MODEL_KEY = MODEL_PRICE_NANO_BANANA_KEY
 VIDEO_MODEL_I2V_KEY = MODEL_PRICE_KLING_I2V_KEY
 VIDEO_MODEL_MOTION_KEY = MODEL_PRICE_KLING_MOTION_KEY
+AGENT_MODEL_KEY = MODEL_PRICE_WEARAI_AGENT_KEY
 
 CHARGE_SOURCE_FREE = "free"
 CHARGE_SOURCE_PAID = "paid"
 CHARGE_SOURCE_MIXED = "mixed"
+CHARGE_SOURCE_DAILY_FREE = "dailyfree"
 PENDING_CHARGE_STALE_AFTER_S = 3 * 60 * 60
 
 
@@ -87,6 +91,18 @@ def _daily_free_count_for_user(user: User) -> int:
     if (user.free_generations_day or "") != _msk_today_key():
         return 0
     return int(user.free_generations_used_today or 0)
+
+
+def _daily_free_agent_count_for_user(user: User) -> int:
+    if (user.free_agent_requests_day or "") != _msk_today_key():
+        return 0
+    return int(user.free_agent_requests_used_today or 0)
+
+
+def _has_enough_agent_balance(user: User, *, credits: int) -> bool:
+    return (int(user.credit_balance or 0) + int(user.free_credit_balance or 0)) >= int(
+        credits
+    )
 
 
 def _pending_charge_exists(user: User) -> bool:
@@ -225,7 +241,12 @@ async def _refund_pending_charge(
         "pending_charge_amount": 0,
         "pending_charge_created_at": 0,
     }
-    if pending_source == CHARGE_SOURCE_FREE:
+    if pending_source == CHARGE_SOURCE_DAILY_FREE:
+        if (user.free_agent_requests_day or "") == _msk_today_key():
+            values["free_agent_requests_used_today"] = max(
+                0, int(user.free_agent_requests_used_today or 0) - 1
+            )
+    elif pending_source == CHARGE_SOURCE_FREE:
         values["free_credit_balance"] = User.free_credit_balance + pending_amount
         if (user.free_generations_day or "") == _msk_today_key():
             values["free_generations_used_today"] = max(
@@ -327,6 +348,87 @@ async def refund_video_generation(
     await _refund_pending_charge(session, tg_id=tg_id, kind="video")
 
 
+async def charge_agent_request(
+    session: AsyncSession,
+    tg_id: int,
+    credits_override: int | None = None,
+    prefer_paid: bool = False,
+) -> ChargeResult:
+    user = await _get_user(session, tg_id)
+    if not user:
+        raise NoGenerationsLeft()
+
+    now_ts = int(_utcnow().timestamp())
+    if _pending_charge_exists(user):
+        if _pending_charge_is_stale(user, now_ts=now_ts):
+            await _refund_pending_charge(
+                session,
+                tg_id=tg_id,
+                kind=(user.pending_charge_kind or "").strip(),
+            )
+            user = await _get_user(session, tg_id)
+            if not user:
+                raise NoGenerationsLeft()
+        else:
+            raise PendingGenerationInProgressError(
+                f"Pending generation already in progress for tg_id={tg_id}"
+            )
+
+    credits = (
+        int(credits_override)
+        if credits_override is not None
+        else await get_model_price_credits(session, AGENT_MODEL_KEY)
+    )
+    if prefer_paid and _has_enough_agent_balance(user, credits=credits):
+        return await _charge_credits(
+            session,
+            tg_id=tg_id,
+            credits=credits,
+            kind="agent",
+            model_key=AGENT_MODEL_KEY,
+        )
+
+    free_limit = await get_agent_daily_free_limit(session)
+    current_free_used = _daily_free_agent_count_for_user(user)
+    if int(free_limit) > 0 and current_free_used < int(free_limit):
+        updated = await session.execute(
+            update(User)
+            .where(User.id == user.id)
+            .values(
+                pending_charge_kind="agent",
+                pending_charge_source=CHARGE_SOURCE_DAILY_FREE,
+                pending_charge_amount=1,
+                pending_charge_created_at=now_ts,
+                free_agent_requests_day=_msk_today_key(),
+                free_agent_requests_used_today=current_free_used + 1,
+            )
+        )
+        if updated.rowcount != 1:
+            raise NoGenerationsLeft()
+        await session.commit()
+        return ChargeResult(
+            kind="agent",
+            source=CHARGE_SOURCE_DAILY_FREE,
+            amount=0,
+            model_key=AGENT_MODEL_KEY,
+        )
+
+    return await _charge_credits(
+        session,
+        tg_id=tg_id,
+        credits=credits,
+        kind="agent",
+        model_key=AGENT_MODEL_KEY,
+    )
+
+
+async def refund_agent_request(
+    session: AsyncSession, tg_id: int, model_key: str = AGENT_MODEL_KEY
+) -> None:
+    del model_key
+    await _refund_pending_charge(session, tg_id=tg_id, kind="agent")
+
+
 async def settle_photo_generation_outcome(
     session: AsyncSession,
     tg_id: int,
@@ -351,6 +453,10 @@ async def settle_video_generation_outcome(
         await finalize_video_generation(session, tg_id)
     else:
         await refund_video_generation(session, tg_id, model_key=model_key)
+
+
+async def finalize_agent_request(session: AsyncSession, tg_id: int) -> None:
+    await _finalize_pending_charge(session, tg_id=tg_id, kind="agent")
 
 
 async def grant_photo_generation(session: AsyncSession, tg_id: int, delta: int = 1) -> None:

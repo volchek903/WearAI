@@ -11,14 +11,20 @@ from app.keyboards.admin import AdminCallbacks, admin_menu_kb, admin_model_prici
 from app.repository.admin import is_admin
 from app.repository.app_settings import (
     MODEL_TITLES,
+    get_agent_daily_free_limit,
     get_launch_daily_limit,
     get_pricing_markup_multiplier_pct,
     get_usd_to_rub_rate,
     list_model_pricing,
+    set_agent_daily_free_limit,
     set_launch_daily_limit,
     set_model_price_credits,
 )
-from app.states.admin import AdminLaunchLimitFSM, AdminModelPricingFSM
+from app.states.admin import (
+    AdminAgentDailyLimitFSM,
+    AdminLaunchLimitFSM,
+    AdminModelPricingFSM,
+)
 from app.utils.tg_edit import edit_text_safe
 from app.utils.support_text import with_support
 
@@ -162,5 +168,53 @@ async def admin_launch_daily_limit_value(
     await state.clear()
     await message.answer(
         f"✅ Лимит обновлён: {value}",
+        reply_markup=admin_menu_kb(),
+    )
+
+
+@router.callback_query(F.data == AdminCallbacks.AGENT_DAILY_LIMIT)
+async def admin_agent_daily_limit_start(
+    call: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    if not await ensure_admin(call, session, "admin_panel.agent_daily_limit"):
+        return
+    current = await get_agent_daily_free_limit(session)
+    await state.clear()
+    await state.set_state(AdminAgentDailyLimitFSM.waiting_value)
+    await edit_text_safe(
+        call,
+        f"Текущий лимит бесплатных запросов к агенту в день: {current}\n\n"
+        "Введи новое число:",
+        reply_markup=admin_menu_kb(),
+    )
+    await call.answer()
+
+
+@router.message(AdminAgentDailyLimitFSM.waiting_value)
+async def admin_agent_daily_limit_value(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    if not await is_admin(session, message.from_user.id):
+        await message.answer("Недостаточно прав")
+        return
+    txt = (message.text or "").strip()
+    if not txt.isdigit():
+        await message.answer(
+            "Нужно целое число. Попробуй ещё раз.",
+            reply_markup=admin_menu_kb(),
+        )
+        return
+    value = int(txt)
+    if value < 0:
+        await message.answer("Число не может быть отрицательным.")
+        return
+    await set_agent_daily_free_limit(session, value)
+    await state.clear()
+    await message.answer(
+        f"✅ Лимит бесплатных запросов к агенту обновлён: {value}",
         reply_markup=admin_menu_kb(),
     )

@@ -4,6 +4,7 @@ from aiogram import Dispatcher
 
 from app.handlers.admin_access import router as admin_access_router
 from app.handlers.admin_broadcast import router as admin_broadcast_router
+from app.handlers.agent import router as agent_router
 from app.handlers.admin_panel import router as admin_panel_router
 from app.handlers.animate_photo import router as animate_router
 from app.handlers.car_in_hand import router as car_in_hand_router
@@ -50,6 +51,7 @@ def setup_routers(dp: Dispatcher) -> None:
     ordered_routers = [
         start_router,
         menu_router,
+        agent_router,
         video_models_router,
         model_router,
         nano_banana_router,

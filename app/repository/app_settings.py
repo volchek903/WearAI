@@ -28,6 +28,12 @@ MODEL_PRICE_KLING_30_VIDEO_PER_SECOND_KEY = "model_price_kling_30_video_per_seco
 MODEL_PRICE_KLING_O3_VIDEO_PER_SECOND_KEY = "model_price_kling_o3_video_per_second"
 MODEL_PRICE_VEO_31_LITE_VIDEO_PER_SECOND_KEY = "model_price_veo_31_lite_video_per_second"
 MODEL_PRICE_GROK_IMAGINE_VIDEO_PER_SECOND_KEY = "model_price_grok_imagine_video_per_second"
+MODEL_PRICE_WEARAI_AGENT_KEY = "model_price_wearai_agent_request"
+MODEL_PRICE_WEARAI_AGENT_MEMORY_KEY = "model_price_wearai_agent_memory_addon"
+MODEL_PRICE_WEARAI_AGENT_DOCUMENTS_KEY = "model_price_wearai_agent_documents_addon"
+MODEL_PRICE_WEARAI_AGENT_WEB_SEARCH_KEY = "model_price_wearai_agent_web_search_addon"
+MODEL_PRICE_WEARAI_AGENT_DEEP_ANALYSIS_KEY = "model_price_wearai_agent_deep_analysis_addon"
+MODEL_PRICE_WEARAI_AGENT_QUICK_MODE_KEY = "model_price_wearai_agent_quick_mode_addon"
 PRICING_MARKUP_MULTIPLIER_KEY = "pricing_markup_multiplier_pct"
 USD_TO_RUB_RATE_KEY = "pricing_usd_to_rub_rate"
 
@@ -55,6 +61,12 @@ DEFAULT_PROVIDER_COST_USD = {
     MODEL_PRICE_KLING_O3_VIDEO_PER_SECOND_KEY: Decimal("0.084"),
     MODEL_PRICE_VEO_31_LITE_VIDEO_PER_SECOND_KEY: Decimal("0.05"),
     MODEL_PRICE_GROK_IMAGINE_VIDEO_PER_SECOND_KEY: Decimal("0.05"),
+    MODEL_PRICE_WEARAI_AGENT_KEY: Decimal("0.02"),
+    MODEL_PRICE_WEARAI_AGENT_MEMORY_KEY: Decimal("0.008"),
+    MODEL_PRICE_WEARAI_AGENT_DOCUMENTS_KEY: Decimal("0.008"),
+    MODEL_PRICE_WEARAI_AGENT_WEB_SEARCH_KEY: Decimal("0.003"),
+    MODEL_PRICE_WEARAI_AGENT_DEEP_ANALYSIS_KEY: Decimal("0.002"),
+    MODEL_PRICE_WEARAI_AGENT_QUICK_MODE_KEY: Decimal("0.001"),
 }
 
 
@@ -64,6 +76,23 @@ class ModelPricing:
     title: str
     provider_cost_usd: Decimal
     user_price_credits: int
+
+
+@dataclass(frozen=True, slots=True)
+class AgentRequestPricing:
+    base: int
+    memory: int
+    documents: int
+    web_search: int
+    deep_analysis: int
+    quick_mode: int
+
+
+@dataclass(frozen=True, slots=True)
+class AgentPriceBreakdown:
+    base: int
+    extras: tuple[tuple[str, int], ...]
+    total: int
 
 
 MODEL_TITLES = {
@@ -86,9 +115,16 @@ MODEL_TITLES = {
     MODEL_PRICE_KLING_O3_VIDEO_PER_SECOND_KEY: "Видео: Kling O3 (база за 1 сек.)",
     MODEL_PRICE_VEO_31_LITE_VIDEO_PER_SECOND_KEY: "Видео: Veo 3.1 Lite (база за 1 сек.)",
     MODEL_PRICE_GROK_IMAGINE_VIDEO_PER_SECOND_KEY: "Видео: Grok Imagine (база за 1 сек.)",
+    MODEL_PRICE_WEARAI_AGENT_KEY: "Агент WeaRai: базовый запрос",
+    MODEL_PRICE_WEARAI_AGENT_MEMORY_KEY: "Агент WeaRai: память диалога",
+    MODEL_PRICE_WEARAI_AGENT_DOCUMENTS_KEY: "Агент WeaRai: документы",
+    MODEL_PRICE_WEARAI_AGENT_WEB_SEARCH_KEY: "Агент WeaRai: веб-поиск",
+    MODEL_PRICE_WEARAI_AGENT_DEEP_ANALYSIS_KEY: "Агент WeaRai: глубокий анализ",
+    MODEL_PRICE_WEARAI_AGENT_QUICK_MODE_KEY: "Агент WeaRai: быстрый режим",
 }
 
 LAUNCH_DAILY_LIMIT_KEY = "launch_daily_limit"
+AGENT_DAILY_FREE_LIMIT_KEY = "agent_daily_free_limit"
 
 
 async def _get_int_setting(session: AsyncSession, key: str, default: int) -> int:
@@ -153,6 +189,14 @@ async def set_launch_daily_limit(session: AsyncSession, value: int) -> None:
     await _set_int_setting(session, LAUNCH_DAILY_LIMIT_KEY, int(value))
 
 
+async def get_agent_daily_free_limit(session: AsyncSession) -> int:
+    return await _get_int_setting(session, AGENT_DAILY_FREE_LIMIT_KEY, 0)
+
+
+async def set_agent_daily_free_limit(session: AsyncSession, value: int) -> None:
+    await _set_int_setting(session, AGENT_DAILY_FREE_LIMIT_KEY, int(value))
+
+
 async def get_pricing_markup_multiplier_pct(session: AsyncSession) -> int:
     return await _get_int_setting(
         session, PRICING_MARKUP_MULTIPLIER_KEY, DEFAULT_MARKUP_MULTIPLIER_PCT
@@ -176,6 +220,54 @@ async def get_model_price_credits(session: AsyncSession, model_key: str) -> int:
         raise KeyError(f"Unknown pricing model key: {model_key}")
     await ensure_model_pricing_settings(session)
     return await _get_int_setting(session, model_key, 0)
+
+
+async def get_agent_request_pricing(session: AsyncSession) -> AgentRequestPricing:
+    await ensure_model_pricing_settings(session)
+    return AgentRequestPricing(
+        base=await _get_int_setting(session, MODEL_PRICE_WEARAI_AGENT_KEY, 5),
+        memory=await _get_int_setting(session, MODEL_PRICE_WEARAI_AGENT_MEMORY_KEY, 2),
+        documents=await _get_int_setting(session, MODEL_PRICE_WEARAI_AGENT_DOCUMENTS_KEY, 2),
+        web_search=await _get_int_setting(session, MODEL_PRICE_WEARAI_AGENT_WEB_SEARCH_KEY, 1),
+        deep_analysis=await _get_int_setting(
+            session,
+            MODEL_PRICE_WEARAI_AGENT_DEEP_ANALYSIS_KEY,
+            1,
+        ),
+        quick_mode=await _get_int_setting(
+            session,
+            MODEL_PRICE_WEARAI_AGENT_QUICK_MODE_KEY,
+            1,
+        ),
+    )
+
+
+def build_agent_price_breakdown(
+    pricing: AgentRequestPricing,
+    *,
+    memory_enabled: bool,
+    documents_enabled: bool,
+    web_search_enabled: bool,
+    deep_analysis_enabled: bool,
+    quick_mode_enabled: bool,
+) -> AgentPriceBreakdown:
+    extras: list[tuple[str, int]] = []
+    if memory_enabled and pricing.memory > 0:
+        extras.append(("память диалога", int(pricing.memory)))
+    if documents_enabled and pricing.documents > 0:
+        extras.append(("документы", int(pricing.documents)))
+    if web_search_enabled and pricing.web_search > 0:
+        extras.append(("веб-поиск", int(pricing.web_search)))
+    if deep_analysis_enabled and pricing.deep_analysis > 0:
+        extras.append(("глубокий анализ", int(pricing.deep_analysis)))
+    if quick_mode_enabled and pricing.quick_mode > 0:
+        extras.append(("быстрый режим", int(pricing.quick_mode)))
+    total = int(pricing.base) + sum(int(amount) for _, amount in extras)
+    return AgentPriceBreakdown(
+        base=int(pricing.base),
+        extras=tuple(extras),
+        total=total,
+    )
 
 
 async def get_scaled_model_price_credits(

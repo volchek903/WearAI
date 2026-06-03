@@ -288,7 +288,10 @@ async def _render_confirm_screen(target: CallbackQuery | Message, state: FSMCont
 
 
 def _back_to_music_menu_text() -> str:
-    return "🎵 Работа с музыкой\n\nСоздай трек по стилю, структуре и тексту 👇"
+    return (
+        "🎵 Модели для музыки\n\n"
+        "Выберите, какие модели вы хотите использовать и для каких целей 👇"
+    )
 
 
 async def _send_intro_audio(message: Message) -> None:
