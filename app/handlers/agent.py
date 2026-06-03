@@ -155,6 +155,20 @@ def _format_agent_feature_list(labels: list[str]) -> str:
     return f"{', '.join(labels[:-1])} и {labels[-1]}"
 
 
+def _build_free_limit_text(*, free_remaining: int, free_limit: int) -> str:
+    if free_limit <= 0:
+        return "• Простых бесплатных запросов сейчас нет."
+    if free_remaining <= 0:
+        return (
+            f"• Простых бесплатных запросов осталось сегодня: <b>0</b> из <b>{free_limit}</b>. "
+            "Лимит обновится в <b>00:00</b> по UTC+3."
+        )
+    return (
+        f"• Простых бесплатных запросов осталось сегодня: <b>{free_remaining}</b> "
+        f"из <b>{free_limit}</b>."
+    )
+
+
 def _describe_next_agent_request(*, settings, pricing, free_limit: int, user) -> str:
     breakdown = build_agent_price_breakdown(
         pricing,
@@ -241,10 +255,9 @@ def _build_agent_pricing_note(*, settings, pricing, free_limit: int, user) -> st
     )
     free_remaining = max(0, int(free_limit) - _free_agent_used_today(user))
     balance = _total_available_credits(user)
-    free_text = (
-        f"• Простых бесплатных запросов осталось сегодня: <b>{free_remaining}</b> из <b>{free_limit}</b>."
-        if free_limit > 0
-        else "• Простых бесплатных запросов сейчас нет."
+    free_text = _build_free_limit_text(
+        free_remaining=free_remaining,
+        free_limit=int(free_limit),
     )
     lines = [
         "💳 <b>Как работает оплата</b>",

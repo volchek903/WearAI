@@ -5,9 +5,11 @@ from types import SimpleNamespace
 
 from app.handlers.agent import (
     _build_agent_request_badge_text,
+    _build_free_limit_text,
     _build_agent_pricing_note,
     _describe_next_agent_request,
     _effective_agent_settings,
+    _msk_today_key,
 )
 from app.repository.app_settings import AgentRequestPricing, build_agent_price_breakdown
 from app.repository.generations import CHARGE_SOURCE_DAILY_FREE, ChargeResult
@@ -110,6 +112,38 @@ class AgentHandlerTests(unittest.TestCase):
         )
 
         self.assertIn("Следующий запрос будет <b>расширенным платным</b>", note)
+
+    def test_free_limit_text_mentions_reset_time_when_exhausted(self) -> None:
+        text = _build_free_limit_text(free_remaining=0, free_limit=1)
+
+        self.assertIn("<b>0</b> из <b>1</b>", text)
+        self.assertIn("00:00", text)
+
+    def test_pricing_note_mentions_reset_time_when_daily_free_limit_is_spent(self) -> None:
+        settings = AgentToggleState(
+            web_search_enabled=False,
+            documents_enabled=False,
+            memory_enabled=False,
+            deep_analysis_enabled=False,
+            quick_mode_enabled=False,
+            document_session_key="session-1",
+        )
+        user = SimpleNamespace(
+            credit_balance=0,
+            free_credit_balance=0,
+            free_agent_requests_used_today=1,
+            free_agent_requests_day=_msk_today_key(),
+        )
+
+        note = _build_agent_pricing_note(
+            settings=settings,
+            pricing=self._pricing(),
+            free_limit=1,
+            user=user,
+        )
+
+        self.assertIn("<b>0</b> из <b>1</b>", note)
+        self.assertIn("Лимит обновится в <b>00:00</b> по UTC+3", note)
 
     def test_next_request_description_for_free_simple_mode(self) -> None:
         settings = AgentToggleState(
