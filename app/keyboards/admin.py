@@ -31,7 +31,7 @@ class AdminCallbacks:
     LAUNCH_DAILY_LIMIT = "admin:launch_daily_limit"
     AGENT_DAILY_LIMIT = "admin:agent_daily_limit"
     MODEL_PRICING = "admin:model_pricing"
-    MODEL_PRICE_EDIT = "admin:model_price:edit"
+    MODEL_PRICE_EDIT = "admin:mp:e"
     ANALYTICS = "admin:analytics"
 
     BACK = "admin:back"
