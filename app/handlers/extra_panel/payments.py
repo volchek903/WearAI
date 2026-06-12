@@ -32,6 +32,7 @@ from app.services.platega import (
     build_platega_client,
     check_platega_health,
     normalize_payment_status,
+    resolve_platega_payment_method,
 )
 from app.utils.support_text import with_support
 from app.utils.tg_edit import edit_text_safe
@@ -62,6 +63,18 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
         await extra_buy_stars(call, session, plan)
         return
 
+    pay_method = resolve_platega_payment_method(method)
+    if pay_method is None:
+        if call.message:
+            await edit_text_safe(
+                call,
+                "Этот способ оплаты сейчас недоступен. Выбери другой вариант.",
+                reply_markup=extra_buy_kb(plan),
+                parse_mode="HTML",
+            )
+        await call.answer("Способ оплаты недоступен", show_alert=True)
+        return
+
     amount = _price_to_rub_int(plan.price)
     platega_ok = await check_platega_health()
     if not platega_ok:
@@ -83,13 +96,6 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
         return
 
     payload = {"tgUserId": call.from_user.id, "planName": plan.name}
-    if method == "crypto":
-        pay_method = 13
-    elif method == "card":
-        pay_method = 11
-    else:
-        pay_method = 2
-
     if call.message:
         await edit_text_safe(call, "🔥 Супер! Сейчас подготовлю оплату…", parse_mode="HTML")
 
@@ -103,8 +109,11 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
         )
     except Exception:
         logger.exception(
-            "extra_buy: failed to create payment plan=%s tg_id=%s",
+            "extra_buy: failed to create payment plan=%s method=%s payment_method=%s amount=%s tg_id=%s",
             plan.name,
+            method,
+            pay_method,
+            amount,
             call.from_user.id,
         )
         if call.message:
@@ -176,6 +185,18 @@ async def extra_custom_buy(call: CallbackQuery, session: AsyncSession) -> None:
         await extra_buy_custom_stars(call, session, credits)
         return
 
+    pay_method = resolve_platega_payment_method(method)
+    if pay_method is None:
+        if call.message:
+            await edit_text_safe(
+                call,
+                "Этот способ оплаты сейчас недоступен. Выбери другой вариант.",
+                reply_markup=extra_custom_buy_kb(credits),
+                parse_mode="HTML",
+            )
+        await call.answer("Способ оплаты недоступен", show_alert=True)
+        return
+
     platega_ok = await check_platega_health()
     if not platega_ok:
         if call.message:
@@ -196,13 +217,6 @@ async def extra_custom_buy(call: CallbackQuery, session: AsyncSession) -> None:
         return
 
     payload = {"tgUserId": call.from_user.id, "customCredits": credits}
-    if method == "crypto":
-        pay_method = 13
-    elif method == "card":
-        pay_method = 11
-    else:
-        pay_method = 2
-
     if call.message:
         await edit_text_safe(call, "🔥 Супер! Сейчас подготовлю оплату…", parse_mode="HTML")
 
@@ -216,8 +230,10 @@ async def extra_custom_buy(call: CallbackQuery, session: AsyncSession) -> None:
         )
     except Exception:
         logger.exception(
-            "extra_custom_buy: failed to create payment credits=%s tg_id=%s",
+            "extra_custom_buy: failed to create payment credits=%s method=%s payment_method=%s tg_id=%s",
             credits,
+            method,
+            pay_method,
             call.from_user.id,
         )
         if call.message:

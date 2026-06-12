@@ -6,6 +6,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.keyboards.menu import MenuCallbacks
 from app.keyboards.utils import add_button, make_button
+from app.services.platega import enabled_platega_methods
 
 class ExtraCallbacks:
     # выбор пакета
@@ -79,6 +80,7 @@ def extra_menu_kb(plans, current_plan_name: str | None) -> InlineKeyboardMarkup:
 
 def extra_custom_buy_kb(credits: int, *, platega_available: bool = True) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
+    payment_methods = set(enabled_platega_methods())
 
     if credits > 0:
         add_button(
@@ -87,19 +89,21 @@ def extra_custom_buy_kb(credits: int, *, platega_available: bool = True) -> Inli
             callback_data=ExtraCallbacks.custom_buy(credits, "stars"),
             style="success",
         )
-    if platega_available and credits > 0:
+    if platega_available and credits > 0 and "sbp" in payment_methods:
         add_button(
             kb,
             text="💳 Купить (СБП)",
             callback_data=ExtraCallbacks.custom_buy(credits, "sbp"),
             style="success",
         )
+    if platega_available and credits > 0 and "card" in payment_methods:
         add_button(
             kb,
             text="💳 Оплата картой",
             callback_data=ExtraCallbacks.custom_buy(credits, "card"),
             style="success",
         )
+    if platega_available and credits > 0 and "crypto" in payment_methods:
         add_button(
             kb,
             text="₿ Купить (Крипто)",
@@ -114,6 +118,7 @@ def extra_custom_buy_kb(credits: int, *, platega_available: bool = True) -> Inli
 
 def extra_buy_kb(plan, *, platega_available: bool = True) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
+    payment_methods = set(enabled_platega_methods())
 
     plan_id = int(plan.id)
     stars_price = int(getattr(plan, "stars_price", 0) or 0)
@@ -126,19 +131,21 @@ def extra_buy_kb(plan, *, platega_available: bool = True) -> InlineKeyboardMarku
             callback_data=ExtraCallbacks.buy(plan_id, "stars"),
             style="success",
         )
-    if platega_available and rub_price > 0:
+    if platega_available and rub_price > 0 and "sbp" in payment_methods:
         add_button(
             kb,
             text="💳 Купить (СБП)",
             callback_data=ExtraCallbacks.buy(plan_id, "sbp"),
             style="success",
         )
+    if platega_available and rub_price > 0 and "card" in payment_methods:
         add_button(
             kb,
             text="💳 Оплата картой",
             callback_data=ExtraCallbacks.buy(plan_id, "card"),
             style="success",
         )
+    if platega_available and rub_price > 0 and "crypto" in payment_methods:
         add_button(
             kb,
             text="₿ Купить (Крипто)",
