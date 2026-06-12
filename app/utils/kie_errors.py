@@ -11,7 +11,7 @@ def _extract_code(text: str) -> Optional[str]:
     WaveSpeed часто возвращает сообщения вида:
     "... (code=422)" / "code=401" и т.п.
     """
-    m = re.search(r"code=(\d+)", text)
+    m = re.search(r"(?:code=|\bHTTP\s+)(\d+)", text, flags=re.IGNORECASE)
     return m.group(1) if m else None
 
 

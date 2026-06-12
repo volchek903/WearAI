@@ -23,6 +23,7 @@ from app.services.subscription_expirer import run_subscription_expirer
 from app.services.payment_poller import run_payment_poller  # NEW
 from app.services.admin_log_cleanup import run_admin_log_cleanup
 from app.services.platega_callback import run_platega_callback_server
+from app.services.wavespeed_ai import get_wavespeed_api_key_from_env
 from app.utils.tg_logging import install_tg_error_logging
 from app.utils.retrying_bot import RetryingBot
 from app.services.admin_seed import ensure_root_admin
@@ -121,7 +122,7 @@ def setup_middlewares(dp: Dispatcher) -> None:
 async def main() -> None:
     setup_logging()
     log = logging.getLogger(__name__)
-    wavespeed_key = os.getenv("WAVESPEED_API_KEY", "").strip() or os.getenv("KIE_API_KEY", "").strip()
+    wavespeed_key = get_wavespeed_api_key_from_env()
     log.info("startup: wavespeed_api_key_fingerprint=%s", _secret_fingerprint(wavespeed_key))
 
     proxy_url = _apply_proxy_env_defaults()

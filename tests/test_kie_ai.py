@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import os
 import unittest
 from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from app.services.kie_ai import WaveSpeedClient, WaveSpeedError
+from app.services.kie_ai import (
+    WaveSpeedClient,
+    WaveSpeedError,
+    get_wavespeed_api_key_from_env,
+)
 from app.utils.kie_errors import kie_error_to_user_text
 
 
@@ -137,6 +142,36 @@ class KieErrorTextTests(unittest.TestCase):
             WaveSpeedError("WaveSpeed create task failed: ReadError: upstream closed")
         )
         self.assertIn("Проблема на стороне сети", text)
+
+
+class WaveSpeedEnvTests(unittest.TestCase):
+    def test_wavespeed_key_does_not_fall_back_to_kie_by_default(self) -> None:
+        with patch.dict(os.environ, {"KIE_API_KEY": "kie-key"}, clear=True):
+            self.assertEqual(get_wavespeed_api_key_from_env(), "")
+
+    def test_legacy_kie_fallback_requires_explicit_opt_in(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "KIE_API_KEY": "legacy-wavespeed-key",
+                "WAVESPEED_ALLOW_KIE_API_KEY_FALLBACK": "1",
+            },
+            clear=True,
+        ):
+            self.assertEqual(
+                get_wavespeed_api_key_from_env(),
+                "legacy-wavespeed-key",
+            )
+
+
+class WaveSpeedErrorTextHttpTests(unittest.TestCase):
+    def test_http_401_maps_to_api_key_message(self) -> None:
+        text = kie_error_to_user_text(
+            WaveSpeedError(
+                'WaveSpeed upload failed [HTTP 401]: {"code":401,"message":"Unauthorized."}'
+            )
+        )
+        self.assertIn("WAVESPEED_API_KEY", text)
 
 
 if __name__ == "__main__":

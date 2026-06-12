@@ -28,8 +28,7 @@ from app.repository.payments import (
     mark_payment_status,
 )
 from app.models.payment import PaymentStatus
-from app.services.platega import normalize_payment_status
-from app.utils.http_client import external_httpx_client
+from app.services.platega import build_platega_client, normalize_payment_status
 from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_photo
 
@@ -49,55 +48,13 @@ async def _hard_reset_user_runtime_caches(*, chat_id: int) -> None:
 
 
 async def _platega_get_status(tx_id: str) -> str | None:
-    base_url = os.getenv("PLATEGA_BASE_URL") or "https://app.platega.io"
-    merchant_id = os.getenv("PLATEGA_MERCHANT_ID") or ""
-    secret = os.getenv("PLATEGA_SECRET") or ""
-
-    if not merchant_id or not secret:
-        logger.error(
-            "start._platega_get_status: missing PLATEGA_MERCHANT_ID/PLATEGA_SECRET"
-        )
-        return None
-
-    url = f"{base_url.rstrip('/')}/transaction/{tx_id}"
-    headers = {"X-MerchantId": merchant_id, "X-Secret": secret}
-
     try:
-        async with external_httpx_client(timeout=20) as client:
-            r = await client.get(url, headers=headers)
+        client = build_platega_client()
     except Exception:
-        logger.exception("start._platega_get_status: request failed tx_id=%s", tx_id)
+        logger.exception("start._platega_get_status: platega client init failed")
         return None
 
-    if r.status_code != 200:
-        logger.warning(
-            "start._platega_get_status: non-200 status_code=%s tx_id=%s body=%s",
-            r.status_code,
-            tx_id,
-            (r.text or "")[:500],
-        )
-        return None
-
-    try:
-        data = r.json()
-    except Exception:
-        logger.exception(
-            "start._platega_get_status: invalid json tx_id=%s body=%s",
-            tx_id,
-            (r.text or "")[:500],
-        )
-        return None
-
-    status = data.get("status")
-    if not status and isinstance(data.get("transaction"), dict):
-        status = data["transaction"].get("status")
-    if not status and isinstance(data.get("data"), dict):
-        data_obj = data["data"]
-        status = data_obj.get("status")
-        if not status and isinstance(data_obj.get("transaction"), dict):
-            status = data_obj["transaction"].get("status")
-
-    raw_status = str(status) if status else None
+    raw_status = await client.get_transaction_status(tx_id)
     normalized = normalize_payment_status(raw_status)
     logger.info(
         "start._platega_get_status: tx_id=%s raw_status=%s normalized=%s",

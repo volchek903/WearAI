@@ -187,8 +187,7 @@ class WaveSpeedClient:
     ) -> None:
         if not api_key:
             raise WaveSpeedError(
-                "WAVESPEED_API_KEY is empty. Put it into .env "
-                "(fallback KIE_API_KEY is also supported)."
+                "WAVESPEED_API_KEY is empty. Put a valid WaveSpeed key into .env."
             )
         self.api_key = api_key
         self.api_base = api_base.rstrip("/")
@@ -755,16 +754,22 @@ class WaveSpeedClient:
         raise WaveSpeedError(f"Download failed: {_format_transport_error(last_exc)}")
 
 
-def get_kie_api_key_from_env() -> str:
-    # Keep function name for compatibility with existing imports.
-    return (
-        os.getenv("WAVESPEED_API_KEY", "").strip()
-        or os.getenv("KIE_API_KEY", "").strip()
-    )
+def _env_truthy(name: str) -> bool:
+    return (os.getenv(name) or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def get_wavespeed_api_key_from_env() -> str:
-    return get_kie_api_key_from_env()
+    key = os.getenv("WAVESPEED_API_KEY", "").strip()
+    if key:
+        return key
+    if _env_truthy("WAVESPEED_ALLOW_KIE_API_KEY_FALLBACK"):
+        return os.getenv("KIE_API_KEY", "").strip()
+    return ""
+
+
+def get_kie_api_key_from_env() -> str:
+    # Keep the old function name for compatibility; it now returns a WaveSpeed key.
+    return get_wavespeed_api_key_from_env()
 
 
 # Backward-compatible aliases.
