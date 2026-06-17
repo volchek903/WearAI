@@ -37,6 +37,7 @@ from app.utils.support_text import with_support, launch_limits_message
 from app.utils.launch_guard import block_launch_for_call
 from app.utils.wavespeed_errors import wavespeed_error_to_user_text
 from app.utils.generated_files import save_generated_image_bytes
+from app.utils.pricing import build_single_generation_price_line
 from app.utils.progress_bar import (
     progress_initial_text,
     progress_loop,
@@ -76,6 +77,7 @@ async def start_model_flow(
 
     await state.clear()
     await state.set_state(ModelFlow.model_desc)
+    price_line = await build_single_generation_price_line(session)
 
     if call.message:
         # Убираем сообщение с welcome.png, чтобы не висело над альбомом
@@ -86,7 +88,7 @@ async def start_model_flow(
         await send_content_album(
             call.message,
             filenames=["model_photo.jpeg", "model_photo1.jpg"],
-            caption=MODEL_DESC_EXAMPLE,
+            caption=f"{MODEL_DESC_EXAMPLE}\n\n{price_line}",
             parse_mode="HTML",
         )
 

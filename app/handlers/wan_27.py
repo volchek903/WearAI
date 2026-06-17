@@ -27,6 +27,7 @@ from app.services.generation import generate_wan_27_image
 from app.services.wavespeed_ai import WaveSpeedError
 from app.states.wan_27_flow import Wan27Flow
 from app.utils.launch_guard import block_launch_for_call
+from app.utils.pricing import build_single_generation_price_line
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.support_text import launch_limits_message, with_support
 from app.utils.tg_callback import safe_answer
@@ -123,6 +124,7 @@ def _settings_text(data: dict) -> str:
         f"<b>Height:</b> {height}\n"
         f"<b>Thinking mode:</b> {_thinking_label(data)}\n"
         f"<b>Seed:</b> {_seed_label(data)}\n\n"
+        f"{data.get('price_line') or ''}\n"
         "Если заданы и width, и height, они имеют приоритет над preset size."
     )
 
@@ -155,6 +157,7 @@ async def _render_settings(target: CallbackQuery | Message, state: FSMContext) -
         target,
         _settings_text(data),
         reply_markup=_wan27_settings_kb(data),
+        parse_mode="HTML",
     )
 
 
@@ -175,6 +178,10 @@ async def start_wan_27(
         height=None,
         thinking_mode=True,
         seed=None,
+        price_line=await build_single_generation_price_line(
+            session,
+            model_key=MODEL_PRICE_WAN_27_KEY,
+        ),
     )
     await state.set_state(Wan27Flow.prompt)
 
@@ -182,8 +189,10 @@ async def start_wan_27(
         call,
         "🌊 <b>Wan 2.7</b>\n\n"
         "Пришли текстовый промпт для генерации изображения ✍️\n\n"
-        "После этого можно будет настроить size, width, height, thinking mode и seed.",
+        "После этого можно будет настроить size, width, height, thinking mode и seed.\n\n"
+        f"{(await state.get_data()).get('price_line') or ''}",
         reply_markup=None,
+        parse_mode="HTML",
     )
 
 
@@ -283,6 +292,7 @@ async def _update_wan_dimension(
     await message.answer(
         _settings_text(await state.get_data()),
         reply_markup=_wan27_settings_kb(await state.get_data()),
+        parse_mode="HTML",
     )
 
 
@@ -316,6 +326,7 @@ async def wan_27_seed_value(message: Message, state: FSMContext) -> None:
     await message.answer(
         _settings_text(await state.get_data()),
         reply_markup=_wan27_settings_kb(await state.get_data()),
+        parse_mode="HTML",
     )
 
 

@@ -28,6 +28,7 @@ from app.services.generation import generate_seedream_v5_lite, get_user_photo_se
 from app.services.wavespeed_ai import WaveSpeedError
 from app.states.seedream_flow import SeedreamFlow
 from app.utils.launch_guard import block_launch_for_call
+from app.utils.pricing import build_single_generation_price_line
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.support_text import launch_limits_message, with_support
 from app.utils.tg_callback import safe_answer
@@ -138,6 +139,7 @@ def _settings_text(data: dict) -> str:
         f"<b>Width:</b> {width}\n"
         f"<b>Height:</b> {height}\n"
         f"<b>Format:</b> {format_line}\n\n"
+        f"{data.get('price_line') or ''}\n"
         "Если заданы и width, и height, они имеют приоритет над preset size."
     )
 
@@ -194,6 +196,7 @@ async def _render_settings(target: CallbackQuery | Message, state: FSMContext) -
         target,
         _settings_text(data),
         reply_markup=_seedream_settings_kb(data),
+        parse_mode="HTML",
     )
 
 
@@ -228,6 +231,10 @@ async def start_seedream_lite(
         width=None,
         height=None,
         output_format=user_settings.output_format,
+        price_line=await build_single_generation_price_line(
+            session,
+            model_key=MODEL_PRICE_SEEDREAM_V5_LITE_KEY,
+        ),
     )
     await state.set_state(SeedreamFlow.prompt)
 
@@ -236,8 +243,10 @@ async def start_seedream_lite(
             call,
             "🌱 <b>Seedream 5 Lite</b>\n\n"
             "Пришли текстовый промпт для генерации изображения ✍️\n\n"
-            "После этого можно будет добавить до 10 референсов и настроить size / width / height / format.",
+            "После этого можно будет добавить до 10 референсов и настроить size / width / height / format.\n\n"
+            f"{(await state.get_data()).get('price_line') or ''}",
             reply_markup=None,
+            parse_mode="HTML",
         )
 
 
@@ -414,6 +423,7 @@ async def _update_seedream_dimension(
     await message.answer(
         _settings_text(await state.get_data()),
         reply_markup=_seedream_settings_kb(await state.get_data()),
+        parse_mode="HTML",
     )
 
 

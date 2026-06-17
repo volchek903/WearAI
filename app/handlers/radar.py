@@ -31,6 +31,7 @@ from app.utils.content_media import send_content_photo
 from app.utils.tg_send import send_image_smart
 from app.utils.support_text import with_support, launch_limits_message
 from app.utils.launch_guard import block_launch_for_call
+from app.utils.pricing import build_single_generation_price_line
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
 
 router = Router()
@@ -110,6 +111,7 @@ async def radar_entry(
         return
     await state.clear()
     await state.set_state(RadarFlow.photos)
+    price_line = await build_single_generation_price_line(session)
 
     if call.message:
         try:
@@ -122,7 +124,7 @@ async def radar_entry(
             caption=(
                 "🛰 <b>ИИ Радар</b>\n\n"
                 "Пришли фото людей, которые будут в кадре.\n"
-                "Можно 1–8 фото одним сообщением (альбомом) 📸"
+                f"Можно 1–8 фото одним сообщением (альбомом) 📸\n\n{price_line}"
             ),
             parse_mode="HTML",
         )

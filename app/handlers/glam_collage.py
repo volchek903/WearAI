@@ -25,6 +25,7 @@ from app.services.wavespeed_ai import WaveSpeedError
 from app.states.glam_collage_flow import GlamCollageFlow
 from app.utils.content_media import send_content_photo
 from app.utils.launch_guard import block_launch_for_call
+from app.utils.pricing import build_single_generation_price_line
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.support_text import launch_limits_message, with_support
 from app.utils.tg_callback import safe_answer
@@ -90,6 +91,7 @@ async def start_glam_collage(
 
     await state.clear()
     await state.set_state(GlamCollageFlow.photo)
+    price_line = await build_single_generation_price_line(session)
 
     if call.message:
         try:
@@ -101,7 +103,8 @@ async def start_glam_collage(
             filename="collage.jpeg",
             caption=(
                 "✨ <b>Шикарный коллаж</b>\n\n"
-                "Пришли фотку мужчины или женщины, и я подготовлю гламурный editorial-коллаж в формате 3:4 📸"
+                "Пришли фотку мужчины или женщины, и я подготовлю "
+                f"гламурный editorial-коллаж в формате 3:4 📸\n\n{price_line}"
             ),
             parse_mode="HTML",
         )

@@ -25,6 +25,7 @@ from app.services.wavespeed_ai import WaveSpeedError
 from app.states.cinema_bw_flow import CinemaBWFlow
 from app.utils.wavespeed_errors import wavespeed_error_to_user_text
 from app.utils.launch_guard import block_launch_for_call
+from app.utils.pricing import build_single_generation_price_line
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.support_text import with_support, launch_limits_message
 from app.utils.tg_callback import safe_answer
@@ -77,6 +78,7 @@ async def start_cinema_bw(
         return
     await state.clear()
     await state.set_state(CinemaBWFlow.female_photo)
+    price_line = await build_single_generation_price_line(session)
 
     if call.message:
         try:
@@ -88,7 +90,7 @@ async def start_cinema_bw(
             filename="kino.jpg",
             caption=(
                 "🎞 <b>Одни в кинозале ЧБ</b>\n\n"
-                "Сначала пришли фото девушки 📸"
+                f"Сначала пришли фото девушки 📸\n\n{price_line}"
             ),
             parse_mode="HTML",
         )

@@ -24,6 +24,7 @@ from app.services.wavespeed_ai import WaveSpeedError
 from app.states.second_life_flow import SecondLifeFlow
 from app.utils.wavespeed_errors import wavespeed_error_to_user_text
 from app.utils.launch_guard import block_launch_for_call
+from app.utils.pricing import build_single_generation_price_line
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_album
@@ -71,6 +72,7 @@ async def start_second_life(
         return
     await state.clear()
     await state.set_state(SecondLifeFlow.photo)
+    price_line = await build_single_generation_price_line(session)
     if call.message:
         try:
             await call.message.delete()
@@ -81,7 +83,7 @@ async def start_second_life(
             filenames=["old_photo.jpeg", "new_photo.jpeg"],
             caption=(
                 "🖼 <b>Вторая жизнь для фото</b>\n\n"
-                "Пришли фото, которое нужно улучшить 📸"
+                f"Пришли фото, которое нужно улучшить 📸\n\n{price_line}"
             ),
             parse_mode="HTML",
         )

@@ -10,7 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.menu import MenuCallbacks, SettingsCallbacks, photo_models_kb
 from app.keyboards.extra import buy_generations_kb
-from app.repository.app_settings import MODEL_PRICE_NANO_BANANA_PRO_KEY
+from app.repository.app_settings import (
+    MODEL_PRICE_NANO_BANANA_KEY,
+    MODEL_PRICE_NANO_BANANA_PRO_KEY,
+)
 from app.repository.generations import (
     NoGenerationsLeft,
     charge_photo_generation,
@@ -30,6 +33,7 @@ from app.utils.progress_bar import (
     progress_loop,
     stop_progress,
 )
+from app.utils.pricing import build_single_generation_price_line
 from app.utils.tg_edit import edit_text_safe
 from app.utils.tg_send import send_image_smart
 from app.utils.validators import MAX_TEXT_LEN, is_text_too_long
@@ -104,11 +108,15 @@ async def start_nano_banana(
         min_images=cfg["min_images"],
         model_variant=cfg["variant"],
     )
+    price_line = await build_single_generation_price_line(
+        session,
+        model_key=str(cfg["model_key"] or MODEL_PRICE_NANO_BANANA_KEY),
+    )
 
     if call.message:
         await edit_text_safe(
             call,
-            str(cfg["caption"]),
+            f"{cfg['caption']}\n\n{price_line}",
             reply_markup=None,
             parse_mode="HTML",
         )

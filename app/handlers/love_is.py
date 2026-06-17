@@ -22,6 +22,7 @@ from app.keyboards.love_is import LoveIsCallbacks, love_is_post_kb
 from app.keyboards.utils import add_button
 from app.repository.generations import (
     NoGenerationsLeft,
+    VIDEO_MODEL_I2V_KEY,
     charge_photo_generation,
     charge_video_generation,
     ensure_default_subscription,
@@ -42,6 +43,7 @@ from app.states.love_is_flow import LoveIsFlow
 from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_photo
 from app.utils.tg_send import send_image_smart
+from app.utils.pricing import build_single_generation_price_line
 from app.utils.support_text import with_support, launch_limits_message
 from app.utils.launch_guard import block_launch_for_call
 from app.utils.progress_bar import (
@@ -69,6 +71,7 @@ async def love_is_start(
         return
     await state.clear()
     await state.set_state(LoveIsFlow.photos)
+    price_line = await build_single_generation_price_line(session)
     if call.message:
         try:
             await call.message.delete()
@@ -79,7 +82,8 @@ async def love_is_start(
             filename="love_is.jpeg",
             caption=(
                 "❤️ <b>ИИ Love is</b>\n\n"
-                "Пришли 1–2 фото (лучше: мужчина и женщина) одним сообщением или альбомом 📸"
+                "Пришли 1–2 фото (лучше: мужчина и женщина) одним сообщением "
+                f"или альбомом 📸\n\n{price_line}"
             ),
             parse_mode="HTML",
         )
@@ -226,9 +230,14 @@ async def love_is_text_in(
         if first_path:
             await state.update_data(love_is_image_path=first_path)
             await state.set_state(LoveIsFlow.ready)
+            video_price_line = await build_single_generation_price_line(
+                session,
+                model_key=VIDEO_MODEL_I2V_KEY,
+            )
             await message.answer(
-                "Готово! Хочешь оживить открытку? 🎬",
+                f"Готово! Хочешь оживить открытку? 🎬\n\n{video_price_line}",
                 reply_markup=love_is_post_kb(),
+                parse_mode="HTML",
             )
             await message.answer(
                 "Хочешь сгенерировать ещё что-нибудь? ✨",

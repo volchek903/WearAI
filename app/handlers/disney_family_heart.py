@@ -26,6 +26,7 @@ from app.services.wavespeed_ai import WaveSpeedError
 from app.states.disney_family_heart_flow import DisneyFamilyHeartFlow
 from app.utils.content_media import send_content_photo
 from app.utils.launch_guard import block_launch_for_call
+from app.utils.pricing import build_single_generation_price_line
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.support_text import launch_limits_message, with_support
 from app.utils.tg_callback import safe_answer
@@ -77,6 +78,7 @@ async def start_disney_family_heart(
 
     await state.clear()
     await state.set_state(DisneyFamilyHeartFlow.photos)
+    price_line = await build_single_generation_price_line(session)
     if call.message:
         try:
             await call.message.delete()
@@ -88,7 +90,7 @@ async def start_disney_family_heart(
             caption=(
                 "💖 <b>Семья в сердечке</b>\n\n"
                 "Пришли 1–8 фото семьи или влюблённых "
-                "(одним сообщением или альбомом) 📸"
+                f"(одним сообщением или альбомом) 📸\n\n{price_line}"
             ),
             parse_mode="HTML",
         )

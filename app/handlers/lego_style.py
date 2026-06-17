@@ -25,6 +25,7 @@ from app.services.wavespeed_ai import WaveSpeedError
 from app.states.lego_style_flow import LegoStyleFlow
 from app.utils.wavespeed_errors import wavespeed_error_to_user_text
 from app.utils.launch_guard import block_launch_for_call
+from app.utils.pricing import build_single_generation_price_line
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.support_text import with_support, launch_limits_message
 from app.utils.tg_callback import safe_answer
@@ -62,6 +63,7 @@ async def start_lego_style(
         return
     await state.clear()
     await state.set_state(LegoStyleFlow.photo)
+    price_line = await build_single_generation_price_line(session)
 
     if call.message:
         try:
@@ -73,7 +75,7 @@ async def start_lego_style(
             filename="legostyle.jpg",
             caption=(
                 "🧱 <b>LEGO Style</b>\n\n"
-                "Пришли фото, которое нужно превратить в LEGO стиль 📸"
+                f"Пришли фото, которое нужно превратить в LEGO стиль 📸\n\n{price_line}"
             ),
             parse_mode="HTML",
         )

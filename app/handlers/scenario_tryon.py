@@ -40,6 +40,7 @@ from app.utils.progress_bar import (
     stop_progress,
 )
 from app.utils.generated_files import save_generated_image_bytes
+from app.utils.pricing import build_single_generation_price_line
 
 
 router = Router()
@@ -66,6 +67,7 @@ async def start_tryon_flow(
 
     await state.clear()
     await state.set_state(TryOnFlow.user_photo)
+    price_line = await build_single_generation_price_line(session)
 
     if call.message:
         try:
@@ -75,7 +77,7 @@ async def start_tryon_flow(
         await send_content_album(
             call.message,
             filenames=["scenario_photo1.jpeg", "scenario_photo2.jpeg"],
-            caption="Поехали! 👕✨\n\nПришли свою фотографию (1 фото) 🤳📸",
+            caption=f"Поехали! 👕✨\n\nПришли свою фотографию (1 фото) 🤳📸\n\n{price_line}",
             parse_mode="HTML",
         )
 

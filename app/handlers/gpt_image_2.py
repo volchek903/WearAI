@@ -38,6 +38,7 @@ from app.services.generation import (
 from app.services.wavespeed_ai import WaveSpeedError
 from app.states.gpt_image_2_flow import GptImage2Flow
 from app.utils.launch_guard import block_launch_for_call
+from app.utils.pricing import single_generation_price_line
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.support_text import launch_limits_message, with_support
 from app.utils.tg_callback import safe_answer
@@ -173,6 +174,8 @@ def _settings_text(data: dict) -> str:
         f"<b>Aspect ratio:</b> {_aspect_label(str(data.get('aspect_ratio') or '1:1'))}",
         f"<b>Resolution:</b> {_resolution_label(str(data.get('resolution') or '1k'))}",
         f"<b>Quality:</b> {_quality_label(str(data.get('quality') or 'medium'))}",
+        "",
+        single_generation_price_line(int(data.get("current_price_credits") or 0)),
     ]
     if mode == "edit":
         lines.insert(
@@ -223,6 +226,7 @@ async def _render_settings(target: CallbackQuery | Message, state: FSMContext) -
         target,
         _settings_text(data),
         reply_markup=_settings_kb(data),
+        parse_mode="HTML",
     )
 
 
@@ -263,6 +267,21 @@ async def _charge_credits_for_current_selection(
     )
 
 
+async def _current_selection_price_credits(
+    session: AsyncSession,
+    *,
+    model_key: str,
+    mode: str,
+    resolution: str,
+    quality: str,
+) -> int:
+    return await get_scaled_model_price_credits(
+        session,
+        model_key,
+        _provider_cost(mode, resolution, quality),
+    )
+
+
 @router.callback_query(
     F.data.in_(
         {
@@ -296,6 +315,13 @@ async def start_gpt_image_2(
         aspect_ratio=_default_aspect(user_settings.aspect_ratio, str(cfg["mode"])),
         resolution=_default_resolution(user_settings.resolution, str(cfg["mode"])),
         quality="medium",
+        current_price_credits=await _current_selection_price_credits(
+            session,
+            model_key=str(cfg["model_key"]),
+            mode=str(cfg["mode"]),
+            resolution=_default_resolution(user_settings.resolution, str(cfg["mode"])),
+            quality="medium",
+        ),
     )
 
     if cfg["mode"] == "edit":
@@ -305,7 +331,8 @@ async def start_gpt_image_2(
 
     await edit_text_safe(
         call,
-        str(cfg["caption"]),
+        f"{cfg['caption']}\n\n"
+        f"{single_generation_price_line(int((await state.get_data()).get('current_price_credits') or 0))}",
         reply_markup=None,
         parse_mode="HTML",
     )
@@ -389,7 +416,7 @@ async def gpt_image_2_settings_aspect(call: CallbackQuery, state: FSMContext) ->
 
 @router.callback_query(GptImage2Flow.settings, F.data == GPT_IMAGE_2_SETTINGS_RESOLUTION)
 async def gpt_image_2_settings_resolution(
-    call: CallbackQuery, state: FSMContext
+    call: CallbackQuery, state: FSMContext, session: AsyncSession
 ) -> None:
     data = await state.get_data()
     mode = str(data.get("mode") or "text_to_image")
@@ -397,19 +424,39 @@ async def gpt_image_2_settings_resolution(
         str(data.get("resolution") or _default_resolution("", mode)),
         _resolution_options(mode),
     )
-    await state.update_data(resolution=next_value)
+    await state.update_data(
+        resolution=next_value,
+        current_price_credits=await _current_selection_price_credits(
+            session,
+            model_key=str(data.get("model_key") or ""),
+            mode=mode,
+            resolution=next_value,
+            quality=str(data.get("quality") or "medium"),
+        ),
+    )
     await _render_settings(call, state)
     await safe_answer(call)
 
 
 @router.callback_query(GptImage2Flow.settings, F.data == GPT_IMAGE_2_SETTINGS_QUALITY)
-async def gpt_image_2_settings_quality(call: CallbackQuery, state: FSMContext) -> None:
+async def gpt_image_2_settings_quality(
+    call: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
     data = await state.get_data()
     next_value = _next_in_cycle(
         str(data.get("quality") or "medium"),
         GPT_IMAGE_2_QUALITY_OPTIONS,
     )
-    await state.update_data(quality=next_value)
+    await state.update_data(
+        quality=next_value,
+        current_price_credits=await _current_selection_price_credits(
+            session,
+            model_key=str(data.get("model_key") or ""),
+            mode=str(data.get("mode") or "text_to_image"),
+            resolution=str(data.get("resolution") or "1k"),
+            quality=next_value,
+        ),
+    )
     await _render_settings(call, state)
     await safe_answer(call)
 

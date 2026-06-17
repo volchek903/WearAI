@@ -30,6 +30,7 @@ from app.utils.content_media import send_content_photo
 from app.utils.tg_send import send_image_smart
 from app.utils.support_text import with_support, launch_limits_message
 from app.utils.launch_guard import block_launch_for_call
+from app.utils.pricing import build_single_generation_price_line
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -64,6 +65,7 @@ async def start_gta_style(
         return
     await state.clear()
     await state.set_state(GTAStyleFlow.photo)
+    price_line = await build_single_generation_price_line(session)
 
     if call.message:
         try:
@@ -75,15 +77,17 @@ async def start_gta_style(
             filename="gta_style.png",
             caption=(
                 "🕶 <b>GTA STYLE</b>\n\n"
-                "Пришли фото человека, который будет на изображении 📸"
+                f"Пришли фото человека, который будет на изображении 📸\n\n{price_line}"
             ),
             parse_mode="HTML",
         )
         if not ok:
             await edit_text_safe(
                 call,
-                "🕶 <b>GTA STYLE</b>\n\nПришли фото человека, который будет на изображении 📸",
+                "🕶 <b>GTA STYLE</b>\n\n"
+                f"Пришли фото человека, который будет на изображении 📸\n\n{price_line}",
                 reply_markup=None,
+                parse_mode="HTML",
             )
 
 

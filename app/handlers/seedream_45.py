@@ -27,6 +27,7 @@ from app.services.generation import generate_seedream_v45_image
 from app.services.wavespeed_ai import WaveSpeedError
 from app.states.seedream_45_flow import Seedream45Flow
 from app.utils.launch_guard import block_launch_for_call
+from app.utils.pricing import build_single_generation_price_line
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.support_text import launch_limits_message, with_support
 from app.utils.tg_callback import safe_answer
@@ -123,6 +124,7 @@ def _settings_text(data: dict) -> str:
         f"<b>Size:</b> {_size_label(data)}\n"
         f"<b>Width:</b> {width}\n"
         f"<b>Height:</b> {height}\n\n"
+        f"{data.get('price_line') or ''}\n"
         "Если заданы и width, и height, они имеют приоритет над preset size."
     )
 
@@ -153,6 +155,7 @@ async def _render_settings(target: CallbackQuery | Message, state: FSMContext) -
         target,
         _settings_text(data),
         reply_markup=_seedream45_settings_kb(data),
+        parse_mode="HTML",
     )
 
 
@@ -171,6 +174,10 @@ async def start_seedream_45(
         size_mode="auto",
         width=None,
         height=None,
+        price_line=await build_single_generation_price_line(
+            session,
+            model_key=MODEL_PRICE_SEEDREAM_V45_KEY,
+        ),
     )
     await state.set_state(Seedream45Flow.prompt)
 
@@ -178,8 +185,10 @@ async def start_seedream_45(
         call,
         "🪧 <b>Seedream 4.5</b>\n\n"
         "Пришли текстовый промпт для генерации изображения ✍️\n\n"
-        "После этого можно будет настроить size, width и height.",
+        "После этого можно будет настроить size, width и height.\n\n"
+        f"{(await state.get_data()).get('price_line') or ''}",
         reply_markup=None,
+        parse_mode="HTML",
     )
 
 
@@ -263,6 +272,7 @@ async def _update_seedream45_dimension(
     await message.answer(
         _settings_text(await state.get_data()),
         reply_markup=_seedream45_settings_kb(await state.get_data()),
+        parse_mode="HTML",
     )
 
 

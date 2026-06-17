@@ -31,6 +31,7 @@ from app.utils.tg_send import send_image_smart
 from app.utils.tg_callback import safe_answer
 from app.utils.support_text import with_support, launch_limits_message
 from app.utils.launch_guard import block_launch_for_call
+from app.utils.pricing import build_single_generation_price_line
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -67,6 +68,7 @@ async def start_rear_view_mirror(
         return
     await state.clear()
     await state.set_state(RearViewMirrorFlow.photo)
+    price_line = await build_single_generation_price_line(session)
 
     if call.message:
         try:
@@ -76,7 +78,10 @@ async def start_rear_view_mirror(
         await send_content_photo(
             call.message,
             filename="drift_car.jpeg",
-            caption="🪞 <b>Зеркало заднего вида</b>\n\nПришли одно фото машины 📸",
+            caption=(
+                "🪞 <b>Зеркало заднего вида</b>\n\n"
+                f"Пришли одно фото машины 📸\n\n{price_line}"
+            ),
             parse_mode="HTML",
         )
 

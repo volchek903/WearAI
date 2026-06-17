@@ -21,6 +21,7 @@ from app.models.subscription import Subscription
 from app.models.user import User
 from app.models.user_subscription import UserSubscription
 from app.repository.generations import (
+    VIDEO_MODEL_I2V_KEY,
     charge_video_generation,
     refund_video_generation,
     finalize_video_generation,
@@ -30,6 +31,7 @@ from app.repository.users import increment_generated_videos
 from app.states.animate_photo import AnimatePhotoStates
 from app.utils.wavespeed_kling_client import WaveSpeedKlingClient
 from app.utils.tg_edit import edit_text_safe
+from app.utils.pricing import build_single_generation_price_line
 from app.utils.support_text import with_support
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 
@@ -91,9 +93,15 @@ def _document_looks_like_image(message: Message) -> bool:
 
 
 @router.callback_query(F.data == MenuCallbacks.ANIMATE)
-async def animate_entry(cb: CallbackQuery, state: FSMContext) -> None:
+async def animate_entry(
+    cb: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
     await state.clear()
     await state.set_state(AnimatePhotoStates.waiting_photo)
+    price_line = await build_single_generation_price_line(
+        session,
+        model_key=VIDEO_MODEL_I2V_KEY,
+    )
 
     if cb.message is None:
         await cb.answer()
@@ -105,10 +113,11 @@ async def animate_entry(cb: CallbackQuery, state: FSMContext) -> None:
         "Можно отправить как обычное фото или как файл-изображение.\n"
         "<i>(Не альбом / не несколько фото одним сообщением)</i>\n\n"
         "После этого я попрошу промпт и начну генерацию видео на <b>5 секунд</b>.\n\n"
+        f"{price_line}\n\n"
         "💡 <b>Совет</b>: лучше работает фото без смаза, с хорошим светом и лицом в кадре."
     )
 
-    await edit_text_safe(cb, text, reply_markup=None)
+    await edit_text_safe(cb, text, reply_markup=None, parse_mode="HTML")
     await cb.answer()
 
 

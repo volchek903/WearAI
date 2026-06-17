@@ -27,6 +27,7 @@ from app.services.wavespeed_ai import WaveSpeedError
 from app.states.sims_style_flow import SimsStyleFlow
 from app.utils.content_media import get_content_file
 from app.utils.launch_guard import block_launch_for_call
+from app.utils.pricing import build_single_generation_price_line
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.support_text import launch_limits_message, with_support
 from app.utils.tg_callback import safe_answer
@@ -75,6 +76,7 @@ async def start_sims_style(
 
     await state.clear()
     await state.set_state(SimsStyleFlow.photo)
+    price_line = await build_single_generation_price_line(session)
 
     if call.message:
         try:
@@ -87,7 +89,8 @@ async def start_sims_style(
                 get_content_file("sims_maket.jpeg"),
                 caption=(
                     "🎮 <b>Sims стиль</b>\n\n"
-                    "Пришли фото человека или животного, которого нужно поместить в Sims стиль 📸"
+                    "Пришли фото человека или животного, которого нужно поместить "
+                    f"в Sims стиль 📸\n\n{price_line}"
                 ),
                 parse_mode="HTML",
             )
@@ -95,8 +98,10 @@ async def start_sims_style(
             await edit_text_safe(
                 call,
                 "🎮 <b>Sims стиль</b>\n\n"
-                "Пришли фото человека или животного, которого нужно поместить в Sims стиль 📸",
+                "Пришли фото человека или животного, которого нужно поместить "
+                f"в Sims стиль 📸\n\n{price_line}",
                 reply_markup=None,
+                parse_mode="HTML",
             )
 
 

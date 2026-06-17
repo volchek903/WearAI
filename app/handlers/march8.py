@@ -26,6 +26,7 @@ from app.states.march8_flow import March8Flow
 from app.utils.wavespeed_errors import wavespeed_error_to_user_text
 from app.utils.tg_callback import safe_answer
 from app.utils.launch_guard import block_launch_for_call
+from app.utils.pricing import build_single_generation_price_line
 from app.utils.progress_bar import progress_initial_text, progress_loop, stop_progress
 from app.utils.tg_edit import edit_text_safe
 from app.utils.content_media import send_content_photo
@@ -67,6 +68,7 @@ async def start_march8(
         return
     await state.clear()
     await state.set_state(March8Flow.photos)
+    price_line = await build_single_generation_price_line(session)
     if call.message:
         try:
             await call.message.delete()
@@ -77,7 +79,7 @@ async def start_march8(
             filename="8march.jpg",
             caption=(
                 "🌸 <b>Поздравление с 8 Марта</b>\n\n"
-                "Пришли 1–2 фото, где чётко видны девушка и женщина 📸"
+                f"Пришли 1–2 фото, где чётко видны девушка и женщина 📸\n\n{price_line}"
             ),
             parse_mode="HTML",
         )

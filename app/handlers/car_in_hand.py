@@ -31,6 +31,7 @@ from app.utils.content_media import send_content_album
 from app.utils.tg_send import send_image_smart
 from app.utils.support_text import with_support, launch_limits_message
 from app.utils.launch_guard import block_launch_for_call
+from app.utils.pricing import build_single_generation_price_line
 from app.utils.tg_callback import safe_answer
 
 router = Router()
@@ -88,6 +89,7 @@ async def car_in_hand_start(
         return
     await state.clear()
     await state.set_state(CarInHandFlow.photo)
+    price_line = await build_single_generation_price_line(session)
 
     if call.message:
         try:
@@ -97,7 +99,7 @@ async def car_in_hand_start(
         await send_content_album(
             call.message,
             filenames=["mini_car.jpg", "mini_car1.jpg"],
-            caption="✋ <b>Ваша машина в руке</b>\n\nПришли фото машины 📸",
+            caption=f"✋ <b>Ваша машина в руке</b>\n\nПришли фото машины 📸\n\n{price_line}",
             parse_mode="HTML",
         )
 
