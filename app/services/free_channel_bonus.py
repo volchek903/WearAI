@@ -4,7 +4,7 @@ import asyncio
 import logging
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from sqlalchemy import update, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -67,6 +67,22 @@ async def bonus_already_used(session: AsyncSession, tg_id: int) -> bool:
     return bool(used)
 
 
+async def _send_message_safe(
+    bot: Bot,
+    tg_id: int,
+    text: str,
+    *,
+    log_context: str,
+    **kwargs,
+) -> None:
+    try:
+        await bot.send_message(tg_id, text, **kwargs)
+    except TelegramForbiddenError:
+        logger.info("%s skipped tg_id=%s reason=bot_blocked", log_context, tg_id)
+    except Exception:
+        logger.exception("%s failed tg_id=%s", log_context, tg_id)
+
+
 async def schedule_bonus_grant(bot: Bot, tg_id: int, delay_s: int = 60) -> None:
     async def _job() -> None:
         await asyncio.sleep(delay_s)
@@ -74,13 +90,12 @@ async def schedule_bonus_grant(bot: Bot, tg_id: int, delay_s: int = 60) -> None:
             await ensure_default_subscription(session, tg_id)
             await grant_photo_generation(session, tg_id, delta=1)
             await finish_bonus(session, tg_id)
-        try:
-            await bot.send_message(
-                tg_id,
-                "🎁 Начислены кредиты на 1 бесплатную фото-генерацию!",
-            )
-        except Exception:
-            logger.exception("failed to send bonus message tg_id=%s", tg_id)
+        await _send_message_safe(
+            bot,
+            tg_id,
+            "🎁 Начислены кредиты на 1 бесплатную фото-генерацию!",
+            log_context="bonus message",
+        )
 
     asyncio.create_task(_job())
 
@@ -99,15 +114,14 @@ async def schedule_free_bonus_reminder(bot: Bot, tg_id: int, delay_s: int = 600)
                 return
             await mark_reminder_sent(session, tg_id)
 
-        try:
-            await bot.send_message(
-                tg_id,
-                "Хочешь получить ещё одну бесплатную фото-генерацию?\n"
-                "Подпишись на канал и нажми кнопку ниже 👇",
-                reply_markup=free_channel_kb(),
-            )
-        except Exception:
-            logger.exception("failed to send reminder tg_id=%s", tg_id)
+        await _send_message_safe(
+            bot,
+            tg_id,
+            "Хочешь получить ещё одну бесплатную фото-генерацию?\n"
+            "Подпишись на канал и нажми кнопку ниже 👇",
+            log_context="reminder",
+            reply_markup=free_channel_kb(),
+        )
 
     asyncio.create_task(_job())
 

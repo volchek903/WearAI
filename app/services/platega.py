@@ -81,6 +81,7 @@ class PlategaClient:
         payload: dict,
         payment_method: int,
         api_version: str,
+        metadata: dict[str, str] | None = None,
     ) -> dict:
         body = {
             "paymentDetails": {"amount": amount, "currency": currency},
@@ -89,6 +90,8 @@ class PlategaClient:
             "failedUrl": self.cfg.failed_url,
             "payload": json.dumps(payload, ensure_ascii=False),
         }
+        if metadata:
+            body["metadata"] = metadata
         if (
             _normalize_platega_api_version(api_version) == "v1"
             or self.cfg.v2_send_payment_method
@@ -104,6 +107,7 @@ class PlategaClient:
         description: str,
         payload: dict,
         payment_method: int = 2,
+        metadata: dict[str, str] | None = None,
     ) -> dict:
         api_version = _normalize_platega_api_version(self.cfg.api_version)
 
@@ -118,6 +122,7 @@ class PlategaClient:
             payload=payload,
             payment_method=payment_method,
             api_version=api_version,
+            metadata=metadata,
         )
         url = self._transaction_process_url(api_version)
         r = await _with_retries(lambda: _post(url, body))
@@ -135,6 +140,7 @@ class PlategaClient:
                     payload=payload,
                     payment_method=payment_method,
                     api_version="v2",
+                    metadata=metadata,
                 )
                 logger.warning(
                     "platega.create_payment_link: retrying via v2 endpoint payment_method=%s amount=%s currency=%s",

@@ -45,6 +45,16 @@ def _price_to_rub_int(value: object) -> int:
     return max(0, int(price.quantize(Decimal("1"), rounding=ROUND_HALF_UP)))
 
 
+def _platega_metadata(call: CallbackQuery) -> dict[str, str]:
+    username = (getattr(call.from_user, "username", None) or "").strip()
+    full_name = (getattr(call.from_user, "full_name", None) or "").strip()
+    user_name = f"@{username}" if username else (full_name or str(call.from_user.id))
+    return {
+        "userId": str(call.from_user.id),
+        "userName": user_name,
+    }
+
+
 @router.callback_query(F.data.startswith(ExtraCallbacks.BUY_PREFIX))
 async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
     await call.answer()
@@ -106,6 +116,7 @@ async def extra_buy(call: CallbackQuery, session: AsyncSession) -> None:
             description=f"Credit pack {plan.name}",
             payload=payload,
             payment_method=pay_method,
+            metadata=_platega_metadata(call),
         )
     except Exception:
         logger.exception(
@@ -227,6 +238,7 @@ async def extra_custom_buy(call: CallbackQuery, session: AsyncSession) -> None:
             description=f"Custom credit top-up {credits}",
             payload=payload,
             payment_method=pay_method,
+            metadata=_platega_metadata(call),
         )
     except Exception:
         logger.exception(

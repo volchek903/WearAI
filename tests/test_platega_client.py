@@ -126,6 +126,7 @@ class PlategaClientTests(unittest.IsolatedAsyncioTestCase):
                 description="Credits",
                 payload={"tgUserId": 1},
                 payment_method=11,
+                metadata={"userId": "1", "userName": "@tester"},
             )
 
         self.assertEqual(
@@ -136,8 +137,48 @@ class PlategaClientTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
         self.assertEqual(fake.calls[0][2]["paymentMethod"], 11)
+        self.assertEqual(
+            fake.calls[0][2]["metadata"],
+            {"userId": "1", "userName": "@tester"},
+        )
         self.assertNotIn("paymentMethod", fake.calls[1][2])
+        self.assertEqual(
+            fake.calls[1][2]["metadata"],
+            {"userId": "1", "userName": "@tester"},
+        )
         self.assertEqual(data["redirect"], "https://pay.platega.io/?id=tx-2")
+
+    async def test_metadata_is_sent_for_v2_create(self) -> None:
+        fake = FakeHttpClient(
+            [
+                FakeResponse(
+                    200,
+                    {
+                        "transactionId": "tx-4",
+                        "url": "https://pay.platega.io/?id=tx-4",
+                        "status": "PENDING",
+                    },
+                )
+            ]
+        )
+
+        with patch(
+            "app.services.platega.external_httpx_client",
+            lambda **kwargs: FakeHttpClientContext(fake),
+        ):
+            await _client(api_version="v2").create_payment_link(
+                amount=700,
+                currency="RUB",
+                description="Credits",
+                payload={"tgUserId": 5},
+                payment_method=11,
+                metadata={"userId": "5", "userName": "@cardpayer"},
+            )
+
+        self.assertEqual(
+            fake.calls[0][2]["metadata"],
+            {"userId": "5", "userName": "@cardpayer"},
+        )
 
     async def test_status_check_uses_root_transaction_path_for_v2_base_url(self) -> None:
         fake = FakeHttpClient([FakeResponse(200, {"status": "CONFIRMED"})])
