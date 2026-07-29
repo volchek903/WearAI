@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
+
 from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.models.user_photo_settings import UserPhotoSettings
@@ -62,8 +65,24 @@ class SettingsCallbacks:
     BACK = "settings:back"
 
 
+def _mini_app_url() -> str | None:
+    for key in ("TELEGRAM_MINI_APP_URL", "MINI_APP_URL", "FRONTEND_PUBLIC_URL"):
+        value = (os.getenv(key) or "").strip()
+        if value:
+            return value
+    return None
+
+
 def main_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
+    mini_app_url = _mini_app_url()
+
+    if mini_app_url:
+        add_button(
+            kb,
+            text="📱 Открыть WearAI Mini App",
+            web_app=WebAppInfo(url=mini_app_url),
+        )
 
     add_button(kb, text="🤖 Агент WeaRai", callback_data=MenuCallbacks.TEXT)
     add_button(kb, text="🖼 Модели для фото", callback_data=MenuCallbacks.PHOTO)

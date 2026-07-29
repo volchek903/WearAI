@@ -45,3 +45,31 @@ def save_generated_image_bytes(
         pass
 
     return str(out_path.resolve())
+
+
+def save_generated_binary_bytes(
+    *,
+    data: bytes,
+    filename: str,
+    scenario: str,
+    tg_id: int,
+    keep_last: int = 20,
+) -> str:
+    root = _root_dir()
+    out_dir = root / scenario / str(tg_id)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    ext = Path(filename).suffix or ".bin"
+    ts = int(time.time() * 1000)
+    out_name = f"{ts}_{uuid.uuid4().hex[:8]}{ext}"
+    out_path = out_dir / out_name
+    out_path.write_bytes(data)
+
+    try:
+        files = sorted(out_dir.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for p in files[keep_last:]:
+            p.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    return str(out_path.resolve())

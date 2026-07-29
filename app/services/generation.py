@@ -58,6 +58,26 @@ def _guess_image_extension(url: str) -> str:
     return ext
 
 
+async def _upload_raw_reference_images(
+    *,
+    wavespeed: WaveSpeedClient,
+    upload_path: str,
+    image_inputs: Sequence[tuple[str, bytes]],
+    default_extension: str,
+    limit: int,
+) -> list[str]:
+    uploaded_urls: list[str] = []
+    for idx, (name, data) in enumerate(list(image_inputs)[:limit], start=1):
+        filename = name or f"input_{idx}.{default_extension}"
+        url = await wavespeed.upload_image_bytes(
+            data=data,
+            filename=filename,
+            upload_path=upload_path,
+        )
+        uploaded_urls.append(url)
+    return uploaded_urls
+
+
 async def get_user_photo_settings(
     session: AsyncSession, tg_id: int
 ) -> PhotoSettingsDTO:
@@ -186,6 +206,61 @@ async def generate_image_wavespeed_from_telegram(
     return out
 
 
+async def generate_image_wavespeed_from_bytes(
+    *,
+    session: AsyncSession,
+    tg_id: int,
+    prompt: str,
+    image_inputs: Sequence[tuple[str, bytes]],
+    aspect_ratio: str | None = None,
+    resolution: str | None = None,
+    output_format: str | None = None,
+    max_images: int = 5,
+    model_variant: str = "nano_banana_2",
+) -> list[tuple[str, bytes]]:
+    settings = await get_user_photo_settings(session, tg_id)
+    if aspect_ratio or resolution or output_format:
+        settings = PhotoSettingsDTO(
+            aspect_ratio=_normalize_aspect_ratio(
+                aspect_ratio or settings.aspect_ratio
+            ),
+            resolution=_normalize_resolution(resolution or settings.resolution),
+            output_format=_normalize_output_format(
+                output_format or settings.output_format
+            ),
+        )
+
+    safe_max = max(1, min(int(max_images or 0), 10))
+    wavespeed = WaveSpeedClient(api_key=get_wavespeed_api_key_from_env())
+    uploaded_urls = await _upload_raw_reference_images(
+        wavespeed=wavespeed,
+        upload_path=f"wearai/{tg_id}",
+        image_inputs=image_inputs,
+        default_extension=settings.output_format,
+        limit=safe_max,
+    )
+
+    if model_variant == "nano_banana_pro":
+        task_id = await wavespeed.create_nano_banana_pro_edit_task(
+            prompt=prompt,
+            image_input_urls=uploaded_urls,
+            settings=settings,
+        )
+    else:
+        task_id = await wavespeed.create_nano_banana_2_task(
+            prompt=prompt,
+            image_input_urls=uploaded_urls,
+            settings=settings,
+        )
+
+    result_urls = await wavespeed.wait_result_urls(task_id)
+    out: list[tuple[str, bytes]] = []
+    for idx, url in enumerate(result_urls, start=1):
+        img_bytes = await wavespeed.download_bytes(url)
+        out.append((f"result_{idx}.{settings.output_format}", img_bytes))
+    return out
+
+
 async def _upload_tg_reference_images(
     *,
     bot: Bot,
@@ -253,6 +328,47 @@ async def generate_seedream_v5_lite(
         img_bytes = await wavespeed.download_bytes(url)
         out.append((f"result_{idx}.{result_format}", img_bytes))
 
+    return out
+
+
+async def generate_seedream_v5_lite_from_bytes(
+    *,
+    session: AsyncSession,
+    tg_id: int,
+    prompt: str,
+    image_inputs: Sequence[tuple[str, bytes]] = (),
+    size: str | None = None,
+    output_format: str | None = None,
+) -> list[tuple[str, bytes]]:
+    settings = await get_user_photo_settings(session, tg_id)
+    result_format = _normalize_output_format(output_format or settings.output_format)
+    wavespeed = WaveSpeedClient(api_key=get_wavespeed_api_key_from_env())
+
+    uploaded_urls = await _upload_raw_reference_images(
+        wavespeed=wavespeed,
+        upload_path=f"wearai/{tg_id}/seedream",
+        image_inputs=image_inputs,
+        default_extension=result_format,
+        limit=10,
+    )
+
+    task_id = await wavespeed.create_seedream_v5_lite_task(
+        prompt=prompt,
+        reference_image_urls=uploaded_urls,
+        size=size,
+        output_format=result_format,
+        settings=PhotoSettingsDTO(
+            aspect_ratio=settings.aspect_ratio,
+            resolution=settings.resolution,
+            output_format=result_format,
+        ),
+    )
+    result_urls = await wavespeed.wait_result_urls(task_id)
+
+    out: list[tuple[str, bytes]] = []
+    for idx, url in enumerate(result_urls, start=1):
+        img_bytes = await wavespeed.download_bytes(url)
+        out.append((f"result_{idx}.{result_format}", img_bytes))
     return out
 
 
@@ -378,6 +494,42 @@ async def generate_gpt_image_2_edit_from_telegram(
     return out
 
 
+async def generate_gpt_image_2_edit_from_bytes(
+    *,
+    tg_id: int,
+    prompt: str,
+    image_inputs: Sequence[tuple[str, bytes]],
+    aspect_ratio: str | None = None,
+    resolution: str | None = None,
+    quality: str | None = None,
+    max_images: int = 5,
+) -> list[tuple[str, bytes]]:
+    wavespeed = WaveSpeedClient(api_key=get_wavespeed_api_key_from_env())
+    uploaded_urls = await _upload_raw_reference_images(
+        wavespeed=wavespeed,
+        upload_path=f"wearai/{tg_id}/gpt-image-2",
+        image_inputs=image_inputs,
+        default_extension="png",
+        limit=max(1, min(int(max_images or 0), 5)),
+    )
+
+    task_id = await wavespeed.create_gpt_image_2_edit_task(
+        prompt=prompt,
+        image_input_urls=uploaded_urls,
+        aspect_ratio=aspect_ratio,
+        resolution=resolution,
+        quality=quality,
+    )
+    result_urls = await wavespeed.wait_result_urls(task_id)
+
+    out: list[tuple[str, bytes]] = []
+    for idx, url in enumerate(result_urls, start=1):
+        img_bytes = await wavespeed.download_bytes(url)
+        ext = _guess_image_extension(url)
+        out.append((f"result_{idx}.{ext}", img_bytes))
+    return out
+
+
 async def generate_image_wavespeed_from_telegram_with_extra(
     *,
     bot: Bot,
@@ -452,6 +604,59 @@ async def generate_image_wavespeed_from_telegram_with_extra(
         img_bytes = await wavespeed.download_bytes(url)
         out.append((f"result_{idx}.{settings.output_format}", img_bytes))
 
+    return out
+
+
+async def generate_image_wavespeed_from_bytes_with_extra(
+    *,
+    session: AsyncSession,
+    tg_id: int,
+    prompt: str,
+    image_inputs: Sequence[tuple[str, bytes]],
+    extra_images: Sequence[tuple[str, bytes]] = (),
+    aspect_ratio: str | None = None,
+    resolution: str | None = None,
+    output_format: str | None = None,
+    max_images: int = 5,
+) -> list[tuple[str, bytes]]:
+    settings = await get_user_photo_settings(session, tg_id)
+    if aspect_ratio or resolution or output_format:
+        settings = PhotoSettingsDTO(
+            aspect_ratio=_normalize_aspect_ratio(
+                aspect_ratio or settings.aspect_ratio
+            ),
+            resolution=_normalize_resolution(resolution or settings.resolution),
+            output_format=_normalize_output_format(
+                output_format or settings.output_format
+            ),
+        )
+
+    wavespeed = WaveSpeedClient(api_key=get_wavespeed_api_key_from_env())
+    max_total_inputs = 8
+    extra_list = list(extra_images)[:max_total_inputs]
+    image_slots = max(0, max_total_inputs - len(extra_list))
+    safe_max = max(0, min(int(max_images or 0), image_slots))
+    merged_inputs = [*extra_list, *list(image_inputs)[:safe_max]]
+
+    uploaded_urls = await _upload_raw_reference_images(
+        wavespeed=wavespeed,
+        upload_path=f"wearai/{tg_id}",
+        image_inputs=merged_inputs,
+        default_extension=settings.output_format,
+        limit=max_total_inputs,
+    )
+
+    task_id = await wavespeed.create_nano_banana_2_task(
+        prompt=prompt,
+        image_input_urls=uploaded_urls,
+        settings=settings,
+    )
+
+    result_urls = await wavespeed.wait_result_urls(task_id)
+    out: list[tuple[str, bytes]] = []
+    for idx, url in enumerate(result_urls, start=1):
+        img_bytes = await wavespeed.download_bytes(url)
+        out.append((f"result_{idx}.{settings.output_format}", img_bytes))
     return out
 
 

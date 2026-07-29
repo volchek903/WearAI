@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#05070d" />
+    <title>WearAI Mini App</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  </head>
+  <body>
+    <svg class="icon-sprite" aria-hidden="true" focusable="false">
+      <symbol id="icon-photo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5z" />
+        <path d="M8 15l2.5-2.5L13 15l2-2 3 3" />
+        <circle cx="9" cy="9" r="1.5" />
+      </symbol>
+      <symbol id="icon-video" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3.5" y="5" width="12.5" height="14" rx="3" />
+        <path d="m16 10 4.5-2.5v9L16 14" />
+      </symbol>
+      <symbol id="icon-music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 5v10.2A2.8 2.8 0 1 1 12 12.5V7.2L19 5v8.2A2.8 2.8 0 1 1 17 10.5V5.7z" />
+      </symbol>
+      <symbol id="icon-agent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="5" width="16" height="12" rx="4" />
+        <path d="M9 20h6" />
+        <circle cx="9" cy="11" r="1" />
+        <circle cx="15" cy="11" r="1" />
+        <path d="M9 14c.9.8 1.9 1.2 3 1.2s2.1-.4 3-1.2" />
+      </symbol>
+      <symbol id="icon-profile" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="8" r="4" />
+        <path d="M5 19.2C6.9 16.6 9.2 15.3 12 15.3s5.1 1.3 7 3.9" />
+      </symbol>
+      <symbol id="icon-wallet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 7.5A2.5 2.5 0 0 1 7.5 5h9A2.5 2.5 0 0 1 19 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 5 16.5z" />
+        <path d="M15 12h4.5" />
+        <circle cx="15.5" cy="12" r=".8" />
+      </symbol>
+      <symbol id="icon-gift" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 9h14v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z" />
+        <path d="M3.5 9h17M12 9v12M8.2 6.7c0 1.3 1.1 2.3 3.8 2.3-2.2-1.6-2.4-3.2-1.1-4 .9-.6 2.4-.3 2.7 1.1M15.8 6.7c0 1.3-1.1 2.3-3.8 2.3 2.2-1.6 2.4-3.2 1.1-4-.9-.6-2.4-.3-2.7 1.1" />
+      </symbol>
+      <symbol id="icon-diamond" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m6 8 6-4 6 4-6 12z" />
+        <path d="M6 8h12" />
+      </symbol>
+      <symbol id="icon-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M3.8 12h16.4M12 3.5c2.2 2.2 3.4 5.3 3.4 8.5S14.2 18.3 12 20.5M12 3.5c-2.2 2.2-3.4 5.3-3.4 8.5S9.8 18.3 12 20.5" />
+      </symbol>
+      <symbol id="icon-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
+      </symbol>
+      <symbol id="icon-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 4.2 18 6.5v5.3c0 4.2-2.3 6.9-6 8.8-3.7-1.9-6-4.6-6-8.8V6.5z" />
+        <path d="m9.2 12.1 1.9 1.9 3.7-3.7" />
+      </symbol>
+      <symbol id="icon-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 18.5h14" />
+        <path d="M8 15V10M12 15V7M16 15v-4" />
+      </symbol>
+      <symbol id="icon-chip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="7" y="7" width="10" height="10" rx="2" />
+        <path d="M9 3.5v2.3M15 3.5v2.3M9 18.2v2.3M15 18.2v2.3M3.5 9h2.3M3.5 15h2.3M18.2 9h2.3M18.2 15h2.3" />
+      </symbol>
+      <symbol id="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 6.5 15 12l-7 5.5" />
+      </symbol>
+      <symbol id="icon-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 4.5h6l4 4v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2z" />
+        <path d="M14 4.5v4h4" />
+        <path d="M9.5 13h5M9.5 16.5h5" />
+      </symbol>
+    </svg>
+
+    <div class="app-shell">
+      <div class="backdrop-orb backdrop-orb--cyan"></div>
+      <div class="backdrop-orb backdrop-orb--violet"></div>
+
+      <header class="topbar">
+        <button id="brand-home-btn" class="brand-button" type="button" aria-label="Открыть студию">
+          <div class="brand-block">
+            <div class="brand-mark" aria-hidden="true">
+              <span class="brand-mark__core"></span>
+              <span class="brand-mark__spark"></span>
+            </div>
+            <div class="brand-copy">
+              <p class="eyebrow">Telegram Mini App</p>
+              <h1>Wear<span>AI</span></h1>
+            </div>
+          </div>
+        </button>
+
+        <button id="profile-trigger" class="profile-trigger" type="button" aria-label="Открыть профиль">
+          <span id="header-avatar" class="avatar avatar--compact"></span>
+          <span class="profile-trigger__copy">
+            <strong id="header-name">WearAI User</strong>
+            <span id="metric-client">ready</span>
+          </span>
+        </button>
+      </header>
+
+      <main class="main-panel">
+        <section class="hero-card">
+          <div class="hero-copy">
+            <p class="eyebrow" id="hero-eyebrow">Telegram Mini App</p>
+            <h2 id="hero-title">Студия генерации внутри Telegram с премиальной логотипной палитрой.</h2>
+            <p id="hero-description">
+              WearAI объединяет фото, видео, музыку, агента и профиль в одном mobile-first
+              интерфейсе с быстрым доступом к результатам и данным аккаунта.
+            </p>
+          </div>
+
+          <div class="hero-stat-stack">
+            <article class="hero-stat hero-stat--gradient">
+              <span class="stat-icon">
+                <svg viewBox="0 0 24 24"><use href="#icon-profile"></use></svg>
+              </span>
+              <span>Аккаунт</span>
+              <strong id="metric-identity">WearAI</strong>
+              <small id="metric-context">workspace ready</small>
+            </article>
+
+            <article class="hero-stat">
+              <span class="stat-icon stat-icon--violet">
+                <svg viewBox="0 0 24 24"><use href="#icon-chart"></use></svg>
+              </span>
+              <span>Каталог</span>
+              <strong id="metric-modes">0</strong>
+              <small>доступных режимов</small>
+            </article>
+
+          </div>
+        </section>
+
+        <section id="workspace-panel" class="workspace-panel">
+          <section id="catalog-panel" class="catalog-panel app-card">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow" id="catalog-eyebrow">Фото</p>
+                <h3 id="catalog-title">Каталог режимов</h3>
+              </div>
+              <span class="pill" id="catalog-count">0</span>
+            </div>
+            <div id="mode-grid" class="mode-grid"></div>
+          </section>
+
+          <section id="studio-panel" class="studio-panel app-card">
+            <div id="studio-panel-head" class="panel-head">
+              <div>
+                <p class="eyebrow">Studio</p>
+                <h3 id="studio-title">Выбери режим</h3>
+              </div>
+              <span id="studio-badge" class="pill pill--ghost">idle</span>
+            </div>
+
+            <div id="studio-meta" class="studio-meta"></div>
+
+            <section id="generation-stage" class="generation-stage">
+              <div class="generation-stage__visual">
+                <div id="stage-media" class="stage-media"></div>
+                <div id="stage-progress" class="stage-progress hidden" aria-live="polite">
+                  <div class="stage-progress__meta">
+                    <strong id="stage-progress-label">Генерация</strong>
+                    <span id="stage-progress-value">0%</span>
+                  </div>
+                  <div class="stage-progress__bar">
+                    <span id="stage-progress-fill"></span>
+                  </div>
+                </div>
+              </div>
+              <div class="generation-stage__copy">
+                <p class="eyebrow eyebrow--tight" id="stage-caption-kicker">Model Preview</p>
+                <strong id="stage-caption-title">Preview сцены</strong>
+                <p id="stage-caption-text">
+                  Здесь появится sample текущей модели, а после генерации этот кадр заменится
+                  на результат пользователя.
+                </p>
+              </div>
+            </section>
+
+            <form id="mode-form" class="mode-form">
+              <div id="primary-field-slot" class="primary-field-slot"></div>
+              <div id="dynamic-fields" class="field-stack"></div>
+              <div id="upload-preview-strip" class="upload-preview-strip hidden"></div>
+              <div id="upload-area" class="upload-stack"></div>
+              <button class="primary-btn" type="submit" id="submit-btn">Запустить генерацию</button>
+            </form>
+
+            <section id="music-panel" class="hidden music-panel">
+              <div class="music-grid">
+                <div class="music-card">
+                  <label for="music-duration">Длительность</label>
+                  <select id="music-duration"></select>
+                </div>
+                <div class="music-card">
+                  <label for="music-seed">Seed</label>
+                  <input id="music-seed" type="number" value="-1" />
+                </div>
+              </div>
+              <div id="music-tags" class="music-tags"></div>
+              <div id="music-structures" class="structure-grid"></div>
+              <div id="music-sections" class="field-stack"></div>
+              <button class="primary-btn" id="music-submit" type="button">Сгенерировать трек</button>
+            </section>
+
+            <section id="agent-panel" class="hidden agent-panel">
+              <div class="agent-chat-shell">
+                <div class="agent-chat-head">
+                  <div>
+                    <p class="eyebrow eyebrow--tight">Agent Chat</p>
+                    <strong>Диалог с WeaRai</strong>
+                  </div>
+                  <span class="pill">live</span>
+                </div>
+
+                <div id="agent-messages" class="agent-messages" aria-live="polite"></div>
+
+                <form id="agent-form" class="agent-form">
+                  <div class="agent-modules">
+                    <div class="agent-modules__copy">
+                      <span>Модули агента</span>
+                      <small>Включай инструменты прямо над вводом перед отправкой запроса.</small>
+                    </div>
+
+                    <div class="agent-tools" role="group" aria-label="Модули агента">
+                      <label class="toggle toggle--agent">
+                        <input type="checkbox" data-agent-toggle="memory_enabled" checked />
+                        <span class="toggle__icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24"><use href="#icon-chip"></use></svg>
+                        </span>
+                        <span class="toggle__copy">
+                          <strong>Память</strong>
+                          <small>Сохраняет ход диалога</small>
+                        </span>
+                      </label>
+
+                      <label class="toggle toggle--agent">
+                        <input type="checkbox" data-agent-toggle="documents_enabled" />
+                        <span class="toggle__icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24"><use href="#icon-doc"></use></svg>
+                        </span>
+                        <span class="toggle__copy">
+                          <strong>Документы</strong>
+                          <small>Работа с файлами и контекстом</small>
+                        </span>
+                      </label>
+
+                      <label class="toggle toggle--agent">
+                        <input type="checkbox" data-agent-toggle="web_search_enabled" />
+                        <span class="toggle__icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24"><use href="#icon-globe"></use></svg>
+                        </span>
+                        <span class="toggle__copy">
+                          <strong>Веб-поиск</strong>
+                          <small>Подтягивает внешний контекст</small>
+                        </span>
+                      </label>
+
+                      <label class="toggle toggle--agent">
+                        <input type="checkbox" data-agent-toggle="deep_analysis_enabled" />
+                        <span class="toggle__icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24"><use href="#icon-spark"></use></svg>
+                        </span>
+                        <span class="toggle__copy">
+                          <strong>Глубокий анализ</strong>
+                          <small>Для длинных и сложных задач</small>
+                        </span>
+                      </label>
+
+                      <label class="toggle toggle--agent">
+                        <input type="checkbox" data-agent-toggle="quick_mode_enabled" />
+                        <span class="toggle__icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24"><use href="#icon-arrow"></use></svg>
+                        </span>
+                        <span class="toggle__copy">
+                          <strong>Quick mode</strong>
+                          <small>Быстрый короткий ответ</small>
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="agent-input-shell">
+                    <div class="agent-doc-upload">
+                      <label class="agent-doc-picker" for="agent-doc-file">
+                        <span class="agent-doc-picker__icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24"><use href="#icon-doc"></use></svg>
+                        </span>
+                        <span class="agent-doc-picker__copy">
+                          <strong>Документ для контекста</strong>
+                          <small id="agent-doc-meta">Добавь файл, чтобы агент увидел материалы.</small>
+                        </span>
+                      </label>
+                      <input id="agent-doc-file" type="file" />
+                      <button id="agent-doc-upload-btn" type="button" class="secondary-btn">Загрузить</button>
+                    </div>
+
+                    <textarea
+                      id="agent-input"
+                      placeholder="Напиши задачу для агента: что проанализировать, сгенерировать или найти..."
+                      required
+                    ></textarea>
+                    <button id="agent-submit-btn" class="primary-btn" type="submit">Отправить запрос</button>
+                  </div>
+                </form>
+              </div>
+            </section>
+          </section>
+
+          <section id="result-panel" class="result-panel app-card">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Output</p>
+                <h3>Результат</h3>
+              </div>
+              <span id="result-status" class="pill pill--ghost">empty</span>
+            </div>
+            <div id="result-content" class="result-content empty-state" aria-live="polite">
+              <div class="empty-state-copy">
+                <strong>Результат появится здесь</strong>
+                <span>Выбери режим, заполни форму и запусти генерацию.</span>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section id="profile-panel" class="profile-panel hidden">
+          <article class="profile-hero app-card">
+            <div id="profile-avatar" class="profile-avatar-shell"></div>
+            <div class="profile-hero__copy">
+              <p class="eyebrow">Профиль</p>
+              <h3 id="profile-name">@wearai</h3>
+              <p id="profile-handle" class="profile-handle hidden"></p>
+            </div>
+          </article>
+
+          <div class="profile-grid">
+            <article class="app-card profile-card">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Wallet</p>
+                  <h3>Кредиты</h3>
+                </div>
+                <span class="pill pill--ghost">WearAI</span>
+              </div>
+              <div id="profile-wallet" class="mini-metrics"></div>
+            </article>
+          </div>
+        </section>
+      </main>
+
+      <nav class="bottom-nav" aria-label="Навигация по разделам">
+        <button class="nav-btn active" data-section="photo" type="button">
+          <svg class="nav-icon" viewBox="0 0 24 24"><use href="#icon-photo"></use></svg>
+          <span class="nav-label">Фото</span>
+        </button>
+        <button class="nav-btn" data-section="video" type="button">
+          <svg class="nav-icon" viewBox="0 0 24 24"><use href="#icon-video"></use></svg>
+          <span class="nav-label">Видео</span>
+        </button>
+        <button class="nav-btn" data-section="music" type="button">
+          <svg class="nav-icon" viewBox="0 0 24 24"><use href="#icon-music"></use></svg>
+          <span class="nav-label">Музыка</span>
+        </button>
+        <button class="nav-btn" data-section="agent" type="button">
+          <svg class="nav-icon" viewBox="0 0 24 24"><use href="#icon-agent"></use></svg>
+          <span class="nav-label">Агент</span>
+        </button>
+        <button class="nav-btn" data-section="profile" type="button">
+          <svg class="nav-icon" viewBox="0 0 24 24"><use href="#icon-profile"></use></svg>
+          <span class="nav-label">Профиль</span>
+        </button>
+      </nav>
+    </div>
+
+    <template id="mode-card-template">
+      <button class="mode-card" type="button">
+        <span class="mode-kind"></span>
+        <div class="mode-card__head">
+          <strong class="mode-title"></strong>
+          <span class="mode-card__dot"></span>
+        </div>
+      </button>
+    </template>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
